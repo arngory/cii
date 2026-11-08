@@ -138,7 +138,7 @@ func (r *Report) WriteJSON(w io.Writer) error {
 }
 
 func (r *Report) WriteText(w io.Writer, color bool) {
-	c := painter(color)
+	c := paint(color)
 	fmt.Fprintf(w, "%s %s — complete information about current IP\n\n", c.bold(r.Tool.Name), r.Tool.Version)
 
 	if r.IPv4 != nil {
@@ -187,7 +187,7 @@ func writeHost(w io.Writer, c paint, label string, h *Host) {
 }
 
 func WriteContacts(w io.Writer, color bool, entries []ledger.Entry) {
-	writeLedger(w, painter(color), entries)
+	writeLedger(w, paint(color), entries)
 }
 
 func writeLedger(w io.Writer, c paint, entries []ledger.Entry) {
@@ -211,7 +211,7 @@ func writeLedger(w io.Writer, c paint, entries []ledger.Entry) {
 }
 
 func WritePlan(w io.Writer, color bool, rules []netx.Rule) {
-	c := painter(color)
+	c := paint(color)
 	fmt.Fprintf(w, "%s the following destinations may be contacted (nothing has been sent):\n", c.bold("Plan:"))
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, r := range rules {
@@ -268,8 +268,6 @@ func ColorEnabled() bool {
 }
 
 type paint bool
-
-func painter(on bool) paint { return paint(on) }
 
 func (p paint) wrap(code, s string) string {
 	if !p || s == "" {

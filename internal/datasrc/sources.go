@@ -49,7 +49,7 @@ func dbipURLs(name string) func(time.Time, config.Keys) ([]string, string, strin
 func maxmindURLs(edition string) func(time.Time, config.Keys) ([]string, string, string, error) {
 	return func(_ time.Time, k config.Keys) ([]string, string, string, error) {
 		if k.MaxMindAccountID == "" || k.MaxMindLicenseKey == "" {
-			return nil, "", "", errNoKey("maxmind_account_id + maxmind_license_key")
+			return nil, "", "", fmt.Errorf("requires your own %s in config", "maxmind_account_id + maxmind_license_key")
 		}
 		u := "https://download.maxmind.com/geoip/databases/" + edition + "/download?suffix=tar.gz"
 		return []string{u}, k.MaxMindAccountID, k.MaxMindLicenseKey, nil
@@ -84,7 +84,7 @@ var Registry = []Source{
 		Archive: Raw, Hosts: []string{"ipinfo.io"},
 		urls: func(_ time.Time, k config.Keys) ([]string, string, string, error) {
 			if k.IPinfoToken == "" {
-				return nil, "", "", errNoKey("ipinfo_token")
+				return nil, "", "", fmt.Errorf("requires your own %s in config", "ipinfo_token")
 			}
 			return []string{"https://ipinfo.io/data/ipinfo_lite.mmdb?token=" + url.QueryEscape(k.IPinfoToken)}, "", "", nil
 		},
