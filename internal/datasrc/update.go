@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -116,10 +115,10 @@ func fetch(ctx context.Context, c *http.Client, dir string, src Source, rawURL, 
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return ManifestEntry{}, redact(err, rawURL)
+		return ManifestEntry{}, netx.Redact(err, rawURL)
 	}
 	defer resp.Body.Close()
-	clean := stripSecrets(rawURL)
+	clean := netx.StripSecrets(rawURL)
 	switch {
 	case resp.StatusCode == http.StatusNotFound:
 		return ManifestEntry{}, notFound{clean}
@@ -190,28 +189,4 @@ func mmdbFromTar(tr *tar.Reader) (io.Reader, error) {
 			return tr, nil
 		}
 	}
-}
-
-func stripSecrets(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "<url>"
-	}
-	q := u.Query()
-	for k := range q {
-		if strings.Contains(strings.ToLower(k), "token") || strings.Contains(strings.ToLower(k), "key") {
-			q.Set(k, "REDACTED")
-		}
-	}
-	u.RawQuery = q.Encode()
-	u.User = nil
-	return u.String()
-}
-
-func redact(err error, raw string) error {
-	var ue *url.Error
-	if errors.As(err, &ue) {
-		return fmt.Errorf("%s %s: %w", ue.Op, stripSecrets(raw), ue.Err)
-	}
-	return errors.New(strings.ReplaceAll(err.Error(), raw, stripSecrets(raw)))
 }

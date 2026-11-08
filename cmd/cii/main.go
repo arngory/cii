@@ -283,6 +283,7 @@ func cmdLookup(args []string) error {
 		if err != nil {
 			return fmt.Errorf("bad address %q", arg)
 		}
+		a = a.Unmap()
 		h := report.NewHost(ipdetect.Address{Address: a, Source: "argument"}, dbs.Lookup(a), c.mask)
 		h.Query = h.Address
 		rep.Results = append(rep.Results, h)

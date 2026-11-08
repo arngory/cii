@@ -1,25 +1,12 @@
 package datasrc
 
 import (
-	"errors"
-	"net/url"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/arngory/cii/internal/config"
 )
-
-func TestStripSecrets(t *testing.T) {
-	got := stripSecrets("https://user:pw@ipinfo.io/data/ipinfo_lite.mmdb?token=SECRET&x=1")
-	if strings.Contains(got, "SECRET") || strings.Contains(got, "pw") {
-		t.Fatalf("secret leaked: %s", got)
-	}
-	err := redact(&url.Error{Op: "Get", URL: "https://ipinfo.io/?token=SECRET", Err: errors.New("boom")}, "https://ipinfo.io/?token=SECRET")
-	if strings.Contains(err.Error(), "SECRET") {
-		t.Fatalf("secret leaked in error: %v", err)
-	}
-}
 
 func TestURLs(t *testing.T) {
 	now := time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)

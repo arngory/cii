@@ -16,6 +16,10 @@ allow() {
   exit 0
 }
 
+command -v jq >/dev/null || {
+  echo '{"systemMessage": "review hook: jq not found, review skipped"}'
+  exit 0
+}
 command -v claude >/dev/null || allow "review hook: claude CLI not found, review skipped"
 
 pathspec=('*.go' 'go.mod' 'go.sum' 'Makefile' '*.sh' '.github/workflows/*')
