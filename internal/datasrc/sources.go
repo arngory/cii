@@ -127,9 +127,3 @@ func Rules(srcs []Source) []netx.Rule {
 	}
 	return rules
 }
-
-type keyError struct{ key string }
-
-func (e keyError) Error() string { return "requires your own " + e.key + " in config" }
-
-func errNoKey(k string) error { return keyError{k} }
