@@ -359,7 +359,10 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 		}
 		srcs = append(srcs, s)
 	}
-	policy := netx.NewPolicy(datasrc.Rules(srcs)...)
+	policy := netx.NewPolicy()
+	if !c.offline {
+		policy.Add(datasrc.Rules(srcs)...)
+	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
 		return nil
