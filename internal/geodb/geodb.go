@@ -33,7 +33,6 @@ type Record struct {
 
 type DB struct {
 	ID     string
-	Path   string
 	Type   string
 	Built  int64
 	reader *maxminddb.Reader
@@ -63,7 +62,7 @@ func Open(dir string) (*Set, error) {
 			continue
 		}
 		id := strings.TrimSuffix(filepath.Base(path), ".mmdb")
-		s.DBs = append(s.DBs, &DB{ID: id, Path: path, Type: r.Metadata.DatabaseType, Built: int64(r.Metadata.BuildEpoch), reader: r})
+		s.DBs = append(s.DBs, &DB{ID: id, Type: r.Metadata.DatabaseType, Built: int64(r.Metadata.BuildEpoch), reader: r})
 	}
 	return s, nil
 }

@@ -295,6 +295,11 @@ func cmdData(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: cii data update|status|sources")
 	}
+	switch args[0] {
+	case "-h", "-help", "--help":
+		printUsage()
+		return flag.ErrHelp
+	}
 	sub, args := args[0], args[1:]
 	var c common
 	fs := flag.NewFlagSet("cii data "+sub, flag.ContinueOnError)
