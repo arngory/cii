@@ -39,13 +39,23 @@ func (p *Policy) Add(rules ...Rule) {
 			continue
 		}
 		if i := p.index(r); i >= 0 {
-			if !slices.Contains(strings.Split(p.rules[i].Purpose, "; "), r.Purpose) {
-				p.rules[i].Purpose += "; " + r.Purpose
-			}
+			p.rules[i].Purpose = mergePurpose(p.rules[i].Purpose, r.Purpose)
 			continue
 		}
 		p.rules = append(p.rules, r)
 	}
+}
+
+func mergePurpose(have, add string) string {
+	switch {
+	case add == "":
+		return have
+	case have == "":
+		return add
+	case slices.Contains(strings.Split(have, "; "), add):
+		return have
+	}
+	return have + "; " + add
 }
 
 func (p *Policy) index(r Rule) int {

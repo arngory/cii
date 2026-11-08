@@ -37,7 +37,7 @@ type Source struct {
 func dbipURLs(name string) func(time.Time, config.Keys) ([]string, string, string, error) {
 	return func(now time.Time, _ config.Keys) ([]string, string, string, error) {
 		cur := now.UTC()
-		prev := cur.AddDate(0, -1, 0)
+		prev := time.Date(cur.Year(), cur.Month()-1, 1, 0, 0, 0, 0, time.UTC)
 		f := "https://download.db-ip.com/free/dbip-%s-lite-%s.mmdb.gz"
 		return []string{
 			fmt.Sprintf(f, name, cur.Format("2006-01")),

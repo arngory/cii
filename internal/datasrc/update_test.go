@@ -28,6 +28,10 @@ func TestURLs(t *testing.T) {
 	if err != nil || len(urls) != 2 || !strings.Contains(urls[0], "2026-01") || !strings.Contains(urls[1], "2025-12") {
 		t.Fatalf("dbip urls = %v, %v", urls, err)
 	}
+	urls, _, _, _ = s.urls(time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC), config.Keys{})
+	if !strings.Contains(urls[1], "2026-02") {
+		t.Fatalf("previous month after month-end = %v", urls)
+	}
 	for _, id := range []string{"ipinfo-lite", "geolite2-city"} {
 		s, _ := ByID(id)
 		if _, _, _, err := s.urls(now, config.Keys{}); err == nil {

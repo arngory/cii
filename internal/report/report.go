@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/netip"
 	"os"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -60,12 +61,16 @@ func New(mode string, mask bool) *Report {
 		GeneratedAt: time.Now().UTC().Truncate(time.Second),
 		Mode:        mode,
 		Masked:      mask,
+		Data:        []DataInfo{},
 		Network:     []ledger.Entry{},
 	}
 }
 
 func NewHost(a ipdetect.Address, geo []geodb.Record, mask bool) *Host {
 	h := &Host{Source: a.Source, Error: a.Error, Geo: geo}
+	if mask {
+		h.Error = MaskText(a.Error)
+	}
 	if a.Address.IsValid() {
 		h.Address = MaskAddr(a.Address, mask)
 	}
@@ -97,6 +102,21 @@ func MaskAddr(a netip.Addr, mask bool) string {
 	}
 	b := a.As16()
 	return fmt.Sprintf("%x:%x:*:*", uint16(b[0])<<8|uint16(b[1]), uint16(b[2])<<8|uint16(b[3]))
+}
+
+var addrLike = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*`)
+
+func MaskText(s string) string {
+	return addrLike.ReplaceAllStringFunc(s, func(tok string) string {
+		trimmed := strings.Trim(tok, ".:")
+		if a, err := netip.ParseAddr(trimmed); err == nil {
+			return strings.Replace(tok, trimmed, MaskAddr(a, true), 1)
+		}
+		if ap, err := netip.ParseAddrPort(trimmed); err == nil {
+			return strings.Replace(tok, trimmed, MaskAddr(ap.Addr(), true), 1)
+		}
+		return tok
+	})
 }
 
 func (r *Report) WriteJSON(w io.Writer) error {

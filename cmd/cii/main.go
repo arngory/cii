@@ -5,10 +5,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"time"
 
@@ -153,12 +155,12 @@ func (c *common) baseOptions() (netx.Options, error) {
 	if c.proxy != "" {
 		u, err := url.Parse(c.proxy)
 		if err != nil || u.Host == "" {
-			return o, fmt.Errorf("bad --proxy %q", c.proxy)
+			return o, errors.New("bad --proxy: expected scheme://host:port")
 		}
 		switch u.Scheme {
 		case "http", "https", "socks5", "socks5h":
 		default:
-			return o, fmt.Errorf("unsupported proxy scheme %q", u.Scheme)
+			return o, fmt.Errorf("unsupported proxy scheme %q in %s", u.Scheme, u.Redacted())
 		}
 		o.Proxy = u
 	}
@@ -321,9 +323,10 @@ func cmdData(ctx context.Context, args []string) error {
 		if len(m.Entries) == 0 {
 			fmt.Println("no databases yet; run `cii data update`")
 		}
-		for _, e := range m.Entries {
+		for _, id := range slices.Sorted(maps.Keys(m.Entries)) {
+			e := m.Entries[id]
 			fmt.Printf("%-18s %s  fetched %s  built %s  %d bytes  sha256 %s\n", e.ID, e.DBType,
-				e.FetchedAt.Format("2006-01-02"), time.Unix(int64(e.BuildEpoch), 0).UTC().Format("2006-01-02"), e.Size, e.SHA256[:16])
+				e.FetchedAt.Format("2006-01-02"), time.Unix(int64(e.BuildEpoch), 0).UTC().Format("2006-01-02"), e.Size, shortHash(e.SHA256))
 		}
 		return nil
 	case "update":
@@ -378,7 +381,7 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 			fmt.Println("FAILED:", err)
 			continue
 		}
-		fmt.Printf("ok  %s, %d bytes, sha256 %s\n", e.DBType, e.Size, e.SHA256[:16])
+		fmt.Printf("ok  %s, %d bytes, sha256 %s\n", e.DBType, e.Size, shortHash(e.SHA256))
 	}
 	fmt.Println()
 	report.WriteContacts(os.Stdout, c.color(), led.Entries())
@@ -386,4 +389,11 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 		return fmt.Errorf("%d of %d sources failed", failed, len(srcs))
 	}
 	return nil
+}
+
+func shortHash(h string) string {
+	if len(h) > 16 {
+		return h[:16]
+	}
+	return h
 }

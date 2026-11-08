@@ -44,6 +44,11 @@ func TestPolicyMatch(t *testing.T) {
 	if r, _ := p.Match("a", "example.com"); r.Purpose != "x; y" {
 		t.Errorf("merged purpose = %q", r.Purpose)
 	}
+	for _, c := range [][3]string{{"", "y", "y"}, {"x", "", "x"}, {"x; y", "y", "x; y"}, {"xy", "x", "xy; x"}} {
+		if got := mergePurpose(c[0], c[1]); got != c[2] {
+			t.Errorf("mergePurpose(%q, %q) = %q, want %q", c[0], c[1], got, c[2])
+		}
+	}
 }
 
 func TestGuardBlocksUndeclaredAndRedirects(t *testing.T) {
@@ -122,4 +127,18 @@ func mustURL(t *testing.T, s string) *url.URL {
 		t.Fatal(err)
 	}
 	return u
+}
+
+func TestForcedFamilyNotAppliedToProxy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(r.URL.Host))
+	}))
+	defer srv.Close()
+	proxy := mustURL(t, srv.URL)
+	n := New(Options{Family: IPv6, Proxy: proxy}, NewPolicy(Rule{Module: "m", Pattern: "target.invalid"}), ledger.New())
+	resp, err := n.HTTPClient("m").Get("http://target.invalid/")
+	if err != nil {
+		t.Fatalf("IPv6-forced request through IPv4 proxy failed: %v", err)
+	}
+	resp.Body.Close()
 }

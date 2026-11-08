@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/arngory/cii/internal/ledger"
@@ -60,6 +61,7 @@ type Net struct {
 	ledger *ledger.Ledger
 	dialer *net.Dialer
 	tr     *http.Transport
+	proxy  sync.Map
 }
 
 func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
@@ -80,8 +82,17 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 		proxy = http.ProxyURL(opts.Proxy)
 	}
 	n.tr = &http.Transport{
-		Proxy: proxy,
+		Proxy: func(r *http.Request) (*url.URL, error) {
+			u, err := proxy(r)
+			if u != nil {
+				n.proxy.Store(proxyAddr(u), struct{}{})
+			}
+			return u, err
+		},
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if _, viaProxy := n.proxy.Load(addr); viaProxy {
+				return d.DialContext(ctx, "tcp", addr)
+			}
 			return d.DialContext(ctx, opts.Family.network("tcp"), addr)
 		},
 		ForceAttemptHTTP2:     true,
@@ -92,10 +103,6 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	}
 	return n
 }
-
-func (n *Net) Options() Options { return n.opts }
-
-func (n *Net) Policy() *Policy { return n.policy }
 
 func (n *Net) HTTPClient(module string) *http.Client {
 	return &http.Client{
@@ -114,6 +121,9 @@ func (g *guard) RoundTrip(req *http.Request) (*http.Response, error) {
 	rule, ok := g.n.policy.Match(g.module, host)
 	if !ok {
 		g.n.ledger.Blocked(g.module, "not declared", normalizeHost(host), req.URL.Scheme)
+		if req.Body != nil {
+			req.Body.Close()
+		}
 		return nil, &BlockedError{Module: g.module, Host: host}
 	}
 	g.n.ledger.Request(g.module, rule.Purpose, normalizeHost(host), req.URL.Scheme)
@@ -149,14 +159,23 @@ func (n *Net) Dial(ctx context.Context, module, network, addr string) (net.Conn,
 	if n.opts.Source.IsValid() && (network == "udp" || network == "udp4" || network == "udp6") {
 		d.LocalAddr = &net.UDPAddr{IP: n.opts.Source.AsSlice()}
 	}
+	dialNet := network
 	if n.opts.Family != Any {
-		network = n.opts.Family.network(trimFamily(network))
+		dialNet = n.opts.Family.network(trimFamily(network))
 	}
-	c, err := d.DialContext(ctx, network, addr)
+	c, err := d.DialContext(ctx, dialNet, addr)
 	if err != nil {
 		n.ledger.Error(module, rule.Purpose, normalizeHost(host), network)
 	}
 	return c, err
+}
+
+func proxyAddr(u *url.URL) string {
+	if u.Port() != "" {
+		return u.Host
+	}
+	port := map[string]string{"http": "80", "https": "443", "socks5": "1080", "socks5h": "1080"}[u.Scheme]
+	return net.JoinHostPort(u.Hostname(), port)
 }
 
 func trimFamily(network string) string {
