@@ -108,15 +108,27 @@ var addrLike = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*`)
 
 func MaskText(s string) string {
 	return addrLike.ReplaceAllStringFunc(s, func(tok string) string {
-		trimmed := strings.Trim(tok, ".:")
-		if a, err := netip.ParseAddr(trimmed); err == nil {
-			return strings.Replace(tok, trimmed, MaskAddr(a, true), 1)
-		}
-		if ap, err := netip.ParseAddrPort(trimmed); err == nil {
-			return strings.Replace(tok, trimmed, MaskAddr(ap.Addr(), true), 1)
+		for _, cand := range []string{tok, trimEdge(tok)} {
+			if a, err := netip.ParseAddr(cand); err == nil {
+				return strings.Replace(tok, cand, MaskAddr(a.Unmap(), true), 1)
+			}
+			if ap, err := netip.ParseAddrPort(cand); err == nil {
+				return strings.Replace(tok, cand, MaskAddr(ap.Addr().Unmap(), true), 1)
+			}
 		}
 		return tok
 	})
+}
+
+func trimEdge(s string) string {
+	s = strings.TrimSuffix(s, ".")
+	if strings.HasSuffix(s, ":") && !strings.HasSuffix(s, "::") {
+		s = s[:len(s)-1]
+	}
+	if strings.HasPrefix(s, ":") && !strings.HasPrefix(s, "::") {
+		s = s[1:]
+	}
+	return s
 }
 
 func (r *Report) WriteJSON(w io.Writer) error {

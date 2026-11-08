@@ -1,11 +1,12 @@
 package geodb
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/netip"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -43,13 +44,19 @@ type Set struct {
 }
 
 func Open(dir string) (*Set, error) {
-	matches, err := filepath.Glob(filepath.Join(dir, "*.mmdb"))
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return &Set{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
-	sort.Strings(matches)
 	s := &Set{}
-	for _, path := range matches {
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".mmdb") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
 		r, err := maxminddb.Open(path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: skipping %s: %v\n", path, err)
@@ -165,17 +172,7 @@ func num(v any) *float64 {
 		f = float64(x)
 	case uint64:
 		f = float64(x)
-	case uint32:
-		f = float64(x)
-	case uint16:
-		f = float64(x)
-	case int:
-		f = float64(x)
 	case int32:
-		f = float64(x)
-	case int64:
-		f = float64(x)
-	case uint:
 		f = float64(x)
 	default:
 		return nil

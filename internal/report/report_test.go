@@ -21,9 +21,9 @@ func TestMaskAddr(t *testing.T) {
 }
 
 func TestMaskText(t *testing.T) {
-	in := "dial tcp4 203.0.113.5:0->198.51.100.7:443: connect: refused; [2a00:1450:4001::1]:443 v1.2 ok"
+	in := "dial tcp4 203.0.113.5:0->198.51.100.7:443: connect: refused; [2a00:1450:4001::1]:443 [2a01:4f8::]:0 ::ffff:9.9.9.9 v1.2 ok"
 	got := MaskText(in)
-	for _, leak := range []string{"203.0.113.5", "198.51.100.7", "4001::1"} {
+	for _, leak := range []string{"203.0.113.5", "198.51.100.7", "4001::1", "2a01:4f8::", "9.9.9"} {
 		if strings.Contains(got, leak) {
 			t.Fatalf("MaskText leaked %s: %s", leak, got)
 		}
