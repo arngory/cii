@@ -1,0 +1,63 @@
+package ipdetect
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/arngory/cii/internal/ledger"
+	"github.com/arngory/cii/internal/netx"
+)
+
+func TestParse(t *testing.T) {
+	cases := []struct {
+		body   string
+		format Format
+		want   string
+	}{
+		{"203.0.113.9\n", "plain", "203.0.113.9"},
+		{"fl=1\nh=x\nip=2001:db8::5\nloc=DE\n", "trace", "2001:db8::5"},
+		{`{"ip":"198.51.100.4"}`, "json:ip", "198.51.100.4"},
+		{"::ffff:1.2.3.4", "", "1.2.3.4"},
+	}
+	for _, c := range cases {
+		a, err := Parse([]byte(c.body), c.format)
+		if err != nil || a.String() != c.want {
+			t.Errorf("Parse(%q, %q) = %v, %v; want %s", c.body, c.format, a, err, c.want)
+		}
+	}
+	for _, bad := range []struct {
+		body   string
+		format Format
+	}{{"<html>", "plain"}, {"h=x", "trace"}, {"{}", "json:ip"}, {"1.2.3.4", "xml"}} {
+		if _, err := Parse([]byte(bad.body), bad.format); err == nil {
+			t.Errorf("Parse(%q, %q) succeeded", bad.body, bad.format)
+		}
+	}
+}
+
+func TestDetectFallsBackAndChecksFamily(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v6":
+			w.Write([]byte("2a00:1450::1"))
+		case "/v4":
+			w.Write([]byte("8.8.8.8"))
+		default:
+			http.Error(w, "nope", http.StatusInternalServerError)
+		}
+	}))
+	defer srv.Close()
+
+	providers := []Provider{
+		{Name: "broken", URL4: srv.URL + "/err"},
+		{Name: "wrongfamily", URL4: srv.URL + "/v6"},
+		{Name: "good", URL4: srv.URL + "/v4"},
+	}
+	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(providers)...), ledger.New())
+	got := Detect(context.Background(), n, netx.IPv4, Options{Providers: providers})
+	if got.Address.String() != "8.8.8.8" || got.Source != "echo:good" {
+		t.Fatalf("Detect = %+v", got)
+	}
+}
