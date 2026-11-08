@@ -72,13 +72,9 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		}
 		return res
 	}
-	providers := o.Providers
-	if len(providers) == 0 {
-		providers = DefaultProviders
-	}
 	client := n.HTTPClient(Module)
 	var errs []string
-	for _, p := range providers {
+	for _, p := range o.Providers {
 		raw := p.URL4
 		if f == netx.IPv6 {
 			raw = p.URL6

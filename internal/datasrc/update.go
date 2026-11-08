@@ -126,7 +126,7 @@ func fetch(ctx context.Context, c *http.Client, dir string, src Source, rawURL, 
 		return ManifestEntry{}, fmt.Errorf("%s: HTTP %d", clean, resp.StatusCode)
 	}
 
-	body := io.Reader(io.LimitReader(resp.Body, maxDownload))
+	body := io.Reader(io.LimitReader(resp.Body, maxDownload+1))
 	switch src.Archive {
 	case Gzip:
 		zr, err := gzip.NewReader(body)
@@ -154,9 +154,12 @@ func fetch(ctx context.Context, c *http.Client, dir string, src Source, rawURL, 
 	}
 	defer os.Remove(tmp.Name())
 	h := sha256.New()
-	size, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(body, maxDownload))
+	size, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(body, maxDownload+1))
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
+	}
+	if err == nil && size > maxDownload {
+		err = fmt.Errorf("exceeds %d bytes", maxDownload)
 	}
 	if err != nil {
 		return ManifestEntry{}, fmt.Errorf("%s: %w", clean, err)
