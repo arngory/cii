@@ -366,7 +366,11 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 	if c.offline {
 		return errors.New("--offline: refusing to download")
 	}
-	opts, err := c.options(netx.Any)
+	f := netx.Any
+	if fams := c.families(); len(fams) == 1 {
+		f = fams[0]
+	}
+	opts, err := c.options(f)
 	if err != nil {
 		return err
 	}
