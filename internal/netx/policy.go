@@ -15,11 +15,10 @@ type Rule struct {
 }
 
 func (r Rule) matches(host string) bool {
-	p := strings.ToLower(r.Pattern)
-	if suffix, ok := strings.CutPrefix(p, "*."); ok {
+	if suffix, ok := strings.CutPrefix(r.Pattern, "*."); ok {
 		return strings.HasSuffix(host, "."+suffix)
 	}
-	return host == p
+	return host == r.Pattern
 }
 
 type Policy struct {

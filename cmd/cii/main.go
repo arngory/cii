@@ -145,7 +145,7 @@ func (c *common) options(f netx.Family) (netx.Options, error) {
 		if err != nil {
 			return o, err
 		}
-		o.Source = a
+		o.Source = a.Unmap()
 	}
 	return o, nil
 }
