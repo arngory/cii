@@ -145,7 +145,7 @@ func (c *common) options(f netx.Family) (netx.Options, error) {
 		if err != nil {
 			return o, err
 		}
-		o.Source = a.Unmap()
+		o.Source = a
 	}
 	return o, nil
 }
@@ -172,7 +172,7 @@ func (c *common) baseOptions() (netx.Options, error) {
 		if err != nil {
 			return o, fmt.Errorf("bad --source: %w", err)
 		}
-		o.Source = a
+		o.Source = a.Unmap()
 	}
 	return o, nil
 }

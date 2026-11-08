@@ -20,12 +20,16 @@ func TestStripSecrets(t *testing.T) {
 }
 
 func TestRedact(t *testing.T) {
-	raw := "https://ipinfo.io/?token=SECRET"
-	err := Redact(&url.Error{Op: "Get", URL: raw, Err: errors.New("boom")}, raw)
-	if strings.Contains(err.Error(), "SECRET") || !strings.Contains(err.Error(), "boom") {
+	blocked := &BlockedError{Module: "m", Host: "h"}
+	err := Redact(&url.Error{Op: "Get", URL: "https://ipinfo.io/?token=SECRET", Err: blocked})
+	if strings.Contains(err.Error(), "SECRET") {
 		t.Fatalf("Redact = %v", err)
 	}
-	if Redact(nil, raw) != nil {
+	var be *BlockedError
+	if !errors.As(err, &be) {
+		t.Fatal("Redact broke the error chain")
+	}
+	if Redact(nil) != nil {
 		t.Fatal("Redact(nil) != nil")
 	}
 }

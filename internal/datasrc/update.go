@@ -115,7 +115,7 @@ func fetch(ctx context.Context, c *http.Client, dir string, src Source, rawURL, 
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return ManifestEntry{}, netx.Redact(err, rawURL)
+		return ManifestEntry{}, netx.Redact(err)
 	}
 	defer resp.Body.Close()
 	clean := netx.StripSecrets(rawURL)

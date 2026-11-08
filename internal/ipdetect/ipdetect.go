@@ -119,7 +119,7 @@ func query(ctx context.Context, c *http.Client, raw string, f Format) (netip.Add
 	}
 	resp, err := c.Do(req)
 	if err != nil {
-		return netip.Addr{}, netx.Redact(err, raw)
+		return netip.Addr{}, netx.Redact(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

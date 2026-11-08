@@ -2,7 +2,6 @@ package netx
 
 import (
 	"errors"
-	"fmt"
 	"net/url"
 	"strings"
 )
@@ -29,13 +28,10 @@ func StripSecrets(raw string) string {
 	return u.String()
 }
 
-func Redact(err error, raw string) error {
-	if err == nil {
-		return nil
-	}
+func Redact(err error) error {
 	var ue *url.Error
-	if errors.As(err, &ue) {
-		return fmt.Errorf("%s %s: %w", ue.Op, StripSecrets(ue.URL), ue.Err)
+	if !errors.As(err, &ue) {
+		return err
 	}
-	return errors.New(strings.ReplaceAll(err.Error(), raw, StripSecrets(raw)))
+	return &url.Error{Op: ue.Op, URL: StripSecrets(ue.URL), Err: ue.Err}
 }
