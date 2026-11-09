@@ -63,6 +63,25 @@ func TestBenchCompact(t *testing.T) {
 	}
 }
 
+func TestSetBenchMasksErrors(t *testing.T) {
+	note := "cloudflare: read tcp 203.0.113.5:40000->104.16.1.1:443: i/o timeout"
+	fail := "connect: dial tcp 203.0.113.5:0->198.51.100.7:5201: connect: connection refused"
+	for _, mask := range []bool{false, true} {
+		b := sampleBench()
+		b.Notes = append(b.Notes, note)
+		b.Iperf[2].Error = fail
+		r := New("bench", mask)
+		r.SetBench(b, mask)
+		got := strings.Join(r.Bench.Notes, "\n") + "\n" + r.Bench.Iperf[2].Error
+		if leaked := strings.Contains(got, "203.0.113.5"); leaked == mask {
+			t.Errorf("mask=%v: %q", mask, got)
+		}
+		if mask && (!strings.Contains(got, "203.0.*.*") || !strings.Contains(got, "fio is not installed; apt install fio")) {
+			t.Errorf("masked text = %q", got)
+		}
+	}
+}
+
 func TestBenchDetailed(t *testing.T) {
 	r := &Report{Bench: sampleBench()}
 	var b strings.Builder

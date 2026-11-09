@@ -8,7 +8,17 @@ import (
 	"github.com/arngory/cii/internal/bench"
 )
 
-func (r *Report) SetBench(b *bench.Report) { r.Bench = b }
+func (r *Report) SetBench(b *bench.Report, mask bool) {
+	if mask {
+		for i := range b.Notes {
+			b.Notes[i] = MaskText(b.Notes[i])
+		}
+		for i := range b.Iperf {
+			b.Iperf[i].Error = MaskText(b.Iperf[i].Error)
+		}
+	}
+	r.Bench = b
+}
 
 const benchLabel = 8
 

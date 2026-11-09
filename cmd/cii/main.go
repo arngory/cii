@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"maps"
+	"math"
 	"net/netip"
 	"net/url"
 	"os"
@@ -763,7 +764,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	rep := report.New("bench", c.mask)
 	b := bench.Run(ctx, bench.Env{Net: n, Ledger: led}, opts, progress)
 	progress("")
-	rep.SetBench(&b)
+	rep.SetBench(&b, c.mask)
 	rep.Network = led.Entries()
 	return output(rep, &c)
 }
@@ -780,7 +781,7 @@ func parseSize(s string) (int64, error) {
 		mult, s = 1<<10, strings.TrimSuffix(s, "K")
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
-	if err != nil || n <= 0 {
+	if err != nil || n <= 0 || n > math.MaxInt64/mult {
 		return 0, fmt.Errorf("expected a number with optional K, M or G suffix, got %q", s)
 	}
 	return n * mult, nil
