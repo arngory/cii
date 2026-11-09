@@ -49,15 +49,13 @@ func SystemIperf3(ctx context.Context, env Env, path string, s IperfServer, dur 
 		run.Error = err.Error()
 		return run
 	}
-	purpose := Module + ": iperf3 " + s.Provider + ", " + s.Location
 	var lastErr error
 	for port := lo; port <= hi; port++ {
 		if ctx.Err() != nil {
 			run.Error = ctx.Err().Error()
 			return run
 		}
-		env.Ledger.Request(Module, purpose, s.Host, "tcp")
-		send, err := iperf3Once(ctx, env, path, s.Host, port, dur, false)
+		send, err := iperf3Once(ctx, env, path, s, port, dur, false)
 		if err != nil {
 			lastErr = err
 			if isIperfRetryable(err) {
@@ -66,7 +64,7 @@ func SystemIperf3(ctx context.Context, env Env, path string, s IperfServer, dur 
 			break
 		}
 		run.Port, run.SendMbps = port, send
-		recv, err := iperf3Once(ctx, env, path, s.Host, port, dur, true)
+		recv, err := iperf3Once(ctx, env, path, s, port, dur, true)
 		if err != nil {
 			run.Error = "receive: " + err.Error()
 			return run
@@ -85,7 +83,18 @@ func isIperfRetryable(err error) bool {
 	return strings.Contains(msg, "busy") || strings.Contains(msg, "refused") || strings.Contains(msg, "access denied")
 }
 
-func iperf3Once(ctx context.Context, env Env, path, host string, port int, dur time.Duration, reverse bool) (float64, error) {
+func iperf3Once(ctx context.Context, env Env, path string, s IperfServer, port int, dur time.Duration, reverse bool) (float64, error) {
+	purpose := Module + ": iperf3 " + s.Provider + ", " + s.Location
+	host := strings.TrimSuffix(strings.ToLower(s.Host), ".")
+	env.Ledger.Request(Module, purpose, host, "tcp")
+	mbps, err := iperf3Exec(ctx, env, path, s.Host, port, dur, reverse)
+	if err != nil {
+		env.Ledger.Error(Module, purpose, host, "tcp")
+	}
+	return mbps, err
+}
+
+func iperf3Exec(ctx context.Context, env Env, path, host string, port int, dur time.Duration, reverse bool) (float64, error) {
 	ctx, cancel := context.WithTimeout(ctx, dur+20*time.Second)
 	defer cancel()
 	args := iperf3Args(env.Net.Options(), host, port, dur, reverse)

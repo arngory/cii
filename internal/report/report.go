@@ -176,7 +176,7 @@ func (r *Report) WriteDetailed(w io.Writer, color bool) {
 			fmt.Fprintf(w, "  %s\n", c.dim(a))
 		}
 		fmt.Fprintln(w)
-	} else {
+	} else if r.Mode != "censor" && r.Mode != "bench" {
 		fmt.Fprintf(w, "%s no local databases; run `cii data update` to fetch DB-IP Lite\n\n", c.yellow("note:"))
 	}
 

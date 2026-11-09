@@ -12,7 +12,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 
 	"github.com/arngory/cii/internal/netx"
 	"github.com/arngory/cii/internal/probe"
@@ -250,14 +249,6 @@ func isX509(err error) bool {
 	return errors.As(err, &unk) || errors.As(err, &host) || errors.As(err, &inv) || errors.As(err, &ve)
 }
 
-func isTimeout(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
-		return true
-	}
-	var ne net.Error
-	return errors.As(err, &ne) && ne.Timeout()
-}
-
 func describe(err error) string {
 	switch {
 	case err == nil:
@@ -268,13 +259,13 @@ func describe(err error) string {
 		var be *netx.BlockedError
 		errors.As(err, &be)
 		return "blocked by policy: " + be.Host
-	case isTimeout(err):
+	case netx.IsTimeout(err):
 		return "timeout"
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case netx.IsRefused(err):
 		return "connection refused"
-	case errors.Is(err, syscall.ECONNRESET):
+	case netx.IsReset(err):
 		return "connection reset"
-	case errors.Is(err, syscall.ENETUNREACH), errors.Is(err, syscall.EHOSTUNREACH):
+	case netx.IsUnreachable(err):
 		return "network unreachable"
 	case isX509(err):
 		return "invalid certificate"

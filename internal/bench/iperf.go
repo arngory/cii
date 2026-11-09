@@ -107,8 +107,7 @@ func IperfTest(ctx context.Context, n *netx.Net, s IperfServer, dur time.Duratio
 		send, lat, err := iperfOnce(ctx, n, s.Host, port, dur, false)
 		if err != nil {
 			lastErr = err
-			var de dialError
-			if errors.Is(err, errBusy) || errors.Is(err, errAccessDenied) || errors.As(err, &de) {
+			if errors.Is(err, errBusy) || errors.Is(err, errAccessDenied) || netx.IsRefused(err) {
 				continue
 			}
 			break

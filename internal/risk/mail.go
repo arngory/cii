@@ -8,7 +8,6 @@ import (
 	"net"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/arngory/cii/internal/netx"
@@ -37,7 +36,7 @@ func checkSMTP(ctx context.Context, d dialer, opts MailOptions, timeout time.Dur
 	conn.SetDeadline(time.Now().Add(timeout))
 	banner, err := readReply(bufio.NewReader(conn))
 	switch {
-	case err != nil && isTimeout(err):
+	case err != nil && netx.IsTimeout(err):
 		res.Status, res.Detail = probe.No, "connected to "+host+", no SMTP banner (timeout)"
 		return res
 	case err != nil && banner == "":
@@ -66,24 +65,16 @@ func dialFailure(err error) (probe.Status, string, string) {
 		return probe.Failed, "", "blocked by policy: " + be.Host
 	case errors.As(err, &dnsErr):
 		return probe.Failed, "", probe.Truncate("resolve: "+dnsErr.Err, 120)
-	case isTimeout(err):
+	case netx.IsTimeout(err):
 		return probe.No, "connection timed out, port 25 likely filtered", ""
-	case errors.Is(err, syscall.ECONNREFUSED):
+	case netx.IsRefused(err):
 		return probe.No, "connection refused", ""
-	case errors.Is(err, syscall.ECONNRESET):
+	case netx.IsReset(err):
 		return probe.No, "connection reset", ""
-	case errors.Is(err, syscall.ENETUNREACH), errors.Is(err, syscall.EHOSTUNREACH):
+	case netx.IsUnreachable(err):
 		return probe.Failed, "", "network unreachable"
 	}
 	return probe.Failed, "", probe.Truncate(err.Error(), 120)
-}
-
-func isTimeout(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, syscall.ETIMEDOUT) {
-		return true
-	}
-	var ne net.Error
-	return errors.As(err, &ne) && ne.Timeout()
 }
 
 func readReply(r *bufio.Reader) (string, error) {

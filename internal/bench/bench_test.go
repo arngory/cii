@@ -185,6 +185,32 @@ func TestIperfAgainstFakeServer(t *testing.T) {
 	}
 }
 
+func TestIperfStopsOnDeadPort(t *testing.T) {
+	lns := adjacentListeners(t, 2)
+	t.Cleanup(func() { lns[0].Close() })
+	go func() {
+		for {
+			c, err := lns[0].Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	good := newFakeIperf(t, lns[1], false)
+	n, _ := testNet(t, "127.0.0.1")
+	s := IperfServer{Host: "127.0.0.1", Ports: fmt.Sprintf("%d-%d", good.port()-1, good.port())}
+	run := IperfTest(context.Background(), n, s, 200*time.Millisecond)
+	if !strings.HasPrefix(run.Error, "connect: ") || run.Port != 0 {
+		t.Errorf("run = %+v", run)
+	}
+	good.mu.Lock()
+	defer good.mu.Unlock()
+	if len(good.params) != 0 {
+		t.Errorf("next port was tried after a non-refused failure: %+v", good.params)
+	}
+}
+
 func TestIperfBusyAndPolicy(t *testing.T) {
 	busy := newFakeIperf(t, adjacentListeners(t, 1)[0], true)
 	n, led := testNet(t, "127.0.0.1")
@@ -481,7 +507,7 @@ func TestSystemIperf3Arguments(t *testing.T) {
 		t.Fatal(err)
 	}
 	led := ledger.New()
-	n := netx.New(netx.Options{Timeout: time.Second, Family: netx.IPv6}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "::1"}), led)
+	n := netx.New(netx.Options{Timeout: time.Second, Family: netx.IPv6}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "::1"}, netx.Rule{Module: Module, Pattern: "fd00::1"}), led)
 	env := Env{Net: n, Ledger: led}
 	run := SystemIperf3(context.Background(), env, tool, IperfServer{Host: "::1", Ports: "5201", IPv6: true}, 2*time.Second)
 	if run.Error != "" || run.SendMbps != 800 || run.RecvMbps != 700 || run.Port != 5201 || run.Client != clientSystem {
@@ -490,6 +516,22 @@ func TestSystemIperf3Arguments(t *testing.T) {
 	calls, _ := os.ReadFile(log)
 	if string(calls) != "-c ::1 -p 5201 -P 4 -t 2 -J -6\n-c ::1 -p 5201 -P 4 -t 2 -J -6 -R\n" {
 		t.Errorf("calls = %q", calls)
+	}
+	broken := filepath.Join(dir, "iperf3-broken")
+	if err := os.WriteFile(broken, []byte("#!/bin/sh\necho '{\"error\":\"unable to connect to server\"}'\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if run := SystemIperf3(context.Background(), env, broken, IperfServer{Host: "FD00::1", Ports: "5201-5203", IPv6: true}, time.Second); run.Error != "unable to connect to server" {
+		t.Errorf("broken run = %+v", run)
+	}
+	tcp := map[string]ledger.Entry{}
+	for _, e := range led.Entries() {
+		if e.Proto == "tcp" {
+			tcp[e.Host] = e
+		}
+	}
+	if len(tcp) != 2 || tcp["::1"].Requests != 2 || tcp["::1"].Errors != 0 || tcp["fd00::1"].Requests != 1 || tcp["fd00::1"].Errors != 1 {
+		t.Errorf("ledger = %+v", led.Entries())
 	}
 	if run := SystemIperf3(context.Background(), env, tool, IperfServer{Host: "::1", Ports: "5201"}, time.Second); run.Error != "no IPv6 endpoint" {
 		t.Errorf("v4-only server run = %+v", run)

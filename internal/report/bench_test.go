@@ -99,3 +99,13 @@ func TestBenchDetailed(t *testing.T) {
 		t.Error("colour codes in plain output")
 	}
 }
+
+func TestLocalDataNoteFollowsMode(t *testing.T) {
+	for mode, want := range map[string]bool{"online": true, "offline": true, "lookup": true, "censor": false, "bench": false} {
+		var b strings.Builder
+		New(mode, false).WriteDetailed(&b, false)
+		if got := strings.Contains(b.String(), "no local databases"); got != want {
+			t.Errorf("mode %s: note printed = %v, want %v", mode, got, want)
+		}
+	}
+}
