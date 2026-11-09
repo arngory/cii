@@ -202,15 +202,12 @@ func bestASN(geo []geodb.Record) string {
 
 func regionParts(c paint, s *region.Summary, p *Profile) []gcell {
 	parts := []gcell{verdictCell(c, s.Verdict)}
-	if p != nil && p.Registered != "" {
-		switch {
-		case p.GeoConsistent == nil:
-			parts = append(parts, gcell{text: "registered " + p.Registered, style: c.dim})
-		case *p.GeoConsistent:
-			parts = append(parts, gcell{text: "registered " + p.Registered + ", geo-consistent", style: c.dim})
-		default:
-			parts = append(parts, gcell{text: "registered " + p.Registered + ", geo-discrepant", style: c.yellow})
+	if text, discrepant := p.registryText(); text != "" {
+		style := c.dim
+		if discrepant {
+			style = c.yellow
 		}
+		parts = append(parts, gcell{text: text, style: style})
 	}
 	for _, g := range []struct {
 		group probe.Group
@@ -337,7 +334,9 @@ func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam) {
 	for _, f := range fams {
 		rs := f.host.Services
 		if f.host.Profile != nil {
-			rs = slices.DeleteFunc(slices.Clone(rs), func(r probe.Result) bool { return r.Group == risk.Reputation })
+			rs = slices.DeleteFunc(slices.Clone(rs), func(r probe.Result) bool {
+				return r.Group == risk.Reputation && r.Facts != nil && r.Status == probe.Yes
+			})
 		}
 		if len(rs) > 0 {
 			cols = append(cols, newColumn(f.label, rs))

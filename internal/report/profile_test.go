@@ -23,6 +23,7 @@ func sampleProfileHost() *Host {
 	h.SetServices([]probe.Result{
 		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.No, Detail: "VPN; risk 66", Facts: facts("", 66, map[probe.Flag]bool{probe.VPN: true, probe.Proxy: false})},
 		{Group: risk.Reputation, Service: "AbuseIPDB", Status: probe.Yes, Facts: facts("isp", 0, map[probe.Flag]bool{probe.Abuser: false})},
+		{Group: risk.Reputation, Service: "ipdata", Status: probe.Failed, Reason: "key rejected (HTTP 401)"},
 		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.Yes},
 	}, false)
 	h.SetRegion(region.Summarize([]probe.Result{
@@ -74,13 +75,14 @@ func TestProfileOutput(t *testing.T) {
 		"Score   ipquery.io 3 · proxycheck.io 66 · AbuseIPDB 0",
 		"Flags   proxy 1/2: ip-api.com · VPN 1/2: proxycheck.io · hosting 1/2: ip-api.com · abuser 0/1",
 		"bl.spamcop.net",
+		"! ipdata",
 	} {
 		if !strings.Contains(out, s) {
 			t.Errorf("%q missing in compact output:\n%s", s, out)
 		}
 	}
-	if strings.Contains(out, "Reputation") {
-		t.Errorf("reputation grid repeated in compact output:\n%s", out)
+	if !strings.Contains(out, "proxycheck.io VPN; risk 66") || strings.Contains(out, "AbuseIPDB\n") || strings.Contains(out, "✓ AbuseIPDB") {
+		t.Errorf("reputation grid should keep only results the profile does not cover:\n%s", out)
 	}
 	var detailed strings.Builder
 	r.WriteDetailed(&detailed, false)

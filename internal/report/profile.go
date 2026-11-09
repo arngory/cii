@@ -37,11 +37,30 @@ type Factor struct {
 	Checked int        `json:"checked"`
 }
 
-func (h *Host) refreshProfile() {
+func (h *Host) factResults() []probe.Result {
 	var rs []probe.Result
-	p := &Profile{}
 	if h.Region != nil {
 		rs = append(rs, h.Region.Results...)
+	}
+	return append(rs, h.Services...)
+}
+
+func (p *Profile) registryText() (string, bool) {
+	if p == nil || p.Registered == "" {
+		return "", false
+	}
+	switch {
+	case p.GeoConsistent == nil:
+		return "registered " + p.Registered, false
+	case *p.GeoConsistent:
+		return "registered " + p.Registered + ", geo-consistent", false
+	}
+	return "registered " + p.Registered + ", geo-discrepant", true
+}
+
+func (h *Host) refreshProfile() {
+	p := &Profile{}
+	if h.Region != nil {
 		for _, r := range h.Region.Results {
 			if r.Group == region.Registry && r.Status == probe.OK && p.Registered == "" {
 				p.Registered = r.Country
@@ -52,11 +71,10 @@ func (h *Host) refreshProfile() {
 			p.GeoConsistent = &ok
 		}
 	}
-	rs = append(rs, h.Services...)
 	usage, company := map[string][]string{}, map[string][]string{}
 	hits := map[probe.Flag][]string{}
 	checked := map[probe.Flag]int{}
-	for _, r := range rs {
+	for _, r := range h.factResults() {
 		f := r.Facts
 		if f == nil {
 			continue
@@ -180,12 +198,8 @@ func scoreStyle(c paint, score int) func(string) string {
 func writeProfile(w io.Writer, c paint, label string, h *Host) {
 	p := h.Profile
 	title := "IP profile (" + label + ")"
-	if p.Registered != "" {
-		state := ""
-		if p.GeoConsistent != nil {
-			state = map[bool]string{true: ", geo-consistent", false: ", geo-discrepant"}[*p.GeoConsistent]
-		}
-		title += " · registered " + p.Registered + state
+	if text, _ := p.registryText(); text != "" {
+		title += " · " + text
 	}
 	fmt.Fprintln(w, c.bold(title))
 	header := []gcell{{text: "  source", style: c.dim}, {text: "usage", style: c.dim}, {text: "company", style: c.dim}, {text: "score", style: c.dim}}
@@ -193,11 +207,7 @@ func writeProfile(w io.Writer, c paint, label string, h *Host) {
 		header = append(header, gcell{text: flagTitles[f], style: c.dim})
 	}
 	rows := [][]gcell{header}
-	var rs []probe.Result
-	if h.Region != nil {
-		rs = append(rs, h.Region.Results...)
-	}
-	for _, r := range append(rs, h.Services...) {
+	for _, r := range h.factResults() {
 		f := r.Facts
 		if f == nil {
 			continue
