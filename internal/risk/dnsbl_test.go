@@ -72,6 +72,7 @@ func byService(rs []probe.Result) map[string]probe.Result {
 }
 
 func TestDNSBL(t *testing.T) {
+	noEnvProxy(t)
 	f := &fakeResolver{
 		answers: map[string][]string{
 			"4.3.2.81.zen.spamhaus.org":       {"127.0.0.4", "127.0.0.11"},
@@ -110,6 +111,7 @@ func TestDNSBL(t *testing.T) {
 }
 
 func TestDNSBLv6AndPublicResolver(t *testing.T) {
+	noEnvProxy(t)
 	f := &fakeResolver{}
 	rc := writeResolvConf(t, "# x\nnameserver 8.8.8.8\nnameserver 2001:4860:4860::8888\n")
 	rs := checkDNSBL(context.Background(), f, netip.MustParseAddr("2a00:1450::1"), rc)
@@ -178,7 +180,15 @@ func testNet(proxy *url.URL, rules ...netx.Rule) *netx.Net {
 	return netx.New(netx.Options{Timeout: 2 * time.Second, Proxy: proxy}, netx.NewPolicy(rules...), ledger.New())
 }
 
+func noEnvProxy(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
+}
+
 func TestSMTP(t *testing.T) {
+	noEnvProxy(t)
 	quit := make(chan string, 1)
 	host, port := smtpServer(t, func(c net.Conn) {
 		c.Write([]byte("220-mx.example.net ESMTP\r\n220 ready\r\n"))
@@ -199,6 +209,7 @@ func TestSMTP(t *testing.T) {
 }
 
 func TestSMTPFailures(t *testing.T) {
+	noEnvProxy(t)
 	silent, sport := smtpServer(t, func(c net.Conn) { time.Sleep(time.Second) })
 	reject, rport := smtpServer(t, func(c net.Conn) { c.Write([]byte("554 no service\r\n")); c.Read(make([]byte, 16)) })
 	l, _ := net.Listen("tcp", "127.0.0.1:0")

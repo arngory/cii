@@ -10,6 +10,9 @@ import (
 )
 
 func TestDialPolicyLedgerAndProxy(t *testing.T) {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -55,5 +58,26 @@ func TestDialPolicyLedgerAndProxy(t *testing.T) {
 	if byKey["m 127.0.0.1 tcp"].Requests != 1 || byKey["other 127.0.0.1 tcp"].Blocked != 1 ||
 		byKey["m a.example udp"].Blocked != 1 || byKey["m a.example dns"].Blocked != 1 {
 		t.Fatalf("ledger = %+v", led.Entries())
+	}
+}
+
+func TestEnvProxyDisablesRaw(t *testing.T) {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
+	clean := New(Options{}, NewPolicy(Rule{Module: "m", Pattern: "a.example"}), ledger.New())
+	if clean.Proxied() {
+		t.Fatal("no proxy configured, yet Proxied() is true")
+	}
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	n := New(Options{}, NewPolicy(Rule{Module: "m", Pattern: "a.example"}), ledger.New())
+	if !n.Proxied() {
+		t.Fatal("HTTPS_PROXY not detected")
+	}
+	if _, err := n.Dial(context.Background(), "m", "tcp", "a.example:25"); !errors.Is(err, ErrProxyRaw) {
+		t.Fatalf("raw dial with env proxy: %v", err)
+	}
+	if _, err := n.LookupHost(context.Background(), "m", "a.example"); !errors.Is(err, ErrProxyRaw) {
+		t.Fatalf("lookup with env proxy: %v", err)
 	}
 }

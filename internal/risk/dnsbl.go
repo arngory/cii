@@ -126,10 +126,10 @@ type dialer interface {
 	Dial(ctx context.Context, module, network, addr string) (net.Conn, error)
 }
 
-const proxyReason = "disabled while --proxy is set"
+const proxyReason = "disabled while a proxy is in effect"
 
 func Run(ctx context.Context, n *netx.Net, ip netip.Addr, opts Options) []probe.Result {
-	if n.Options().Proxy != nil {
+	if n.Proxied() {
 		return proxied(ip, opts)
 	}
 	return run(ctx, n, n, n.Options().Timeout, ip, opts)

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 
@@ -54,12 +55,24 @@ func DefaultUserAgent() string {
 }
 
 type Net struct {
-	opts   Options
-	policy *Policy
-	ledger *ledger.Ledger
-	tr     *http.Transport
-	proxy  sync.Map
+	opts    Options
+	policy  *Policy
+	ledger  *ledger.Ledger
+	tr      *http.Transport
+	proxy   sync.Map
+	proxied bool
 }
+
+func envProxy() bool {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		if os.Getenv(k) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func (n *Net) Proxied() bool { return n.proxied }
 
 func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	if opts.Timeout <= 0 {
@@ -72,7 +85,7 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	if opts.Source.IsValid() {
 		d.LocalAddr = &net.TCPAddr{IP: opts.Source.AsSlice()}
 	}
-	n := &Net{opts: opts, policy: policy, ledger: led}
+	n := &Net{opts: opts, policy: policy, ledger: led, proxied: opts.Proxy != nil || envProxy()}
 
 	proxy := http.ProxyFromEnvironment
 	if opts.Proxy != nil {

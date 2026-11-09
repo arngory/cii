@@ -7,7 +7,7 @@ import (
 	"net"
 )
 
-var ErrProxyRaw = errors.New("raw connections and DNS lookups are disabled while --proxy is set")
+var ErrProxyRaw = errors.New("raw connections and DNS lookups are disabled while a proxy is in effect")
 
 func (n *Net) Options() Options { return n.opts }
 
@@ -17,7 +17,7 @@ func (n *Net) allow(module, host, proto string) (Rule, error) {
 		n.ledger.Blocked(module, "not declared", normalizeHost(host), proto)
 		return rule, &BlockedError{Module: module, Host: host}
 	}
-	if n.opts.Proxy != nil {
+	if n.proxied {
 		n.ledger.Blocked(module, rule.Purpose, normalizeHost(host), proto)
 		return rule, ErrProxyRaw
 	}
