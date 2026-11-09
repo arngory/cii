@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/arngory/cii/internal/config"
 	"github.com/arngory/cii/internal/ledger"
@@ -160,5 +161,12 @@ func TestSelectRespectsKeys(t *testing.T) {
 	}
 	if !has(Select(config.Keys{}), "ipinfo.io") {
 		t.Error("keyless ipinfo.io missing")
+	}
+}
+
+func TestTruncateKeepsUTF8(t *testing.T) {
+	got := truncate("абвгд", 5)
+	if !utf8.ValidString(got) || got != "аб…" {
+		t.Fatalf("truncate = %q", got)
 	}
 }

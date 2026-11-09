@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/arngory/cii/internal/config"
@@ -83,7 +84,7 @@ func rdap(r *response) []Result {
 			if cc != "" {
 				break
 			}
-			if len(e.VCardArray) == 2 && contains(e.Roles, "registrant") {
+			if len(e.VCardArray) == 2 && slices.Contains(e.Roles, "registrant") {
 				cc = vcardCountry(e.VCardArray[1])
 			}
 		}
@@ -117,15 +118,6 @@ func vcardCountry(raw json.RawMessage) string {
 		}
 	}
 	return ""
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 var traceLine = regexp.MustCompile(`(?m)^(loc|colo)=([A-Za-z]+)\s*$`)
