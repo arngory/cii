@@ -80,9 +80,11 @@ func TestRun(t *testing.T) {
 		{Service: "redir", Group: "g", Requests: Get(srv.URL + "/redir"), Eval: CountryFrom(WholeBody, 0)},
 		{Service: "v6only", Group: "g", Transport: netx.IPv6, Requests: Get(srv.URL + "/x"), Eval: CountryFrom(WholeBody, 0)},
 	}
+	keys := config.Keys{IPinfoToken: "T"}
+	checks = Select("m", checks, keys, true)
 	led := ledger.New()
-	n := netx.New(netx.Options{}, netx.NewPolicy(Rules("m", checks)...), led)
-	env := Env{Module: "m", Nets: map[netx.Family]*netx.Net{netx.IPv4: n}, Keys: config.Keys{IPinfoToken: "T"}}
+	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(checks)...), led)
+	env := Env{Nets: map[netx.Family]*netx.Net{netx.IPv4: n}, Keys: keys}
 	res := Run(context.Background(), env, netx.IPv4, netip.MustParseAddr("203.0.113.9"), checks)
 	if len(res) != 5 {
 		t.Fatalf("results = %+v", res)
@@ -117,10 +119,11 @@ func TestSelect(t *testing.T) {
 		}
 		return strings.Join(s, ",")
 	}
-	if got := names(Select(checks, config.Keys{}, false)); got != "a" {
+	if got := names(Select("m", checks, config.Keys{}, false)); got != "a" {
 		t.Errorf("default = %s", got)
 	}
-	if got := names(Select(checks, config.Keys{GeoapifyKey: "x"}, true)); got != "a,b,k" {
+	sel := Select("m", checks, config.Keys{GeoapifyKey: "x"}, true)
+	if got := names(sel); got != "a,b,k" || sel[0].Module != "m" {
 		t.Errorf("extended+key = %s", got)
 	}
 }

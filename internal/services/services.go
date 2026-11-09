@@ -2,15 +2,13 @@ package services
 
 import (
 	"bytes"
-	"context"
 	"net/http"
-	"net/netip"
 	"regexp"
 
 	"github.com/arngory/cii/internal/clientids"
 	"github.com/arngory/cii/internal/config"
-	"github.com/arngory/cii/internal/netx"
 	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/region"
 )
 
 const Module = "services"
@@ -22,15 +20,7 @@ const (
 )
 
 func Select(k config.Keys, extended bool) []probe.Check {
-	return probe.Select(Checks, k, extended)
-}
-
-func Rules(checks []probe.Check) []netx.Rule {
-	return probe.Rules(Module, checks)
-}
-
-func Run(ctx context.Context, nets map[netx.Family]*netx.Net, keys config.Keys, f netx.Family, ip netip.Addr, checks []probe.Check) []probe.Result {
-	return probe.Run(ctx, probe.Env{Module: Module, Nets: nets, Keys: keys}, f, ip, checks)
+	return probe.Select(Module, Checks, k, extended)
 }
 
 var Checks = []probe.Check{
@@ -59,16 +49,29 @@ var Checks = []probe.Check{
 
 	{Service: "Disney+", Group: Streaming, Tier: probe.TierB, Requests: []probe.Request{{Method: http.MethodPost,
 		URL: "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql", Body: clientids.DisneyPlusQuery,
-		Header: map[string]string{"Authorization": "Bearer " + clientids.DisneyPlusAPIKey, "Content-Type": "application/json"}}}, Eval: disneyPlus},
+		Header: map[string]string{"Authorization": "Bearer " + clientids.DisneyPlusAPIKey, "Content-Type": "application/json"}}},
+		Eval: withPlatformCountry("Disney+", disneyPlus)},
 	{Service: "Spotify signup", Group: Streaming, Tier: probe.TierB, Requests: []probe.Request{{
 		URL:    "https://spclient.wg.spotify.com/signup/public/v1/account/?validate=1&key=" + clientids.SpotifySignupKey,
-		Header: map[string]string{"X-Client-Id": clientids.SpotifyClientID}}}, Eval: spotify},
+		Header: map[string]string{"X-Client-Id": clientids.SpotifyClientID}}},
+		Eval: withPlatformCountry("Spotify", spotify)},
 	{Service: "YouTube Premium", Group: Streaming, Tier: probe.TierB, Requests: []probe.Request{{Method: http.MethodPost,
 		URL: "https://www.youtube.com/youtubei/v1/browse", Body: clientids.YouTubePremiumQuery,
 		Header: map[string]string{"Content-Type": "application/json"}}}, Eval: youtubePremium},
 	{Service: "DAZN", Group: Streaming, Tier: probe.TierB, Requests: []probe.Request{{Method: http.MethodPost,
 		URL: "https://startup.core.indazn.com/misl/v5/Startup", Body: clientids.DAZNStartupBody,
 		Header: map[string]string{"Content-Type": "application/json"}}}, Eval: dazn},
+}
+
+func withPlatformCountry(service string, eval func([]*probe.Response) []probe.Result) func([]*probe.Response) []probe.Result {
+	return func(rs []*probe.Response) []probe.Result {
+		out := eval(rs)
+		platform := probe.Result{Group: region.Platform, Service: service, Status: probe.Unknown}
+		if out[0].Country != "" {
+			platform.Status, platform.Country = probe.OK, out[0].Country
+		}
+		return append(out, platform)
+	}
 }
 
 func aiAPI(service, rawURL, blockedMarker string) probe.Check {

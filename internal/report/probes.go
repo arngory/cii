@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
@@ -80,7 +79,7 @@ func writeProbes(w io.Writer, c paint, hosts []labeled) {
 	}
 	extended := false
 	if len(regionCols) > 0 {
-		verdict := []string{"  verdict"}
+		verdict := []gcell{plain("  verdict")}
 		for _, s := range summaries {
 			verdict = append(verdict, verdictCell(c, s.Verdict))
 		}
@@ -122,38 +121,37 @@ func writeProbes(w io.Writer, c paint, hosts []labeled) {
 	}
 }
 
-func writeTable(w io.Writer, c paint, title string, cols []column, sections []section, firstRow []string) bool {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	header := []string{c.bold(title)}
+func writeTable(w io.Writer, c paint, title string, cols []column, sections []section, firstRow []gcell) bool {
+	header := []gcell{{text: title, style: c.bold}}
 	for _, col := range cols {
-		header = append(header, c.bold(col.label))
+		header = append(header, gcell{text: col.label, style: c.bold})
 	}
-	fmt.Fprintln(tw, strings.Join(header, "\t"))
+	rows := [][]gcell{header}
 	if firstRow != nil {
-		fmt.Fprintln(tw, strings.Join(firstRow, "\t"))
+		rows = append(rows, firstRow)
 	}
 	extended := false
 	for _, s := range sections {
-		rows := rowsOf(cols, s.group)
-		if len(rows) == 0 {
+		services := rowsOf(cols, s.group)
+		if len(services) == 0 {
 			continue
 		}
-		fmt.Fprintln(tw, c.dim(s.title)+strings.Repeat("\t", len(cols)))
-		for _, first := range rows {
+		rows = append(rows, []gcell{{text: s.title, style: c.dim}})
+		for _, first := range services {
 			name := "  " + first.Service
 			if first.Extended {
 				name += "*"
 				extended = true
 			}
-			row := []string{name}
+			row := []gcell{plain(name)}
 			for _, col := range cols {
 				r, ok := col.byKey[key(first)]
 				row = append(row, cell(c, r, ok))
 			}
-			fmt.Fprintln(tw, strings.Join(row, "\t"))
+			rows = append(rows, row)
 		}
 	}
-	tw.Flush()
+	writeGrid(w, rows)
 	return extended
 }
 
@@ -171,9 +169,9 @@ func rowsOf(cols []column, g probe.Group) []probe.Result {
 	return out
 }
 
-func verdictCell(c paint, verdict []string) string {
+func verdictCell(c paint, verdict []string) gcell {
 	if len(verdict) == 0 {
-		return c.dim("?")
+		return gcell{text: "?", style: c.dim}
 	}
 	s := strings.Join(verdict, "/")
 	if len(verdict) == 1 {
@@ -181,12 +179,12 @@ func verdictCell(c paint, verdict []string) string {
 			s += " " + name
 		}
 	}
-	return c.green(s)
+	return gcell{text: s, style: c.green}
 }
 
-func cell(c paint, r probe.Result, ok bool) string {
+func cell(c paint, r probe.Result, ok bool) gcell {
 	if !ok {
-		return c.dim("—")
+		return gcell{text: "—", style: c.dim}
 	}
 	withCountry := func(s string) string {
 		if r.Country != "" {
@@ -197,23 +195,23 @@ func cell(c paint, r probe.Result, ok bool) string {
 	switch r.Status {
 	case probe.OK:
 		if r.IATA != "" {
-			return r.Country + " " + c.dim(r.IATA)
+			return plain(r.Country + " " + r.IATA)
 		}
-		return r.Country
+		return plain(r.Country)
 	case probe.Yes:
-		return c.green(withCountry("yes"))
+		return gcell{text: withCountry("yes"), style: c.green}
 	case probe.No:
-		return c.red(withCountry("no"))
+		return gcell{text: withCountry("no"), style: c.red}
 	case probe.Partial:
 		label := "partial"
 		if r.Reason != "" {
 			label = r.Reason
 		}
-		return c.yellow(withCountry(label))
+		return gcell{text: withCountry(label), style: c.yellow}
 	case probe.IPBlock:
-		return c.red("blocked")
+		return gcell{text: "blocked", style: c.red}
 	case probe.Failed:
-		return c.dim("error")
+		return gcell{text: "error", style: c.dim}
 	}
-	return c.dim("?")
+	return gcell{text: "?", style: c.dim}
 }

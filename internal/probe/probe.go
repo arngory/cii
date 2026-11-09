@@ -64,6 +64,7 @@ type Response struct {
 }
 
 type Check struct {
+	Module     string
 	Service    string
 	Group      Group
 	Tier       Tier
@@ -77,17 +78,18 @@ type Check struct {
 
 func Get(rawURL string) []Request { return []Request{{URL: rawURL}} }
 
-func Select(checks []Check, k config.Keys, extended bool) []Check {
+func Select(module string, checks []Check, k config.Keys, extended bool) []Check {
 	var out []Check
 	for _, c := range checks {
 		if (c.Tier == TierA || extended) && (c.KeyOK == nil || c.KeyOK(k)) {
+			c.Module = module
 			out = append(out, c)
 		}
 	}
 	return out
 }
 
-func Rules(module string, checks []Check) []netx.Rule {
+func Rules(checks []Check) []netx.Rule {
 	var rules []netx.Rule
 	for _, c := range checks {
 		hosts := append([]string(nil), c.ExtraHosts...)
@@ -97,16 +99,15 @@ func Rules(module string, checks []Check) []netx.Rule {
 			}
 		}
 		for _, h := range hosts {
-			rules = append(rules, netx.Rule{Module: module, Pattern: h, Purpose: module + ": " + c.Service})
+			rules = append(rules, netx.Rule{Module: c.Module, Pattern: h, Purpose: c.Module + ": " + c.Service})
 		}
 	}
 	return rules
 }
 
 type Env struct {
-	Module string
-	Nets   map[netx.Family]*netx.Net
-	Keys   config.Keys
+	Nets map[netx.Family]*netx.Net
+	Keys config.Keys
 }
 
 const maxBody = 4 << 20
@@ -156,7 +157,7 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 	}
 	var responses []*Response
 	for _, r := range c.Requests {
-		resp, err := do(ctx, n.HTTPClient(env.Module), env.Keys, ip, c, r)
+		resp, err := do(ctx, n.HTTPClient(c.Module), env.Keys, ip, c, r)
 		if err != nil {
 			return Fail(reason(err))
 		}

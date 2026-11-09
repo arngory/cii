@@ -23,26 +23,9 @@ var ExtendedChecks = []probe.Check{
 			Header: map[string]string{"User-Agent": clientids.ClaudeAndroidUA, "Anthropic-Client-Platform": clientids.ClaudePlatformHeader}}},
 		Eval: probe.CountryFrom(probe.JSONPath("statsig.user.country"), 0)},
 	{Service: "Netflix", Group: Platform, Tier: probe.TierB, Requests: probe.Get(fastURL), Eval: netflixFast},
-	{Service: "Spotify", Group: Platform, Tier: probe.TierB, Requests: spotifySignup(),
-		Eval: probe.CountryFrom(probe.JSONPath("country"), 0)},
-	{Service: "Disney+", Group: Platform, Tier: probe.TierB, Requests: disneyPlusGraph(),
-		Eval: probe.CountryFrom(probe.JSONPath("extensions.sdk.session.location.countryCode"), 0)},
 }
 
 const fastURL = "https://api.fast.com/netflix/speedtest/v2?https=true&urlCount=1&token=" + clientids.FastToken
-
-func spotifySignup() []probe.Request {
-	return []probe.Request{{
-		URL:    "https://spclient.wg.spotify.com/signup/public/v1/account/?validate=1&key=" + clientids.SpotifySignupKey,
-		Header: map[string]string{"X-Client-Id": clientids.SpotifyClientID},
-	}}
-}
-
-func disneyPlusGraph() []probe.Request {
-	return []probe.Request{{Method: http.MethodPost, URL: "https://disney.api.edge.bamgrid.com/graph/v1/device/graphql",
-		Body:   clientids.DisneyPlusQuery,
-		Header: map[string]string{"Authorization": "Bearer " + clientids.DisneyPlusAPIKey, "Content-Type": "application/json"}}}
-}
 
 var netflixNode = regexp.MustCompile(`^https://ipv[46]-([a-z0-9]+-([a-z]{3})[0-9]+[a-z0-9-]*)\.`)
 

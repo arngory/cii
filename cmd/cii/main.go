@@ -213,16 +213,14 @@ func cmdIP(ctx context.Context, args []string) error {
 	if c.quick && c.extended {
 		return errors.New("--quick and --extended are mutually exclusive")
 	}
-	var regionChecks, serviceChecks []probe.Check
+	var checks []probe.Check
 	if !c.quick {
-		regionChecks = region.Select(cfg.Keys, c.extended)
-		serviceChecks = services.Select(cfg.Keys, c.extended)
+		checks = append(region.Select(cfg.Keys, c.extended), services.Select(cfg.Keys, c.extended)...)
 	}
 	policy := netx.NewPolicy()
 	if !c.offline {
 		policy.Add(ipdetect.Rules(providers)...)
-		policy.Add(region.Rules(regionChecks)...)
-		policy.Add(services.Rules(serviceChecks)...)
+		policy.Add(probe.Rules(checks)...)
 	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
@@ -269,14 +267,20 @@ func cmdIP(ctx context.Context, args []string) error {
 	for _, h := range hosts {
 		host := report.NewHost(h.addr, h.geo, c.mask)
 		if h.addr.Address.IsValid() {
-			var results []probe.Result
+			results := localOpinions(h.geo)
 			if !c.offline {
-				results = region.Run(ctx, nets, cfg.Keys, h.family, h.addr.Address, regionChecks)
-				if svc := services.Run(ctx, nets, cfg.Keys, h.family, h.addr.Address, serviceChecks); len(svc) > 0 {
+				var svc []probe.Result
+				for _, r := range probe.Run(ctx, probe.Env{Nets: nets, Keys: cfg.Keys}, h.family, h.addr.Address, checks) {
+					if region.Owns(r.Group) {
+						results = append(results, r)
+					} else {
+						svc = append(svc, r)
+					}
+				}
+				if len(svc) > 0 {
 					host.SetServices(svc, c.mask)
 				}
 			}
-			results = append(localOpinions(h.geo), results...)
 			if len(results) > 0 {
 				host.SetRegion(region.Summarize(results), c.mask)
 			}

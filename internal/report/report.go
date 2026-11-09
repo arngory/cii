@@ -201,18 +201,19 @@ func writeLedger(w io.Writer, c paint, entries []ledger.Entry) {
 		return
 	}
 	fmt.Fprintf(w, "%s %d destination(s)\n", c.bold("Network contacts:"), len(entries))
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	var rows [][]gcell
 	for _, e := range entries {
-		status := fmt.Sprintf("%d req", e.Requests)
+		status := gcell{text: fmt.Sprintf("%d req", e.Requests)}
 		if e.Errors > 0 {
-			status += fmt.Sprintf(", %d failed", e.Errors)
+			status.text += fmt.Sprintf(", %d failed", e.Errors)
 		}
 		if e.Blocked > 0 {
-			status += c.red(fmt.Sprintf(", %d BLOCKED", e.Blocked))
+			status.text += fmt.Sprintf(", %d BLOCKED", e.Blocked)
+			status.style = c.red
 		}
-		fmt.Fprintf(tw, "  %s\t%s\t%s\t%s\t%s\n", e.Module, e.Host, e.Proto, status, c.dim(e.Purpose))
+		rows = append(rows, []gcell{plain("  " + e.Module), plain(e.Host), plain(e.Proto), status, {text: e.Purpose, style: c.dim}})
 	}
-	tw.Flush()
+	writeGrid(w, rows)
 }
 
 func WritePlan(w io.Writer, color bool, rules []netx.Rule) {
