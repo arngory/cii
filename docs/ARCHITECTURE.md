@@ -24,8 +24,9 @@
 | `internal/clientids` | Все сторонние идентификаторы клиентов, нужные проверкам уровня B, в одном месте |
 | `internal/refdata` | Встроенные справочники: названия стран (CLDR) и «IATA → страна» (OurAirports); генерируются `go generate ./internal/refdata` |
 | `internal/config` | Необязательный `config.yaml`: свои ключи, свой список echo-сервисов, набор баз по умолчанию |
-| `internal/report` | Текстовый и JSON-вывод, маскирование адресов, план, журнал |
-| `internal/paths` | Каталоги конфига и данных по ОС (XDG, `%LOCALAPPDATA%`, `~/Library/Application Support`) |
+| `internal/report` | Компактный вывод по ширине терминала (`compact.go`), подробные таблицы для `--debug` и лога (`probes.go`, `report.go`), JSON, маскирование адресов, план, журнал; выравнивание по видимой ширине с учётом цвета (`grid.go`) |
+| `internal/runlog` | Локальный лог каждого запуска: подробный отчёт + JSON, права 0600, хранятся последние 20 |
+| `internal/paths` | Каталоги конфига, данных и логов по ОС (XDG, `%LOCALAPPDATA%`, `~/Library/…`) |
 
 ## Поток выполнения `cii`
 
