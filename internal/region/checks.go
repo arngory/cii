@@ -34,7 +34,7 @@ func head(rawURL string) []probe.Request {
 }
 
 var Checks = []probe.Check{
-	{Service: "RDAP (RIR)", Group: GeoIP, Requests: probe.Get("https://rdap.db.ripe.net/ip/{ip}"), ExtraHosts: rdapHosts, Eval: rdap},
+	{Service: "RDAP (RIR)", Group: Registry, Requests: probe.Get("https://rdap.db.ripe.net/ip/{ip}"), ExtraHosts: rdapHosts, Eval: rdap},
 	withAuth(geoip("ipinfo.io", "https://ipinfo.io/{ip}/json", probe.JSONPath("country")), nil, func(req *http.Request, k config.Keys) {
 		if k.IPinfoToken != "" {
 			req.Header.Set("Authorization", "Bearer "+k.IPinfoToken)
@@ -42,17 +42,17 @@ var Checks = []probe.Check{
 	}),
 	geoip("ipapi.co", "https://ipapi.co/{ip}/json/", probe.JSONPath("country_code")),
 	geoip("ifconfig.co", "https://ifconfig.co/country-iso?ip={ip}", probe.WholeBody),
-	withAuth(geoip("ip2location.io", "https://api.ip2location.io/?ip={ip}", probe.JSONPath("country_code")), nil,
-		func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IP2LocationKey) }),
+	withFacts(withAuth(geoip("ip2location.io", "https://api.ip2location.io/?ip={ip}", probe.JSONPath("country_code")), nil,
+		func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IP2LocationKey) }), ip2locationFacts),
 	geoip("country.is", "https://api.country.is/{ip}", probe.JSONPath("country")),
 	geoip("geojs.io", "https://get.geojs.io/v1/ip/country.json?ip={ip}", probe.JSONPath("[0].country")),
 	geoip("ipbase.com", "https://api.ipbase.com/v2/info?ip={ip}", probe.JSONPath("data.location.country.alpha2")),
-	geoip("ipquery.io", "https://api.ipquery.io/{ip}", probe.JSONPath("location.country_code")),
+	withFacts(geoip("ipquery.io", "https://api.ipquery.io/{ip}", probe.JSONPath("location.country_code")), ipqueryFacts),
 	geoip("ipwho.is", "https://ipwho.is/{ip}", probe.JSONPath("country_code")),
-	ipv4Only(geoip("ip-api.com", "http://ip-api.com/json/{ip}?fields=status,countryCode", probe.JSONPath("countryCode"))),
-	withAuth(geoip("ipregistry.co", "https://api.ipregistry.co/{ip}", probe.JSONPath("location.country.code")),
+	withFacts(ipv4Only(geoip("ip-api.com", "http://ip-api.com/json/{ip}?fields=status,countryCode,proxy,hosting,mobile", probe.JSONPath("countryCode"))), ipAPIFacts),
+	withFacts(withAuth(geoip("ipregistry.co", "https://api.ipregistry.co/{ip}", probe.JSONPath("location.country.code")),
 		func(k config.Keys) bool { return k.IPRegistryKey != "" },
-		func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IPRegistryKey) }),
+		func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IPRegistryKey) }), ipregistryFacts),
 	withAuth(geoip("geoapify.com", "https://api.geoapify.com/v1/ipinfo?ip={ip}", probe.JSONPath("country.iso_code")),
 		func(k config.Keys) bool { return k.GeoapifyKey != "" },
 		func(req *http.Request, k config.Keys) { setQuery(req, "apiKey", k.GeoapifyKey) }),

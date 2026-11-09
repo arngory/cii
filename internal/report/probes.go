@@ -24,6 +24,7 @@ func (h *Host) SetRegion(s region.Summary, mask bool) {
 	maskReasons(s.Results, mask)
 	maskReasons(s.Attention, mask)
 	h.Region = &s
+	h.refreshProfile()
 }
 
 func (r *Report) SetCensor(rs []probe.Result, mask bool) {
@@ -44,6 +45,7 @@ func (h *Host) SetServices(rs []probe.Result, mask bool) {
 		}
 	}
 	h.Services = rs
+	h.refreshProfile()
 }
 
 type section struct {
@@ -51,7 +53,7 @@ type section struct {
 	title string
 }
 
-var regionSections = []section{{region.GeoIP, "GeoIP"}, {region.Platform, "Platforms"}, {region.CDN, "CDN"}}
+var regionSections = []section{{region.GeoIP, "GeoIP"}, {region.Registry, "Registry"}, {region.Platform, "Platforms"}, {region.CDN, "CDN"}}
 
 func sectionsOf(cols []column) []section {
 	var out []section
@@ -125,6 +127,11 @@ func writeProbes(w io.Writer, c paint, hosts []labeled) {
 	if len(serviceCols) > 0 {
 		extended = writeTable(w, c, "Services", serviceCols, sectionsOf(serviceCols), nil) || extended
 		fmt.Fprintln(w)
+	}
+	for _, h := range hosts {
+		if h.host != nil && h.host.Profile != nil {
+			writeProfile(w, c, h.label, h.host)
+		}
 	}
 	var fails []string
 	for _, cols := range [][]column{regionCols, serviceCols} {

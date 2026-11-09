@@ -53,6 +53,7 @@ type Host struct {
 	Geo       []geodb.Record  `json:"geo,omitempty"`
 	Region    *region.Summary `json:"region,omitempty"`
 	Services  []probe.Result  `json:"services,omitempty"`
+	Profile   *Profile        `json:"profile,omitempty"`
 }
 
 type DataInfo struct {

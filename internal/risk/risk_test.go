@@ -157,3 +157,31 @@ func TestIPData(t *testing.T) {
 		t.Errorf("unauth = %+v", r)
 	}
 }
+
+func TestReputationFacts(t *testing.T) {
+	pc := one(t, evalProxyCheck(resp(200, `{"status":"ok","203.0.113.7":{"proxy":"no","type":"Business","risk":12,"isocode":"DE"}}`))).Facts
+	if pc.Usage != "business" || *pc.Score != 12 || pc.Flags[probe.Hosting] || pc.Flags[probe.VPN] || len(pc.Flags) != 4 {
+		t.Errorf("proxycheck facts = %+v", pc)
+	}
+	vpn := one(t, evalProxyCheck(resp(200, `{"status":"ok","203.0.113.7":{"proxy":"yes","type":"VPN","risk":66}}`))).Facts
+	if vpn.Usage != "" || !vpn.Flags[probe.VPN] || vpn.Flags[probe.Proxy] || len(vpn.Flags) != 3 {
+		t.Errorf("proxycheck VPN facts = %+v", vpn)
+	}
+	ia := one(t, evalIPAPIis(resp(200, `{"is_datacenter":true,"is_vpn":false,"is_proxy":false,"is_tor":false,"is_abuser":true,"is_crawler":false,"is_mobile":false,
+		"company":{"type":"hosting","abuser_score":"0.0123 (Low)"},"asn":{"type":"isp"},"location":{"country_code":"DE"}}`))).Facts
+	if ia.Usage != "isp" || ia.Company != "hosting" || *ia.Score != 1 || !ia.Flags[probe.Hosting] || !ia.Flags[probe.Abuser] || len(ia.Flags) != 6 {
+		t.Errorf("ipapi.is facts = %+v", ia)
+	}
+	ab := one(t, evalAbuseIPDB(resp(200, `{"data":{"abuseConfidenceScore":30,"countryCode":"DE","usageType":"Fixed Line ISP","isTor":false,"totalReports":3}}`))).Facts
+	if ab.Usage != "isp" || *ab.Score != 30 || !ab.Flags[probe.Abuser] || ab.Flags[probe.Tor] {
+		t.Errorf("AbuseIPDB facts = %+v", ab)
+	}
+	qs := one(t, evalIPQS(resp(200, `{"success":true,"fraud_score":80,"country_code":"DE","proxy":true,"vpn":true,"tor":false,"bot_status":true,"connection_type":"Residential","mobile":false}`))).Facts
+	if qs.Usage != "isp" || *qs.Score != 80 || !qs.Flags[probe.VPN] || qs.Flags[probe.Proxy] || !qs.Flags[probe.Bot] {
+		t.Errorf("IPQS facts = %+v", qs)
+	}
+	id := one(t, evalIPData(resp(200, `{"country_code":"DE","asn":{"type":"hosting"},"threat":{"is_tor":false,"is_proxy":false,"is_datacenter":true,"is_known_abuser":false,"is_known_attacker":false,"scores":{"threat_score":5}}}`))).Facts
+	if _, ok := id.Flags[probe.VPN]; ok || id.Usage != "hosting" || *id.Score != 5 || !id.Flags[probe.Hosting] {
+		t.Errorf("ipdata facts = %+v", id)
+	}
+}

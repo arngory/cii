@@ -106,3 +106,41 @@ func TestSelect(t *testing.T) {
 		t.Error("tier B selection ignores --extended")
 	}
 }
+
+func TestFactsFromGeoIPAnswers(t *testing.T) {
+	q := ipqueryFacts([]byte(`{"risk":{"is_mobile":true,"is_vpn":false,"is_tor":false,"is_proxy":true,"is_datacenter":false,"risk_score":42}}`))
+	if q.Usage != "mobile" || !q.Flags[probe.Proxy] || q.Flags[probe.VPN] || len(q.Flags) != 4 || *q.Score != 42 {
+		t.Errorf("ipquery = %+v", q)
+	}
+	if f := ip2locationFacts([]byte(`{"country_code":"DE","is_proxy":false}`)); len(f.Flags) != 1 || f.Flags[probe.Proxy] {
+		t.Errorf("ip2location = %+v", f)
+	}
+	if f := ip2locationFacts([]byte(`{"country_code":"DE"}`)).OrNil(); f != nil {
+		t.Errorf("ip2location without flag = %+v", f)
+	}
+	a := ipAPIFacts([]byte(`{"status":"success","countryCode":"DE","proxy":false,"hosting":true,"mobile":false}`))
+	if a.Usage != "" || !a.Flags[probe.Hosting] || a.Flags[probe.Proxy] || len(a.Flags) != 2 {
+		t.Errorf("ip-api = %+v", a)
+	}
+	r := ipregistryFacts([]byte(`{"connection":{"type":"isp"},"company":{"type":"business"},"security":{"is_abuser":false,"is_attacker":true,"is_cloud_provider":false,"is_proxy":false,"is_tor":false,"is_tor_exit":false,"is_vpn":false}}`))
+	if r.Usage != "isp" || r.Company != "business" || !r.Flags[probe.Abuser] || r.Flags[probe.Tor] || len(r.Flags) != 5 {
+		t.Errorf("ipregistry = %+v", r)
+	}
+
+	c := withFacts(geoip("x", "https://x.example/{ip}", probe.JSONPath("cc")), ipqueryFacts)
+	ok := c.Eval(resp(`{"cc":"DE","risk":{"is_vpn":true}}`))
+	bad := c.Eval([]*probe.Response{{Status: 500, Body: []byte(`{"risk":{"is_vpn":true}}`)}})
+	if ok[0].Country != "DE" || !ok[0].Facts.Flags[probe.VPN] || bad[0].Facts != nil {
+		t.Errorf("withFacts = %+v / %+v", ok, bad)
+	}
+}
+
+func TestRegistryDoesNotVote(t *testing.T) {
+	s := Summarize([]probe.Result{
+		{Group: GeoIP, Service: "a", Status: probe.OK, Country: "DE"},
+		{Group: Registry, Service: "RDAP (RIR)", Status: probe.OK, Country: "US"},
+	})
+	if strings.Join(s.Verdict, ",") != "DE" || len(s.Attention) != 0 {
+		t.Fatalf("summary = %+v", s)
+	}
+}

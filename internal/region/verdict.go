@@ -53,7 +53,7 @@ func Summarize(results []probe.Result) Summary {
 	sort.Strings(s.Verdict)
 	markFallbacks(&s)
 	for _, r := range s.Results {
-		if r.Status == probe.OK && r.Group != CDN && !slices.Contains(s.Verdict, r.Country) {
+		if r.Status == probe.OK && (r.Group == GeoIP || r.Group == Platform) && !slices.Contains(s.Verdict, r.Country) {
 			s.Attention = append(s.Attention, r)
 		}
 	}

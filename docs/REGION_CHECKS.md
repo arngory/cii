@@ -7,6 +7,7 @@
 | Группа | Что это | Участвует в вердикте |
 |---|---|---|
 | **GeoIP** | базы геолокации: онлайн-провайдеры, которым передаётся адрес, и локальные `.mmdb` (`local:<id>`) | да |
+| **Registry** | страна регистрации блока адресов по RDAP региональных регистраторов (RIR) | нет: показывается рядом с вердиктом как `registered XX` с пометкой `geo-consistent` (совпадает с вердиктом) или `geo-discrepant` (не совпадает) |
 | **Platforms** | страна, которую сервис определил по входящему соединению | да |
 | **CDN** | площадка (IATA-код), через которую сервис отдаёт трафик; страна берётся по встроенному справочнику аэропортов | нет |
 
@@ -20,20 +21,25 @@
 
 | Сервис | Запрос | Ключ | Заметки |
 |---|---|---|---|
-| RDAP (RIR) | `rdap.db.ripe.net/ip/{ip}` с редиректом к нужному RIR | — | страна регистрации, а не геолокация; для ARIN — из адреса регистранта. Разрешены RIPE, ARIN, APNIC, LACNIC, registro.br, AFRINIC; редирект к другим NIR блокируется политикой |
 | ipinfo.io | `ipinfo.io/{ip}/json` | `ipinfo_token` — необязательно | без токена действуют лимиты анонимного доступа |
 | ipapi.co | `ipapi.co/{ip}/json/` | — | бесплатный лимит без ключа |
 | ifconfig.co | `ifconfig.co/country-iso?ip=` | — | открытый сервис echoip, ограничение частоты |
-| ip2location.io | `api.ip2location.io/?ip=` | `ip2location_key` — необязательно | без ключа — суточный лимит (сервис сообщает его в ответе) |
+| ip2location.io | `api.ip2location.io/?ip=` | `ip2location_key` — необязательно | без ключа — суточный лимит (сервис сообщает его в ответе); в том же ответе — флаг прокси |
 | country.is | `api.country.is/{ip}` | — | открытый сервис |
 | geojs.io | `get.geojs.io/v1/ip/country.json?ip=` | — | |
 | ipbase.com | `api.ipbase.com/v2/info?ip=` | — | бесплатный лимит без ключа |
-| ipquery.io | `api.ipquery.io/{ip}` | — | |
+| ipquery.io | `api.ipquery.io/{ip}` | — | в том же ответе — флаги VPN, Tor, прокси, дата-центр, мобильная сеть и оценка риска (см. [RISK_CHECKS.md](RISK_CHECKS.md#профиль-адреса)) |
 | ipwho.is | `ipwho.is/{ip}` | — | бесплатно для некоммерческого использования |
-| ip-api.com | `http://ip-api.com/json/{ip}` | — | бесплатно для некоммерческого использования, только HTTP и только по IPv4; для IPv6-адреса запрос идёт по IPv4 |
-| ipregistry.co | `api.ipregistry.co/{ip}` | `ipregistry_key` — **обязательно** | без вашего ключа не запускается |
+| ip-api.com | `http://ip-api.com/json/{ip}?fields=status,countryCode,proxy,hosting,mobile` | — | бесплатно для некоммерческого использования, только HTTP и только по IPv4; для IPv6-адреса запрос идёт по IPv4; в том же ответе — флаги прокси, хостинга и мобильной сети |
+| ipregistry.co | `api.ipregistry.co/{ip}` | `ipregistry_key` — **обязательно** | без вашего ключа не запускается; в том же ответе — тип подключения и компании, флаги безопасности |
 | geoapify.com | `api.geoapify.com/v1/ipinfo?ip=` | `geoapify_key` — **обязательно** | без вашего ключа не запускается |
 | MaxMind GeoLite | `geolite.info/geoip/v2.1/country/{ip}` | `maxmind_account_id` + `maxmind_license_key` — **обязательно** | бесплатный веб-сервис GeoLite вашей учётной записи |
+
+### Registry (адрес передаётся явно)
+
+| Сервис | Запрос | Ключ | Заметки |
+|---|---|---|---|
+| RDAP (RIR) | `rdap.db.ripe.net/ip/{ip}` с редиректом к нужному RIR | — | страна регистрации, а не геолокация; для ARIN — из адреса регистранта. Разрешены RIPE, ARIN, APNIC, LACNIC, registro.br, AFRINIC; редирект к другим NIR блокируется политикой |
 
 ### Platforms (по входящему соединению)
 

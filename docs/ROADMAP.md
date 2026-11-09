@@ -39,7 +39,8 @@
 - [x] Офлайн-наборы: Tor, AWS, GCP, Oracle, Cloudflare, DigitalOcean (`cii data update`)
 - [x] proxycheck.io без ключа; ipapi.is, AbuseIPDB, IPQS, ipdata — с ключом пользователя
 - [x] Проба исходящего 25-го порта
-- [ ] Тип сети (хостинг / резидентная / мобильная) по ASN-данным; FireHOL — после проверки лицензий списков
+- [x] Профиль адреса по разделам 1–4 IPQuality: страна регистрации и geo-consistent/discrepant, тип, оценки, факторы риска — из уже получаемых ответов
+- [ ] Тип сети по офлайн-данным ASN; FireHOL — после проверки лицензий списков
 
 ## 5. Цензура (censorcheck) — готово
 

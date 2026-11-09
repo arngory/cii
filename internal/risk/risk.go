@@ -123,6 +123,7 @@ type verdict struct {
 	flags   []string
 	notes   []string
 	country string
+	facts   probe.Facts
 }
 
 func (v *verdict) flag(on bool, name string) {
@@ -150,6 +151,7 @@ func (v *verdict) result() []probe.Result {
 		parts = append([]string{strings.Join(v.flags, ", ")}, parts...)
 	}
 	r.Detail = probe.Truncate(strings.Join(parts, "; "), 160)
+	r.Facts = v.facts.OrNil()
 	return []probe.Result{r}
 }
 
@@ -222,6 +224,14 @@ func evalProxyCheck(rs []*probe.Response) []probe.Result {
 	v.note(typ != "vpn" && typ != "tor", e.Type)
 	if e.Risk != nil {
 		v.note(true, "risk "+e.Risk.String())
+		v.facts.SetScore(float64(*e.Risk))
+	}
+	v.facts.Set(probe.VPN, typ == "vpn" || strings.EqualFold(e.VPN, "yes"))
+	v.facts.Set(probe.Tor, typ == "tor")
+	v.facts.Set(probe.Proxy, strings.EqualFold(e.Proxy, "yes") && typ != "vpn" && typ != "tor")
+	if u := probe.NormalizeUsage(e.Type); u != "" {
+		v.facts.Usage = u
+		v.facts.Set(probe.Hosting, u == "hosting")
 	}
 	return v.result()
 }
@@ -245,6 +255,7 @@ func evalIPAPIis(rs []*probe.Response) []probe.Result {
 			Datacenter string `json:"datacenter"`
 		} `json:"datacenter"`
 		Company  json.RawMessage `json:"company"`
+		ASN      json.RawMessage `json:"asn"`
 		Location *struct {
 			CountryCode string `json:"country_code"`
 		} `json:"location"`
@@ -283,6 +294,24 @@ func evalIPAPIis(rs []*probe.Response) []probe.Result {
 	json.Unmarshal(d.Company, &company)
 	v.note(company.Type != "", "company type "+company.Type)
 	v.note(company.AbuserScore != "", "abuser score "+company.AbuserScore)
+	v.facts.Set(probe.VPN, d.IsVPN)
+	v.facts.Set(probe.Proxy, d.IsProxy)
+	v.facts.Set(probe.Tor, d.IsTor)
+	v.facts.Set(probe.Abuser, d.IsAbuser)
+	v.facts.Set(probe.Hosting, *d.IsDatacenter)
+	v.facts.Set(probe.Bot, d.IsCrawler)
+	v.facts.SetCompany(company.Type)
+	var asn struct {
+		Type string `json:"type"`
+	}
+	json.Unmarshal(d.ASN, &asn)
+	v.facts.SetUsage(asn.Type)
+	if d.IsMobile {
+		v.facts.Usage = "mobile"
+	}
+	if score, err := strconv.ParseFloat(strings.Fields(company.AbuserScore + " x")[0], 64); err == nil {
+		v.facts.SetScore(score * 100)
+	}
 	return v.result()
 }
 
@@ -317,6 +346,10 @@ func evalAbuseIPDB(rs []*probe.Response) []probe.Result {
 	v.note(true, x.TotalReports.String()+" reports in 90 days")
 	v.note(x.UsageType != "", x.UsageType)
 	v.note(x.IsWhitelisted != nil && *x.IsWhitelisted, "whitelisted")
+	v.facts.Set(probe.Tor, x.IsTor)
+	v.facts.Set(probe.Abuser, *x.Score >= 25)
+	v.facts.SetScore(float64(*x.Score))
+	v.facts.SetUsage(x.UsageType)
 	return v.result()
 }
 
@@ -335,6 +368,7 @@ func evalIPQS(rs []*probe.Response) []probe.Result {
 		RecentAbuse    bool    `json:"recent_abuse"`
 		BotStatus      bool    `json:"bot_status"`
 		ConnectionType string  `json:"connection_type"`
+		Mobile         bool    `json:"mobile"`
 	}
 	if json.Unmarshal(r.Body, &d) != nil || !d.Success || d.FraudScore == nil {
 		return failure(r, d.Message)
@@ -348,6 +382,16 @@ func evalIPQS(rs []*probe.Response) []probe.Result {
 	v.flag(*d.FraudScore >= 75, "high fraud score")
 	v.note(true, "fraud score "+d.FraudScore.String())
 	v.note(d.ConnectionType != "", d.ConnectionType)
+	v.facts.Set(probe.VPN, d.VPN || d.ActiveVPN)
+	v.facts.Set(probe.Tor, d.Tor || d.ActiveTor)
+	v.facts.Set(probe.Proxy, d.Proxy && !d.VPN && !d.ActiveVPN && !d.Tor && !d.ActiveTor)
+	v.facts.Set(probe.Abuser, d.RecentAbuse)
+	v.facts.Set(probe.Bot, d.BotStatus)
+	v.facts.SetScore(float64(*d.FraudScore))
+	v.facts.SetUsage(d.ConnectionType)
+	if d.Mobile {
+		v.facts.Usage = "mobile"
+	}
 	return v.result()
 }
 
@@ -360,16 +404,20 @@ func evalIPData(rs []*probe.Response) []probe.Result {
 			Type string `json:"type"`
 		} `json:"asn"`
 		Threat *struct {
-			IsTor         bool `json:"is_tor"`
-			IsICloudRelay bool `json:"is_icloud_relay"`
-			IsProxy       bool `json:"is_proxy"`
-			IsDatacenter  bool `json:"is_datacenter"`
-			IsAnonymous   bool `json:"is_anonymous"`
-			IsKnownAttack bool `json:"is_known_attacker"`
-			IsKnownAbuser bool `json:"is_known_abuser"`
-			IsThreat      bool `json:"is_threat"`
-			IsBogon       bool `json:"is_bogon"`
-			Blocklists    []struct {
+			IsTor         bool  `json:"is_tor"`
+			IsICloudRelay bool  `json:"is_icloud_relay"`
+			IsProxy       bool  `json:"is_proxy"`
+			IsDatacenter  bool  `json:"is_datacenter"`
+			IsAnonymous   bool  `json:"is_anonymous"`
+			IsKnownAttack bool  `json:"is_known_attacker"`
+			IsKnownAbuser bool  `json:"is_known_abuser"`
+			IsThreat      bool  `json:"is_threat"`
+			IsBogon       bool  `json:"is_bogon"`
+			IsVPN         *bool `json:"is_vpn"`
+			Scores        *struct {
+				Threat *number `json:"threat_score"`
+			} `json:"scores"`
+			Blocklists []struct {
 				Name string `json:"name"`
 			} `json:"blocklists"`
 		} `json:"threat"`
@@ -398,6 +446,17 @@ func evalIPData(rs []*probe.Response) []probe.Result {
 			names = append(names, b.Name)
 		}
 		v.note(true, "blocklists: "+strings.Join(names, ", "))
+	}
+	v.facts.Set(probe.Tor, t.IsTor)
+	v.facts.Set(probe.Proxy, t.IsProxy)
+	v.facts.SetIf(probe.VPN, t.IsVPN)
+	v.facts.Set(probe.Hosting, t.IsDatacenter)
+	v.facts.Set(probe.Abuser, t.IsKnownAttack || t.IsKnownAbuser)
+	if d.ASN != nil {
+		v.facts.SetUsage(d.ASN.Type)
+	}
+	if t.Scores != nil && t.Scores.Threat != nil {
+		v.facts.SetScore(float64(*t.Scores.Threat))
 	}
 	return v.result()
 }

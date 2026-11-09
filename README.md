@@ -48,8 +48,11 @@ make build
 ```
 IPv4  203.0.113.7 · DE Germany · AS3320 Deutsche Telekom AG
 
-Region  DE Germany · GeoIP 12/12 · platforms 12/12 · ChatGPT* says NL
+Region  DE Germany · registered DE, geo-consistent · GeoIP 11/11 · platforms 12/12 · ChatGPT* says NL
 CDN     Cloudflare FRA DE · YouTube FRA DE · Netflix* AMS NL
+Type    ISP 1/1
+Score   ipquery.io 0 · proxycheck.io 0
+Flags   proxy 0/4 · VPN 0/2 · Tor 0/2 · hosting 0/3
 
 Streaming  ✓ Netflix          ✓ Prime Video      ✓ Disney+*         ✓ Spotify signup*  ✗ YouTube Premium*
 AI         ✓ OpenAI API       ✓ Anthropic API    ✓ Grok API         ✓ Mistral API      …
@@ -63,7 +66,8 @@ details: --debug or ~/.local/state/cii/logs/20260101-120000.log
 - Сервисы — сеткой по секциям. Страна рядом с сервисом показывается, только если она отличается от вердикта. При двух стеках у каждого сервиса две отметки: первая для IPv4, вторая для IPv6.
 - Отметки: `✓` да, `✗` нет, `◐` частично, `⊘` адрес заблокирован сервисом, `?` нет ответа, `!` ошибка; в терминале без UTF-8 — `+ - ~ x ? !`.
 - Региональный каталог сервисов подбирается по стране из вердикта (`--catalog auto`). Можно задать вручную: `--catalog JP,EU`, `all` или `none`.
-- Секции Reputation, DNSBL, Mail и Network описывают, как адрес выглядит со стороны: VPN/прокси/дата-центр, чёрные списки рассылок, исходящий 25-й порт, диапазоны Tor и облаков. Что для этого спрашивается и у кого — в [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md).
+- Профиль адреса (как разделы 1–4 IPQuality): страна регистрации и пометка `geo-consistent`/`geo-discrepant` в строке региона, строки `Type` (тип адреса: ISP, mobile, hosting и т.д.), `Score` (оценки риска 0–100) и `Flags` (сколько источников нашли прокси, VPN, Tor, хостинг, абьюзера, бота). Собирается из уже полученных ответов, без лишних запросов.
+- Секции DNSBL, Mail и Network описывают, как адрес выглядит со стороны: чёрные списки рассылок, исходящий 25-й порт, диапазоны Tor и облаков. Что для этого спрашивается и у кого — в [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md).
 
 `--debug` печатает полные таблицы по каждому источнику, причины неудачных проверок, сведения о локальных базах и журнал соединений: каждый хост, число запросов, назначение, попытки, заблокированные политикой (`BLOCKED`), и сырые соединения, не выполненные из-за прокси (`skipped (proxy)`). Тот же подробный отчёт вместе с JSON при каждом запуске сохраняется в локальный лог: `~/.local/state/cii/logs` на Linux, `~/Library/Logs/cii` на macOS, `%LOCALAPPDATA%\cii\logs` на Windows. Права на файл — 0600, хранятся последние 20 запусков. Лог содержит ваш адрес (если не указан `--mask`) и никуда не отправляется. Отключение — `--no-log`, другой каталог — `CII_LOG_DIR`.
 

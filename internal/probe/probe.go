@@ -48,6 +48,7 @@ type Result struct {
 	Reason   string `json:"reason,omitempty"`
 	Detail   string `json:"detail,omitempty"`
 	Extended bool   `json:"extended,omitempty"`
+	Facts    *Facts `json:"facts,omitempty"`
 }
 
 type Request struct {

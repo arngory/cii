@@ -11,6 +11,7 @@ const (
 	GeoIP    probe.Group = "geoip"
 	Platform probe.Group = "platform"
 	CDN      probe.Group = "cdn"
+	Registry probe.Group = "registry"
 )
 
 func Select(k config.Keys, extended bool) []probe.Check {
@@ -18,5 +19,5 @@ func Select(k config.Keys, extended bool) []probe.Check {
 }
 
 func Owns(g probe.Group) bool {
-	return g == GeoIP || g == Platform || g == CDN
+	return g == GeoIP || g == Platform || g == CDN || g == Registry
 }

@@ -104,7 +104,7 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 
 	var withRegion []fam
 	for _, f := range fams {
-		if f.host.Region != nil {
+		if f.host.Region != nil || f.host.Profile != nil {
 			withRegion = append(withRegion, f)
 		}
 	}
@@ -116,9 +116,15 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 		if len(withRegion) > 1 {
 			label += " " + f.label
 		}
-		writeLine(w, st.Width, m.sep, c.bold(label)+"  ", utf8.RuneCountInString(label)+2, regionParts(c, f.host.Region))
-		if edges := cdnParts(c, f.host.Region); len(edges) > 0 {
-			writeLine(w, st.Width, m.sep, c.dim(pad("CDN", utf8.RuneCountInString(label)))+"  ", utf8.RuneCountInString(label)+2, edges)
+		lw := utf8.RuneCountInString(label)
+		if f.host.Region != nil {
+			writeLine(w, st.Width, m.sep, c.bold(label)+"  ", lw+2, regionParts(c, f.host.Region, f.host.Profile))
+			if edges := cdnParts(c, f.host.Region); len(edges) > 0 {
+				writeLine(w, st.Width, m.sep, c.dim(pad("CDN", lw))+"  ", lw+2, edges)
+			}
+		}
+		for _, row := range profileRows(c, f.host.Profile) {
+			writeLine(w, st.Width, m.sep, c.dim(pad(row.title, lw))+"  ", lw+2, row.parts)
 		}
 	}
 
@@ -194,8 +200,18 @@ func bestASN(geo []geodb.Record) string {
 	return ""
 }
 
-func regionParts(c paint, s *region.Summary) []gcell {
+func regionParts(c paint, s *region.Summary, p *Profile) []gcell {
 	parts := []gcell{verdictCell(c, s.Verdict)}
+	if p != nil && p.Registered != "" {
+		switch {
+		case p.GeoConsistent == nil:
+			parts = append(parts, gcell{text: "registered " + p.Registered, style: c.dim})
+		case *p.GeoConsistent:
+			parts = append(parts, gcell{text: "registered " + p.Registered + ", geo-consistent", style: c.dim})
+		default:
+			parts = append(parts, gcell{text: "registered " + p.Registered + ", geo-discrepant", style: c.yellow})
+		}
+	}
 	for _, g := range []struct {
 		group probe.Group
 		title string
@@ -319,8 +335,12 @@ func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam) {
 	var cols []column
 	var verdicts [][]string
 	for _, f := range fams {
-		if len(f.host.Services) > 0 {
-			cols = append(cols, newColumn(f.label, f.host.Services))
+		rs := f.host.Services
+		if f.host.Profile != nil {
+			rs = slices.DeleteFunc(slices.Clone(rs), func(r probe.Result) bool { return r.Group == risk.Reputation })
+		}
+		if len(rs) > 0 {
+			cols = append(cols, newColumn(f.label, rs))
 			var v []string
 			if f.host.Region != nil {
 				v = f.host.Region.Verdict
