@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -141,10 +140,12 @@ func Rules(opts Options) []netx.Rule {
 		rules = append(rules, netx.Rule{Module: Module, Pattern: host, Purpose: Module + ": " + purpose})
 	}
 	if modes["dns"] {
-		for _, r := range resolvers {
-			add(r.IP, "DNS resolver "+r.Name+" (UDP/53, DoT/853)")
-			if u, err := url.Parse(r.DoH); err == nil {
-				add(u.Hostname(), "DNS resolver "+r.Name+" (DoH)")
+		for _, fam := range []netx.Family{netx.IPv4, netx.IPv6} {
+			for _, r := range resolversFor(fam) {
+				add(r.IP, "DNS resolver "+r.Name+" (UDP/53, DoT/853)")
+				if u, err := url.Parse(r.DoH); err == nil {
+					add(u.Hostname(), "DNS resolver "+r.Name+" (DoH)")
+				}
 			}
 		}
 		for _, d := range hijackDomains {
@@ -154,6 +155,7 @@ func Rules(opts Options) []netx.Rule {
 	if modes["telegram"] {
 		for _, dc := range telegramDCs {
 			add(dc.IP, "Telegram DC MTProto handshake")
+			add(dc.IP6, "Telegram DC MTProto handshake")
 		}
 	}
 	lists, _ := webLists(opts, modes)
@@ -170,10 +172,17 @@ func Rules(opts Options) []netx.Rule {
 }
 
 type runner struct {
-	n       *netx.Net
-	opts    Options
-	sem     chan struct{}
-	retries int
+	n         *netx.Net
+	opts      Options
+	sem       chan struct{}
+	retries   int
+	resolvers []resolver
+	dcs       []telegramDC
+}
+
+func newRunner(n *netx.Net, opts Options) *runner {
+	fam := n.Options().Family
+	return &runner{n: n, opts: opts, sem: make(chan struct{}, 8), retries: max(opts.Retries, 0), resolvers: resolversFor(fam), dcs: telegramDCsFor(fam)}
 }
 
 func (r *runner) acquire() func() {
@@ -197,7 +206,7 @@ func (r *runner) timeoutCtx(ctx context.Context) (context.Context, context.Cance
 
 func Run(ctx context.Context, n *netx.Net, opts Options) []probe.Result {
 	modes, bad := selectedModes(opts)
-	r := &runner{n: n, opts: opts, sem: make(chan struct{}, 8), retries: max(opts.Retries, 0)}
+	r := newRunner(n, opts)
 	var out []probe.Result
 	for _, m := range bad {
 		out = append(out, probe.Result{Service: "mode " + m, Status: probe.Failed, Reason: "unknown mode"})
@@ -289,5 +298,3 @@ func errStatus(err error) probe.Status {
 	}
 	return probe.No
 }
-
-func contains(list []string, s string) bool { return slices.Contains(list, s) }

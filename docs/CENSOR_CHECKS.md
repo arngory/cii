@@ -18,7 +18,7 @@ cii censor --domains my-list.txt --protocol https
 
 ## DNS
 
-Для каждого из 12 резолверов (Cloudflare, Google, Quad9, AdGuard, NextDNS, Яндекс — по два адреса) запрашивается `rutracker.org` тремя транспортами:
+Для каждого из 12 резолверов (Cloudflare, Google, Quad9, AdGuard, NextDNS, Яндекс — по два адреса) запрашивается `rutracker.org` тремя транспортами. У каждого резолвера есть IPv4- и IPv6-адрес; с `-6` используются вторые, а запрашивается запись AAAA. Для Telegram с `-6` берутся IPv6-адреса дата-центров (по одному на DC):
 
 | Транспорт | Как | Статусы |
 |---|---|---|

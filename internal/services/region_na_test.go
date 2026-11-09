@@ -163,7 +163,4 @@ func TestNorthAmericaTiers(t *testing.T) {
 			t.Errorf("%s must be tier A", s)
 		}
 	}
-	if id := naSessionID(); len(id) != 36 || id == naSessionID() {
-		t.Errorf("session id %q", id)
-	}
 }

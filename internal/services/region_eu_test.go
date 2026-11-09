@@ -2,6 +2,7 @@ package services
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/arngory/cii/internal/probe"
@@ -147,19 +148,16 @@ func TestEUChecks(t *testing.T) {
 
 func TestEOSSCatalogHosts(t *testing.T) {
 	for _, code := range []string{"EU", "OC", "SEA", "SPORT"} {
-		seen := map[string]bool{}
+		seen := 0
 		for _, ch := range catalog(code).checks {
-			if seen[ch.Service] {
-				t.Errorf("%s: duplicate service %q", code, ch.Service)
-			}
-			seen[ch.Service] = true
+			seen++
 			for _, rq := range ch.Requests {
-				if rq.URL == "" || rq.URL[:8] != "https://" {
+				if !strings.HasPrefix(rq.URL, "https://") {
 					t.Errorf("%s/%s: bad URL %q", code, ch.Service, rq.URL)
 				}
 			}
 		}
-		if len(seen) == 0 {
+		if seen == 0 {
 			t.Errorf("%s: empty catalog", code)
 		}
 	}

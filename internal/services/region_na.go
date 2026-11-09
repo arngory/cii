@@ -1,8 +1,6 @@
 package services
 
 import (
-	"crypto/rand"
-	"fmt"
 	"net/http"
 	"regexp"
 	"strings"
@@ -44,7 +42,7 @@ func init() {
 		probe.Check{Service: "NBC TV", Tier: probe.TierB, Requests: []probe.Request{{Method: http.MethodPost,
 			URL: "https://geolocation.digitalsvc.apps.nbcuni.com/geolocation/live/usa", Body: clientids.NBCGeoBody,
 			Header: map[string]string{"Accept": "application/media.geo-v2+json", "Content-Type": "application/json",
-				"Authorization": clientids.NBCGeoAuthorization, "Client": clientids.NBCGeoClient, "App-Session-Id": naSessionID(),
+				"Authorization": clientids.NBCGeoAuthorization, "Client": clientids.NBCGeoClient, "App-Session-Id": strings.ToUpper(uuid4()),
 				"Origin": "https://www.nbc.com", "Referer": "https://www.nbc.com/"}}}, Eval: naNBC},
 		brightcoveCheck("encoreTVB", clientids.EncoreTVBBrightcoveAccount, clientids.EncoreTVBBrightcoveVideo, clientids.EncoreTVBBrightcovePolicyKey, "https://www.encoretvb.com"),
 		probe.Check{Service: "Crave", Tier: probe.TierB, Requests: []probe.Request{{
@@ -52,14 +50,6 @@ func init() {
 			Header: map[string]string{"Origin": "https://www.crave.ca", "Referer": "https://www.crave.ca/"}}},
 			Eval: byMarkers([]string{"Geo Constraint Restrictions"}, []string{"video.9c9media.com"})},
 	)
-}
-
-func naSessionID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return strings.ToUpper(fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:]))
 }
 
 func naPhilo(rs []*probe.Response) []probe.Result {

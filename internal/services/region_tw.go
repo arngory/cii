@@ -2,7 +2,6 @@ package services
 
 import (
 	"bytes"
-	"crypto/rand"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -15,7 +14,7 @@ func init() {
 	register("TW",
 		probe.Check{Service: "KKTV", Requests: probe.Get("https://api.kktv.me/v3/ipcheck"), Eval: twKKTV},
 		probe.Check{Service: "LiTV", Tier: probe.TierB, Requests: []probe.Request{{Method: http.MethodPost,
-			URL: "https://www.litv.tv/api/get-urls-no-auth", Body: fmt.Sprintf(clientids.LiTVURLsBodyFormat, twUUID()),
+			URL: "https://www.litv.tv/api/get-urls-no-auth", Body: fmt.Sprintf(clientids.LiTVURLsBodyFormat, uuid4()),
 			Header: map[string]string{"Content-Type": "application/json", "Origin": "https://www.litv.tv", "Referer": "https://www.litv.tv/drama/watch/VOD00328856"}}},
 			Eval: twLiTV},
 		probe.Check{Service: "MyVideo", Requests: []probe.Request{{URL: "https://www.myvideo.net.tw/login.do", NoRedirect: true}}, Eval: byRedirect(regexp.MustCompile(`(?i)serviceAreaBlock`), true)},
@@ -74,12 +73,4 @@ func twLineTV(rs []*probe.Response) []probe.Result {
 	default:
 		return no("countryCode " + code)
 	}
-}
-
-func twUUID() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }

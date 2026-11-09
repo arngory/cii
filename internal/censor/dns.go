@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"slices"
 	"strings"
 	"sync"
 
@@ -21,8 +21,6 @@ import (
 	"github.com/arngory/cii/internal/netx"
 	"github.com/arngory/cii/internal/probe"
 )
-
-var dotRoots *x509.CertPool
 
 type answer struct {
 	RCode dnsmessage.RCode
@@ -151,7 +149,7 @@ func (r *runner) queryDoT(ctx context.Context, addr, serverName, name string, qt
 	if dl, ok := ctx.Deadline(); ok {
 		raw.SetDeadline(dl)
 	}
-	c := tls.Client(raw, &tls.Config{ServerName: serverName, RootCAs: dotRoots, MinVersion: tls.VersionTLS12})
+	c := tls.Client(raw, &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12})
 	if err := c.HandshakeContext(ctx); err != nil {
 		return answer{}, err
 	}
@@ -209,10 +207,10 @@ type transportResult struct {
 
 func (r *runner) dns(ctx context.Context) []probe.Result {
 	qtype := r.qtype()
-	udp := make([]transportResult, len(resolvers))
-	dot := make([]transportResult, len(resolvers))
+	udp := make([]transportResult, len(r.resolvers))
+	dot := make([]transportResult, len(r.resolvers))
 	doh := map[string]*transportResult{}
-	for _, rs := range resolvers {
+	for _, rs := range r.resolvers {
 		doh[rs.DoH] = &transportResult{}
 	}
 	var wg sync.WaitGroup
@@ -226,7 +224,7 @@ func (r *runner) dns(ctx context.Context) []probe.Result {
 			})
 		})
 	}
-	for i, rs := range resolvers {
+	for i, rs := range r.resolvers {
 		run(&udp[i], func() (answer, error) {
 			return r.queryUDP(ctx, net.JoinHostPort(rs.IP, "53"), availabilityDomain, qtype)
 		})
@@ -241,7 +239,7 @@ func (r *runner) dns(ctx context.Context) []probe.Result {
 
 	var out []probe.Result
 	refIdx, refDoH := -1, false
-	for i, rs := range resolvers {
+	for i, rs := range r.resolvers {
 		name := rs.Name + " " + rs.IP
 		out = append(out, udpResult(name, udp[i]))
 		dohRes := encryptedResult(name+" DoH", *doh[rs.DoH])
@@ -342,7 +340,7 @@ func classifyPlain(a plainAnswer, reference []string) (probe.Status, string) {
 		return probe.Unknown, "unreachable"
 	}
 	for _, ip := range a.IPs {
-		if contains(reference, ip) {
+		if slices.Contains(reference, ip) {
 			return probe.Yes, "clean"
 		}
 	}
@@ -355,12 +353,7 @@ func classifyPlain(a plainAnswer, reference []string) (probe.Status, string) {
 
 func bogus(ips []string) bool {
 	for _, s := range ips {
-		ip, err := netip.ParseAddr(s)
-		if err != nil {
-			continue
-		}
-		if ip.IsPrivate() || ip.IsLoopback() || ip.IsUnspecified() || ip.IsLinkLocalUnicast() || ip.IsMulticast() ||
-			netip.MustParsePrefix("100.64.0.0/10").Contains(ip) || netip.MustParsePrefix("198.18.0.0/15").Contains(ip) {
+		if ip, err := netip.ParseAddr(s); err == nil && !netx.IsPublic(ip) {
 			return true
 		}
 	}
@@ -405,7 +398,7 @@ func (r *runner) hijack(ctx context.Context, refIdx int, refDoH bool) []probe.Re
 		summary.Status, summary.Reason = probe.Unknown, "no DoH/DoT server reachable"
 		return []probe.Result{summary}
 	}
-	ref := resolvers[refIdx]
+	ref := r.resolvers[refIdx]
 	transport := "DoT"
 	if refDoH {
 		transport = "DoH"
@@ -434,9 +427,9 @@ func (r *runner) hijack(ctx context.Context, refIdx int, refDoH bool) []probe.Re
 			continue
 		}
 		refIPs, checked = refAns.IPs, domain
-		answers := make([]plainAnswer, len(resolvers)+1)
+		answers := make([]plainAnswer, len(r.resolvers)+1)
 		var wg sync.WaitGroup
-		for i, rs := range resolvers {
+		for i, rs := range r.resolvers {
 			wg.Go(func() {
 				defer r.acquire()()
 				var a answer
@@ -452,7 +445,7 @@ func (r *runner) hijack(ctx context.Context, refIdx int, refDoH bool) []probe.Re
 			defer r.acquire()()
 			a, err := r.systemAnswer(ctx, domain)
 			if err == nil {
-				answers[len(resolvers)] = a
+				answers[len(r.resolvers)] = a
 			}
 		})
 		wg.Wait()
@@ -461,8 +454,8 @@ func (r *runner) hijack(ctx context.Context, refIdx int, refDoH bool) []probe.Re
 		spoofed := 0
 		for i, a := range answers {
 			service := "System resolver spoofing"
-			if i < len(resolvers) {
-				service = resolvers[i].Name + " " + resolvers[i].IP + " spoofing"
+			if i < len(r.resolvers) {
+				service = r.resolvers[i].Name + " " + r.resolvers[i].IP + " spoofing"
 			}
 			st, reason := classifyPlain(a, refIPs)
 			if st == probe.No {

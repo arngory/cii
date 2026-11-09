@@ -71,7 +71,7 @@ func countries(path string) error {
 	alts := map[string][]string{}
 	for k, v := range doc.Main["en"].LocaleDisplayNames.Territories {
 		m := territoryKey.FindStringSubmatch(k)
-		if m == nil || m[1] == "ZZ" || m[1] == "EU" || m[1] == "EZ" || m[1] == "UN" || m[1] == "QO" {
+		if m == nil || m[1] == "ZZ" || m[1] == "EU" || m[1] == "EZ" || m[1] == "UN" || m[1] == "QO" || m[1] == "XA" || m[1] == "XB" {
 			continue
 		}
 		if m[2] == "" {

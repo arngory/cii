@@ -44,10 +44,12 @@ var eossMeWatchCode = probe.BodyRegex(`"code"\s*:\s*(\d+)`)
 
 func eossMeWatch(rs []*probe.Response) []probe.Result {
 	r := rs[0]
-	if code := eossMeWatchCode(r); code != "" {
+	switch code := eossMeWatchCode(r); {
+	case code == "8002":
 		return no("code " + code)
-	}
-	if r.Status == http.StatusOK && has(r.Body, "stream") {
+	case code != "":
+		return unknownWith(r, "code "+code)
+	case r.Status == http.StatusOK && has(r.Body, "stream"):
 		return yes("")
 	}
 	return unknown(r)

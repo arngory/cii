@@ -20,6 +20,7 @@ import (
 
 	"github.com/arngory/cii/internal/config"
 	"github.com/arngory/cii/internal/netx"
+	"github.com/arngory/cii/internal/paths"
 )
 
 const maxDownload = 512 << 20
@@ -63,11 +64,14 @@ func (m *Manifest) save(dir string) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(dir, "manifest.json.tmp")
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
+	return paths.WriteFileAtomic(filepath.Join(dir, "manifest.json"), b, 0o644)
+}
+
+func loadOrResetManifest(dir string) *Manifest {
+	if m, err := LoadManifest(dir); err == nil {
+		return m
 	}
-	return os.Rename(tmp, filepath.Join(dir, "manifest.json"))
+	return &Manifest{Entries: map[string]ManifestEntry{}}
 }
 
 func Update(ctx context.Context, n *netx.Net, dir string, src Source, keys config.Keys) (ManifestEntry, error) {
@@ -80,15 +84,12 @@ func Update(ctx context.Context, n *netx.Net, dir string, src Source, keys confi
 	}
 	client := n.HTTPClient(Module)
 	client.Timeout = 10 * time.Minute
+	m := loadOrResetManifest(dir)
 
 	var lastErr error
 	for _, u := range candidates {
 		entry, err := fetch(ctx, client, dir, src, u, user, pass)
 		if err == nil {
-			m, err := LoadManifest(dir)
-			if err != nil {
-				return entry, err
-			}
 			m.Entries[src.ID] = entry
 			return entry, m.save(dir)
 		}
@@ -155,6 +156,9 @@ func fetch(ctx context.Context, c *http.Client, dir string, src Source, rawURL, 
 	defer os.Remove(tmp.Name())
 	h := sha256.New()
 	size, err := io.Copy(io.MultiWriter(tmp, h), io.LimitReader(body, maxDownload+1))
+	if serr := tmp.Sync(); err == nil {
+		err = serr
+	}
 	if cerr := tmp.Close(); err == nil {
 		err = cerr
 	}

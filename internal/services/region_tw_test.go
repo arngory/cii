@@ -39,9 +39,9 @@ func TestTWCatalog(t *testing.T) {
 }
 
 func TestTWUUID(t *testing.T) {
-	id := twUUID()
-	if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(id) || id == twUUID() {
-		t.Errorf("twUUID() = %q", id)
+	id := uuid4()
+	if !regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$`).MatchString(id) || id == uuid4() {
+		t.Errorf("uuid4() = %q", id)
 	}
 	for _, c := range catalog("TW").checks {
 		if c.Service == "LiTV" && strings.Contains(c.Requests[0].Body, "%s") {

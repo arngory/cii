@@ -204,10 +204,13 @@ func youtubePremium(rs []*probe.Response) []probe.Result {
 	if r.Status != http.StatusOK {
 		return unknown(r)
 	}
-	if bytes.Contains(r.Body, []byte("premiumPurchaseButtonRenderer")) {
+	switch {
+	case bytes.Contains(r.Body, []byte("Premium is not available in your country")):
+		return no("")
+	case bytes.Contains(r.Body, []byte("premiumPurchaseButtonRenderer")):
 		return yes("")
 	}
-	return no("")
+	return unknown(r)
 }
 
 var daznAllowed = regexp.MustCompile(`"isAllowed"\s*:\s*(true|false)`)

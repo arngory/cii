@@ -20,10 +20,6 @@ const (
 	Mail       probe.Group = "mail"
 )
 
-func Owns(g probe.Group) bool {
-	return g == Reputation || g == DNSBL || g == Mail
-}
-
 func Checks(k config.Keys, extended bool) []probe.Check {
 	cs := []probe.Check{proxyCheck(k.ProxyCheckKey)}
 	if k.IPAPIisKey != "" {

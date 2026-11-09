@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/arngory/cii/internal/netx"
+	"github.com/arngory/cii/internal/paths"
 	"github.com/arngory/cii/internal/probe"
 )
 
@@ -114,11 +115,14 @@ func saveManifest(dir string, m map[string]DataEntry) error {
 	if err != nil {
 		return err
 	}
-	tmp := filepath.Join(dir, "manifest.json.tmp")
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
+	return paths.WriteFileAtomic(filepath.Join(dir, "manifest.json"), b, 0o644)
+}
+
+func loadOrResetManifest(base string) map[string]DataEntry {
+	if m, err := DataManifest(base); err == nil {
+		return m
 	}
-	return os.Rename(tmp, filepath.Join(dir, "manifest.json"))
+	return map[string]DataEntry{}
 }
 
 func Update(ctx context.Context, n *netx.Net, base string, ids ...string) ([]DataEntry, error) {
@@ -143,6 +147,7 @@ func update(ctx context.Context, client *http.Client, base string, ids []string)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
+	m := loadOrResetManifest(base)
 	var done []DataEntry
 	var errs []error
 	for _, s := range sources {
@@ -151,12 +156,8 @@ func update(ctx context.Context, client *http.Client, base string, ids []string)
 			errs = append(errs, fmt.Errorf("%s: %w", s.ID, err))
 			continue
 		}
-		m, err := DataManifest(base)
-		if err == nil {
-			m[s.ID] = e
-			err = saveManifest(dir, m)
-		}
-		if err != nil {
+		m[s.ID] = e
+		if err := saveManifest(dir, m); err != nil {
 			errs = append(errs, err)
 			continue
 		}
@@ -193,12 +194,7 @@ func fetchSource(ctx context.Context, client *http.Client, dir string, s DataSou
 	sort.Strings(lines)
 	data := []byte(strings.Join(lines, "\n") + "\n")
 	file := s.ID + ".txt"
-	tmp := filepath.Join(dir, file+".tmp")
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return DataEntry{}, err
-	}
-	if err := os.Rename(tmp, filepath.Join(dir, file)); err != nil {
-		os.Remove(tmp)
+	if err := paths.WriteFileAtomic(filepath.Join(dir, file), data, 0o644); err != nil {
 		return DataEntry{}, err
 	}
 	sum := sha256.Sum256(data)

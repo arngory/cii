@@ -151,9 +151,9 @@ func (r *runner) mtprotoExchange(ctx context.Context, addr string, dc int) error
 }
 
 func (r *runner) telegram(ctx context.Context) []probe.Result {
-	out := make([]probe.Result, len(telegramDCs))
+	out := make([]probe.Result, len(r.dcs))
 	var wg sync.WaitGroup
-	for i, dc := range telegramDCs {
+	for i, dc := range r.dcs {
 		wg.Go(func() {
 			defer r.acquire()()
 			err := r.attempt(func() error {

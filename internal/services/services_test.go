@@ -76,7 +76,8 @@ func TestPageChecks(t *testing.T) {
 		{"Spotify signup", r(200, `{"status":1,"country":"SE","is_country_launched":true}`), probe.Yes, "SE"},
 		{"Spotify signup", r(200, `{"status":120}`), probe.No, ""},
 		{"YouTube Premium", r(200, `..premiumPurchaseButtonRenderer..`), probe.Yes, ""},
-		{"YouTube Premium", r(200, `{}`), probe.No, ""},
+		{"YouTube Premium", r(200, `..Premium is not available in your country..`), probe.No, ""},
+		{"YouTube Premium", r(200, `{}`), probe.Unknown, ""},
 		{"DAZN", r(200, `{"Region":{"isAllowed":true,"GeolocatedCountry":"de"}}`), probe.Yes, "DE"},
 		{"DAZN", r(403, `Security policy has been breached`), probe.IPBlock, ""},
 	}

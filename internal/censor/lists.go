@@ -1,25 +1,52 @@
 package censor
 
+import (
+	"net/url"
+
+	"github.com/arngory/cii/internal/netx"
+)
+
 type resolver struct {
 	Name string
 	IP   string
+	IP6  string
 	DoH  string
 	DoT  string
 }
 
 var resolvers = []resolver{
-	{"Cloudflare", "1.1.1.1", "https://1.1.1.1/dns-query", "cloudflare-dns.com"},
-	{"Cloudflare", "1.0.0.1", "https://1.0.0.1/dns-query", "cloudflare-dns.com"},
-	{"Google", "8.8.8.8", "https://8.8.8.8/dns-query", "dns.google"},
-	{"Google", "8.8.4.4", "https://8.8.4.4/dns-query", "dns.google"},
-	{"Quad9", "9.9.9.9", "https://9.9.9.9/dns-query", "dns.quad9.net"},
-	{"Quad9", "9.9.9.10", "https://dns10.quad9.net/dns-query", "dns10.quad9.net"},
-	{"AdGuard", "94.140.14.14", "https://dns.adguard-dns.com/dns-query", "dns.adguard-dns.com"},
-	{"AdGuard", "94.140.15.15", "https://dns.adguard-dns.com/dns-query", "dns.adguard-dns.com"},
-	{"NextDNS", "45.90.28.65", "https://dns.nextdns.io/dns-query", "dns.nextdns.io"},
-	{"NextDNS", "45.90.30.65", "https://dns.nextdns.io/dns-query", "dns.nextdns.io"},
-	{"Yandex", "77.88.8.8", "https://common.dot.dns.yandex.net/dns-query", "common.dot.dns.yandex.net"},
-	{"Yandex", "77.88.8.1", "https://common.dot.dns.yandex.net/dns-query", "common.dot.dns.yandex.net"},
+	{Name: "Cloudflare", IP: "1.1.1.1", IP6: "2606:4700:4700::1111", DoT: "cloudflare-dns.com"},
+	{Name: "Cloudflare", IP: "1.0.0.1", IP6: "2606:4700:4700::1001", DoT: "cloudflare-dns.com"},
+	{Name: "Google", IP: "8.8.8.8", IP6: "2001:4860:4860::8888", DoT: "dns.google"},
+	{Name: "Google", IP: "8.8.4.4", IP6: "2001:4860:4860::8844", DoT: "dns.google"},
+	{Name: "Quad9", IP: "9.9.9.9", IP6: "2620:fe::fe", DoT: "dns.quad9.net"},
+	{Name: "Quad9", IP: "9.9.9.10", IP6: "2620:fe::10", DoH: "https://dns10.quad9.net/dns-query", DoT: "dns10.quad9.net"},
+	{Name: "AdGuard", IP: "94.140.14.14", IP6: "2a10:50c0::ad1:ff", DoH: "https://dns.adguard-dns.com/dns-query", DoT: "dns.adguard-dns.com"},
+	{Name: "AdGuard", IP: "94.140.15.15", IP6: "2a10:50c0::ad2:ff", DoH: "https://dns.adguard-dns.com/dns-query", DoT: "dns.adguard-dns.com"},
+	{Name: "NextDNS", IP: "45.90.28.65", IP6: "2a07:a8c0::", DoH: "https://dns.nextdns.io/dns-query", DoT: "dns.nextdns.io"},
+	{Name: "NextDNS", IP: "45.90.30.65", IP6: "2a07:a8c1::", DoH: "https://dns.nextdns.io/dns-query", DoT: "dns.nextdns.io"},
+	{Name: "Yandex", IP: "77.88.8.8", IP6: "2a02:6b8::feed:0ff", DoH: "https://common.dot.dns.yandex.net/dns-query", DoT: "common.dot.dns.yandex.net"},
+	{Name: "Yandex", IP: "77.88.8.1", IP6: "2a02:6b8:0:1::feed:0ff", DoH: "https://common.dot.dns.yandex.net/dns-query", DoT: "common.dot.dns.yandex.net"},
+}
+
+func (rs resolver) forFamily(fam netx.Family) resolver {
+	if fam == netx.IPv6 {
+		rs.IP = rs.IP6
+	}
+	if rs.DoH == "" {
+		rs.DoH = (&url.URL{Scheme: "https", Host: rs.IP, Path: "/dns-query"}).String()
+	}
+	return rs
+}
+
+func resolversFor(fam netx.Family) []resolver {
+	out := make([]resolver, 0, len(resolvers))
+	for _, rs := range resolvers {
+		if rs := rs.forFamily(fam); rs.IP != "" {
+			out = append(out, rs)
+		}
+	}
+	return out
 }
 
 const availabilityDomain = "rutracker.org"
@@ -27,18 +54,32 @@ const availabilityDomain = "rutracker.org"
 var hijackDomains = []string{"rutracker.org", "linkedin.com", "flibusta.is"}
 
 type telegramDC struct {
-	ID int
-	IP string
+	ID  int
+	IP  string
+	IP6 string
 }
 
 var telegramDCs = []telegramDC{
-	{1, "149.154.175.50"},
-	{2, "149.154.167.51"},
-	{2, "95.161.76.100"},
-	{3, "149.154.175.100"},
-	{4, "149.154.167.91"},
-	{5, "149.154.171.5"},
-	{5, "91.108.56.130"},
+	{1, "149.154.175.50", "2001:b28:f23d:f001::a"},
+	{2, "149.154.167.51", "2001:67c:4e8:f002::a"},
+	{2, "95.161.76.100", ""},
+	{3, "149.154.175.100", "2001:b28:f23d:f003::a"},
+	{4, "149.154.167.91", "2001:67c:4e8:f004::a"},
+	{5, "149.154.171.5", "2001:b28:f23f:f005::a"},
+	{5, "91.108.56.130", ""},
+}
+
+func telegramDCsFor(fam netx.Family) []telegramDC {
+	out := make([]telegramDC, 0, len(telegramDCs))
+	for _, dc := range telegramDCs {
+		if fam == netx.IPv6 {
+			dc.IP = dc.IP6
+		}
+		if dc.IP != "" {
+			out = append(out, dc)
+		}
+	}
+	return out
 }
 
 const telegramPort = "443"
