@@ -730,8 +730,8 @@ func cmdBench(ctx context.Context, args []string) error {
 	}
 	opts.DiskSize = size
 	opts.Disk, opts.CPU, opts.Net, opts.Iperf = !noDisk, !noCPU, !noNet && !c.offline, !noIperf && !c.offline
-	if opts.Duration <= 0 || opts.Duration > time.Minute {
-		return errors.New("--duration must be between 1s and 1m")
+	if opts.Duration < time.Second || opts.Duration > time.Minute || opts.Duration%time.Second != 0 {
+		return errors.New("--duration must be a whole number of seconds between 1s and 1m")
 	}
 	policy := netx.NewPolicy(bench.Rules(opts)...)
 	if c.plan {
@@ -750,7 +750,12 @@ func cmdBench(ctx context.Context, args []string) error {
 	n := netx.New(netOpts, policy, led)
 	progress := func(string) {}
 	if !c.json && term.IsTerminal(int(os.Stderr.Fd())) {
-		progress = func(step string) { fmt.Fprintf(os.Stderr, "\r\033[K%s…", step) }
+		progress = func(step string) {
+			if step != "" {
+				step += "…"
+			}
+			fmt.Fprint(os.Stderr, "\r\033[K"+step)
+		}
 	}
 	rep := report.New("bench", c.mask)
 	b := bench.Run(ctx, bench.Env{Net: n, Ledger: led}, opts, progress)

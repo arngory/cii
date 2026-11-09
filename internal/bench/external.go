@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/arngory/cii/internal/netx"
 )
 
 const clientSystem = "iperf3"
@@ -35,6 +37,10 @@ type iperf3Output struct {
 
 func SystemIperf3(ctx context.Context, env Env, path string, s IperfServer, dur time.Duration) IperfRun {
 	run := IperfRun{Server: s, Client: clientSystem, Streams: iperfStreams}
+	if env.Net.Options().Family == netx.IPv6 && !s.IPv6 {
+		run.Error = "no IPv6 endpoint"
+		return run
+	}
 	if _, err := env.Net.LookupHost(ctx, Module, s.Host); err != nil {
 		run.Error = err.Error()
 		return run
@@ -83,19 +89,7 @@ func isIperfRetryable(err error) bool {
 func iperf3Once(ctx context.Context, env Env, path, host string, port int, dur time.Duration, reverse bool) (float64, error) {
 	ctx, cancel := context.WithTimeout(ctx, dur+20*time.Second)
 	defer cancel()
-	args := []string{"-c", host, "-p", strconv.Itoa(port), "-P", strconv.Itoa(iperfStreams), "-t", strconv.Itoa(int(dur.Seconds())), "-J"}
-	switch env.Net.Options().Family.String() {
-	case "IPv4":
-		args = append(args, "-4")
-	case "IPv6":
-		args = append(args, "-6")
-	}
-	if src := env.Net.Options().Source; src.IsValid() {
-		args = append(args, "-B", src.String())
-	}
-	if reverse {
-		args = append(args, "-R")
-	}
+	args := iperf3Args(env.Net.Options(), host, port, dur, reverse)
 	out, err := exec.CommandContext(ctx, path, args...).Output()
 	var res iperf3Output
 	if jerr := json.Unmarshal(out, &res); jerr != nil {
@@ -117,6 +111,24 @@ func iperf3Once(ctx context.Context, env Env, path, host string, port int, dur t
 	return bps / 1e6, nil
 }
 
+func iperf3Args(o netx.Options, host string, port int, dur time.Duration, reverse bool) []string {
+	seconds := max(int(dur.Seconds()), 1)
+	args := []string{"-c", host, "-p", strconv.Itoa(port), "-P", strconv.Itoa(iperfStreams), "-t", strconv.Itoa(seconds), "-J"}
+	switch o.Family {
+	case netx.IPv4:
+		args = append(args, "-4")
+	case netx.IPv6:
+		args = append(args, "-6")
+	}
+	if o.Source.IsValid() {
+		args = append(args, "-B", o.Source.String())
+	}
+	if reverse {
+		args = append(args, "-R")
+	}
+	return args
+}
+
 type FioResult struct {
 	Job       string  `json:"job"`
 	ReadMBps  float64 `json:"read_mbps"`
@@ -133,9 +145,9 @@ type FioReport struct {
 type fioOutput struct {
 	Version string `json:"fio version"`
 	Jobs    []struct {
-		Name  string `json:"jobname"`
-		Read  fioSide
-		Write fioSide
+		Name  string  `json:"jobname"`
+		Read  fioSide `json:"read"`
+		Write fioSide `json:"write"`
 	} `json:"jobs"`
 }
 
@@ -170,7 +182,7 @@ func FioTest(ctx context.Context, path, dir string, size int64) (FioReport, erro
 		out, err := exec.CommandContext(ctx, path, args...).Output()
 		var ee *exec.ExitError
 		if errors.As(err, &ee) {
-			return rep, fmt.Errorf("%s: %s", j.name, strings.TrimSpace(string(bytes.TrimSpace(ee.Stderr))))
+			return rep, fmt.Errorf("%s: %s", j.name, bytes.TrimSpace(ee.Stderr))
 		}
 		if err != nil {
 			return rep, err

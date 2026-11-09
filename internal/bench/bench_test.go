@@ -1,6 +1,8 @@
 package bench
 
 import (
+	"bytes"
+	"compress/flate"
 	"context"
 	"encoding/binary"
 	"encoding/json"
@@ -9,8 +11,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -354,6 +358,15 @@ func TestCPUSmall(t *testing.T) {
 	if rep.Single.SHA256MBps <= 0 || rep.Single.AESGCMMBps <= 0 || rep.Single.DeflateMBps <= 0 || rep.Single.Score <= 0 || rep.Threads < 1 {
 		t.Errorf("report = %+v", rep)
 	}
+	text := make([]byte, 1<<16)
+	fillText(text, 3)
+	var packed bytes.Buffer
+	w, _ := flate.NewWriter(&packed, flate.DefaultCompression)
+	w.Write(text)
+	w.Close()
+	if ratio := float64(len(text)) / float64(packed.Len()); ratio < 1.5 || ratio > 6 {
+		t.Errorf("workload compresses %.1f times, want text-like", ratio)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if rep := cpuTest(ctx, time.Second); rep.Single.Score != 0 {
@@ -385,6 +398,50 @@ func TestSystemFromFixtures(t *testing.T) {
 	}
 	if got := s.UptimeString(); got != "1d 1h" {
 		t.Errorf("uptime = %q", got)
+	}
+}
+
+func TestSystemIperf3Arguments(t *testing.T) {
+	src := netip.MustParseAddr("192.0.2.7")
+	got := strings.Join(iperf3Args(netx.Options{Family: netx.IPv4, Source: src}, "h.example", 5203, 10*time.Second, true), " ")
+	if got != "-c h.example -p 5203 -P 4 -t 10 -J -4 -B 192.0.2.7 -R" {
+		t.Errorf("args = %q", got)
+	}
+	got = strings.Join(iperf3Args(netx.Options{Family: netx.IPv6}, "h.example", 5201, 300*time.Millisecond, false), " ")
+	if got != "-c h.example -p 5201 -P 4 -t 1 -J -6" {
+		t.Errorf("args = %q", got)
+	}
+	if got := iperf3Args(netx.Options{}, "h", 1, time.Second, false); strings.Contains(strings.Join(got, " "), "-4") {
+		t.Errorf("any-family args = %q", got)
+	}
+
+	if runtime.GOOS == "windows" {
+		t.Skip("fake iperf3 is a shell script")
+	}
+	noEnvProxy(t)
+	dir := t.TempDir()
+	log := filepath.Join(dir, "args")
+	tool := filepath.Join(dir, "iperf3")
+	script := "#!/bin/sh\necho \"$@\" >> " + log + "\necho '{\"end\":{\"sum_sent\":{\"bits_per_second\":8e8},\"sum_received\":{\"bits_per_second\":7e8}}}'\n"
+	if err := os.WriteFile(tool, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	led := ledger.New()
+	n := netx.New(netx.Options{Timeout: time.Second, Family: netx.IPv6}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "::1"}), led)
+	env := Env{Net: n, Ledger: led}
+	run := SystemIperf3(context.Background(), env, tool, IperfServer{Host: "::1", Ports: "5201", IPv6: true}, 2*time.Second)
+	if run.Error != "" || run.SendMbps != 800 || run.RecvMbps != 700 || run.Port != 5201 || run.Client != clientSystem {
+		t.Errorf("run = %+v", run)
+	}
+	calls, _ := os.ReadFile(log)
+	if string(calls) != "-c ::1 -p 5201 -P 4 -t 2 -J -6\n-c ::1 -p 5201 -P 4 -t 2 -J -6 -R\n" {
+		t.Errorf("calls = %q", calls)
+	}
+	if run := SystemIperf3(context.Background(), env, tool, IperfServer{Host: "::1", Ports: "5201"}, time.Second); run.Error != "no IPv6 endpoint" {
+		t.Errorf("v4-only server run = %+v", run)
+	}
+	if run := SystemIperf3(context.Background(), env, tool, IperfServer{Host: "undeclared.example", Ports: "5201", IPv6: true}, time.Second); !strings.Contains(run.Error, "not allowed") {
+		t.Errorf("undeclared host run = %+v", run)
 	}
 }
 

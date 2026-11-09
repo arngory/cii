@@ -3,7 +3,6 @@ package bench
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -75,7 +74,13 @@ func diskTest(ctx context.Context, dir string, size int64, randDur time.Duration
 		if ctx.Err() != nil {
 			return rep, ctx.Err()
 		}
-		r := randomRW(ctx, f, size, bs.size, randDur)
+		r, err := randomRW(ctx, f, size, bs.size, randDur)
+		if err != nil {
+			return DiskReport{}, fmt.Errorf("%s random: %w", bs.name, err)
+		}
+		if ctx.Err() != nil {
+			return DiskReport{}, ctx.Err()
+		}
 		r.Block, r.Direct = bs.name, direct
 		rep.Random = append(rep.Random, r)
 	}
@@ -109,10 +114,8 @@ func sequential(ctx context.Context, f *os.File, size int64) (DiskResult, error)
 			return DiskResult{}, ctx.Err()
 		}
 		n, err := f.ReadAt(buf, read)
-		if err != nil && !errors.Is(err, context.Canceled) {
-			if n == 0 {
-				return DiskResult{}, fmt.Errorf("read: %w", err)
-			}
+		if err != nil && n == 0 {
+			return DiskResult{}, fmt.Errorf("read: %w", err)
 		}
 		read += int64(n)
 	}
@@ -120,12 +123,13 @@ func sequential(ctx context.Context, f *os.File, size int64) (DiskResult, error)
 	return DiskResult{Block: "1m seq", WriteMBps: mbps(size, wdur), ReadMBps: mbps(size, rdur), DurationMs: (wdur + rdur).Milliseconds()}, nil
 }
 
-func randomRW(ctx context.Context, f *os.File, size int64, bs int, dur time.Duration) DiskResult {
+func randomRW(ctx context.Context, f *os.File, size int64, bs int, dur time.Duration) (DiskResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, dur)
 	defer cancel()
 	blocks := size / int64(bs)
 	var mu sync.Mutex
 	var rbytes, wbytes, rops, wops int64
+	var failed error
 	var wg sync.WaitGroup
 	start := time.Now()
 	for w := 0; w < queueDepth; w++ {
@@ -136,36 +140,51 @@ func randomRW(ctx context.Context, f *os.File, size int64, bs int, dur time.Dura
 			rand.Read(buf)
 			x := uint64(seed*7919 + 1)
 			var lr, lw, lro, lwo int64
+			var lerr error
 			for ctx.Err() == nil {
 				x ^= x << 13
 				x ^= x >> 7
 				x ^= x << 17
-				off := int64(x%uint64(blocks)) * int64(bs)
+				off := int64(x>>1%uint64(blocks)) * int64(bs)
 				if x&1 == 0 {
-					if n, err := f.ReadAt(buf, off); err == nil {
-						lr += int64(n)
-						lro++
+					n, err := f.ReadAt(buf, off)
+					if err != nil {
+						lerr = fmt.Errorf("read: %w", err)
+						break
 					}
+					lr += int64(n)
+					lro++
 				} else {
-					if n, err := f.WriteAt(buf, off); err == nil {
-						lw += int64(n)
-						lwo++
+					n, err := f.WriteAt(buf, off)
+					if err != nil {
+						lerr = fmt.Errorf("write: %w", err)
+						break
 					}
+					lw += int64(n)
+					lwo++
 				}
 			}
 			mu.Lock()
 			rbytes, wbytes, rops, wops = rbytes+lr, wbytes+lw, rops+lro, wops+lwo
+			if failed == nil {
+				failed = lerr
+			}
 			mu.Unlock()
 		}(int64(w))
 	}
 	wg.Wait()
-	f.Sync()
+	if failed != nil {
+		return DiskResult{}, failed
+	}
+	if err := f.Sync(); err != nil {
+		return DiskResult{}, err
+	}
 	el := time.Since(start)
 	return DiskResult{
 		ReadMBps: mbps(rbytes, el), WriteMBps: mbps(wbytes, el),
 		ReadIOPS: float64(rops) / el.Seconds(), WriteIOPS: float64(wops) / el.Seconds(),
 		DurationMs: el.Milliseconds(),
-	}
+	}, nil
 }
 
 func mbps(b int64, d time.Duration) float64 {

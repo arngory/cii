@@ -64,12 +64,10 @@ func throughput(ctx context.Context, threads int, per time.Duration, round func(
 	start := time.Now()
 	for i := 0; i < threads; i++ {
 		wg.Add(1)
-		go func(seed byte) {
+		go func(seed uint64) {
 			defer wg.Done()
 			buf := make([]byte, cpuRound)
-			for j := range buf {
-				buf[j] = byte(j*31) ^ seed
-			}
+			fillText(buf, seed)
 			var n int64
 			for round(ctx, buf) {
 				n += cpuRound
@@ -77,10 +75,35 @@ func throughput(ctx context.Context, threads int, per time.Duration, round func(
 			mu.Lock()
 			total += n
 			mu.Unlock()
-		}(byte(i))
+		}(uint64(i))
 	}
 	wg.Wait()
 	return float64(total) / 1e6 / time.Since(start).Seconds()
+}
+
+func fillText(buf []byte, seed uint64) {
+	x := seed*0x9E3779B97F4A7C15 | 1
+	next := func() uint64 {
+		x ^= x << 13
+		x ^= x >> 7
+		x ^= x << 17
+		return x
+	}
+	var words [512][]byte
+	for i := range words {
+		w := make([]byte, 3+next()%8)
+		for j := range w {
+			w[j] = 'a' + byte(next()%26)
+		}
+		words[i] = w
+	}
+	for n := 0; n < len(buf); {
+		n += copy(buf[n:], words[next()%uint64(len(words))])
+		if n < len(buf) {
+			buf[n] = ' '
+			n++
+		}
+	}
 }
 
 func shaRound(ctx context.Context, buf []byte) bool {

@@ -238,7 +238,7 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 		}
 		switch state {
 		case stateParamExchange:
-			p := iperfParams{TCP: true, Time: int(dur.Seconds()), Parallel: iperfStreams, Reverse: reverse, Len: iperfBlock, ClientVersion: clientVersion}
+			p := iperfParams{TCP: true, Time: max(int(dur.Seconds()), 1), Parallel: iperfStreams, Reverse: reverse, Len: iperfBlock, ClientVersion: clientVersion}
 			if err := writeJSON(ctrl, p); err != nil {
 				return 0, 0, err
 			}
