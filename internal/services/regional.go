@@ -25,6 +25,8 @@ var Catalogs = []*Catalog{
 	{Code: "EU", Title: "Europe", Countries: strings.Fields("AT BE BG HR CY CZ DK EE FI FR DE GR HU IE IT LV LT LU MT NL PL PT RO SK SI ES SE GB NO IS LI CH AL BA ME MK RS XK UA MD BY RU AD MC SM VA GI")},
 	{Code: "OC", Title: "Oceania", Countries: []string{"AU", "NZ"}},
 	{Code: "SEA", Title: "Southeast Asia", Countries: strings.Fields("SG TH MY PH ID VN KH LA MM BN")},
+	{Code: "IN", Title: "India", Countries: []string{"IN"}},
+	{Code: "SPORT", Title: "Sport"},
 	{Code: "AF", Title: "Africa", Countries: strings.Fields("DZ AO BJ BW BF BI CV CM CF TD KM CG CD CI DJ EG GQ ER SZ ET GA GM GH GN GW KE LS LR LY MG MW ML MR MU MA MZ NA NE NG RW ST SN SC SL SO ZA SS SD TZ TG TN UG ZM ZW")},
 }
 
