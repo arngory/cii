@@ -17,6 +17,10 @@ func TestPolicyMatch(t *testing.T) {
 		Rule{Module: "a", Pattern: "*.cdn.example"},
 		Rule{Module: "a", Pattern: "example.com", Purpose: "y"},
 		Rule{Module: "a", Pattern: "example.com", Purpose: "x"},
+		Rule{Module: "a", Pattern: "Example.COM.", Purpose: "x"},
+		Rule{Module: "a", Pattern: "*.cdn.example."},
+		Rule{Module: "a", Pattern: "*."},
+		Rule{Module: "a", Pattern: "."},
 	)
 	cases := []struct {
 		module, host string

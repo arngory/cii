@@ -179,6 +179,9 @@ func FioTest(ctx context.Context, path, dir string, size int64) (FioReport, erro
 		dir = os.TempDir()
 	}
 	size = max(size, minDiskSize)
+	if err := checkSpace(dir, size); err != nil {
+		return FioReport{}, err
+	}
 	file := scratchName(dir, "fio")
 	f, err := os.OpenFile(file, exclusiveFlags, 0o600)
 	if err != nil {

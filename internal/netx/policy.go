@@ -33,8 +33,8 @@ func NewPolicy(rules ...Rule) *Policy {
 
 func (p *Policy) Add(rules ...Rule) {
 	for _, r := range rules {
-		r.Pattern = strings.ToLower(strings.TrimSpace(r.Pattern))
-		if r.Pattern == "" {
+		r.Pattern = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(r.Pattern)), ".")
+		if r.Pattern == "" || r.Pattern == "*" {
 			continue
 		}
 		if i := p.index(r); i >= 0 {

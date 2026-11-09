@@ -44,14 +44,21 @@ func DiskTest(ctx context.Context, dir string, size int64) (DiskReport, error) {
 	return diskTest(ctx, dir, max(size, minDiskSize), randomDuration)
 }
 
+func checkSpace(dir string, size int64) error {
+	free, err := freeSpace(dir)
+	if err == nil && free/2 < uint64(size) {
+		return fmt.Errorf("%s has %d MiB free, need %d MiB", dir, free>>20, uint64(size)>>19)
+	}
+	return nil
+}
+
 func diskTest(ctx context.Context, dir string, size int64, randDur time.Duration) (DiskReport, error) {
 	if dir == "" {
 		dir = os.TempDir()
 	}
 	size -= size % (1 << 20)
-	free, err := freeSpace(dir)
-	if err == nil && free < uint64(size)*2 {
-		return DiskReport{}, fmt.Errorf("%s has %d MiB free, need %d MiB", dir, free>>20, (size*2)>>20)
+	if err := checkSpace(dir, size); err != nil {
+		return DiskReport{}, err
 	}
 	f, direct, err := openDirect(scratchName(dir, "bench"))
 	if err != nil {

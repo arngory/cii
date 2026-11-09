@@ -399,6 +399,23 @@ func TestDiskSmall(t *testing.T) {
 	}
 }
 
+func TestSpaceGuardCoversFio(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := freeSpace(dir); err != nil {
+		t.Skip("free space is not reported here")
+	}
+	const huge = 1 << 60
+	if _, err := diskTest(context.Background(), dir, huge, time.Millisecond); err == nil || !strings.Contains(err.Error(), "MiB free, need") {
+		t.Errorf("disk test error = %v", err)
+	}
+	if _, err := FioTest(context.Background(), filepath.Join(dir, "no-fio"), dir, huge); err == nil || !strings.Contains(err.Error(), "MiB free, need") {
+		t.Errorf("fio error = %v", err)
+	}
+	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+		t.Errorf("scratch file left behind: %v", entries)
+	}
+}
+
 func TestScratchFileIsExclusive(t *testing.T) {
 	dir := t.TempDir()
 	a, b := scratchName(dir, "bench"), scratchName(dir, "bench")
