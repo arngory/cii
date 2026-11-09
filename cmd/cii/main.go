@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/arngory/cii/internal/censor"
 	"github.com/arngory/cii/internal/config"
 	"github.com/arngory/cii/internal/datasrc"
 	"github.com/arngory/cii/internal/geodb"
@@ -42,6 +43,7 @@ Usage:
   cii data update [ID...]     download offline databases from their publishers
   cii data status             show local databases
   cii data sources            list supported databases and their licenses
+  cii censor [flags]          DNS resolvers and hijacking, DPI and geoblocks, Telegram (see docs/CENSOR_CHECKS.md)
   cii version
 
 Common flags:
@@ -93,6 +95,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdLookup(args)
 	case "data":
 		return cmdData(ctx, args)
+	case "censor":
+		return cmdCensor(ctx, args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -642,4 +646,51 @@ func shortHash(h string) string {
 		return h[:16]
 	}
 	return h
+}
+
+func cmdCensor(ctx context.Context, args []string) error {
+	var c common
+	var mode, domainsFile, domain, protocol string
+	var retries int
+	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
+	c.register(fs)
+	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram (comma-separated)")
+	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
+	fs.StringVar(&domain, "domain", "", "check a single domain")
+	fs.StringVar(&protocol, "protocol", "both", "http, https or both")
+	fs.IntVar(&retries, "retries", 0, "extra attempts per target")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	if c.offline {
+		return errors.New("--offline: censorship checks need the network")
+	}
+	for _, m := range strings.Split(mode, ",") {
+		if !censor.ValidMode(m) {
+			return fmt.Errorf("unknown mode %q (known: %s, all)", m, strings.Join(censor.Modes, ", "))
+		}
+	}
+	opts := censor.Options{Modes: strings.Split(mode, ","), DomainsFile: domainsFile, Domain: domain, Protocol: protocol, Retries: retries}
+	policy := netx.NewPolicy(censor.Rules(opts)...)
+	if c.plan {
+		report.WritePlan(os.Stdout, c.color(), policy.Rules())
+		return nil
+	}
+	f := netx.IPv4
+	if fams := c.families(); len(fams) == 1 {
+		f = fams[0]
+	}
+	netOpts, err := c.options(f)
+	if err != nil {
+		return err
+	}
+	led := ledger.New()
+	n := netx.New(netOpts, policy, led)
+	rep := report.New("censor", c.mask)
+	rep.SetCensor(censor.Run(ctx, n, opts), c.mask)
+	rep.Network = led.Entries()
+	return output(rep, &c)
 }

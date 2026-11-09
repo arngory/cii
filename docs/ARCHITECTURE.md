@@ -22,6 +22,7 @@
 | `internal/region` | Каталог проверок региона и вердикт с равным весом групп. Перечень — в [REGION_CHECKS.md](REGION_CHECKS.md) |
 | `internal/services` | Каталог проверок доступности сервисов. Перечень — в [SERVICE_CHECKS.md](SERVICE_CHECKS.md) |
 | `internal/risk` | Репутация адреса (keyless proxycheck.io + платные базы с ключом пользователя), DNSBL с правилами FUP через `netx.LookupHost`, проба SMTP через `netx.Dial`, офлайн-списки Tor и облаков со своим манифестом. Перечень — в [RISK_CHECKS.md](RISK_CHECKS.md) |
+| `internal/censor` | `cii censor`: собственный DNS по UDP/DoH/DoT, детектор подмены, веб-проверки с `httptrace`-фазами, MTProto-рукопожатие Telegram — всё через `netx`. Перечень — в [CENSOR_CHECKS.md](CENSOR_CHECKS.md) |
 | `internal/clientids` | Все сторонние идентификаторы клиентов, нужные проверкам уровня B, в одном месте |
 | `internal/refdata` | Встроенные справочники: названия стран (CLDR) и «IATA → страна» (OurAirports); генерируются `go generate ./internal/refdata` |
 | `internal/config` | Необязательный `config.yaml`: свои ключи, свой список echo-сервисов, набор баз по умолчанию |
@@ -61,5 +62,4 @@
 | Модуль | Источник идей | Суть |
 |---|---|---|
 | `services` | RegionRestrictionCheck, IPQuality, ipregion | доступность стримингов, ИИ-сервисов, CDN по регионам; декларативный каталог (YAML) + Go для сложных случаев, уровни A/B |
-| `censor` | censorcheck | подмена DNS, доступность DoH/DoT, DPI-блокировки, MTProto-проба Telegram |
 | `bench` | YABS, bench.sh, russian-iperf3-servers | iperf3 (свой клиент), скорость через Cloudflare, сведения о системе, диск, CPU |

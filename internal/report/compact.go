@@ -8,6 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/arngory/cii/internal/censor"
 	"github.com/arngory/cii/internal/geodb"
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
@@ -45,7 +46,7 @@ type fam struct {
 }
 
 func (r *Report) allResults() []probe.Result {
-	var out []probe.Result
+	out := append([]probe.Result(nil), r.Censor...)
 	for _, f := range r.families() {
 		if f.host.Region != nil {
 			out = append(out, f.host.Region.Results...)
@@ -122,6 +123,9 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 	}
 
 	writeServiceGrid(w, c, m, st.Width, fams)
+	if len(r.Censor) > 0 {
+		writeGrid2(w, c, m, st.Width, []column{newColumn("", r.Censor)}, [][]string{nil})
+	}
 
 	if len(footer) > 0 {
 		fmt.Fprintln(w)
@@ -270,6 +274,10 @@ func writeLine(w io.Writer, width int, sep, label string, labelWidth int, parts 
 }
 
 var groupTitles = map[probe.Group]string{
+	censor.DNS:         "DNS",
+	censor.DPI:         "DPI",
+	censor.Geoblock:    "Geoblock",
+	censor.Telegram:    "Telegram",
 	services.Streaming: "Streaming",
 	services.AI:        "AI",
 	services.Web:       "Web",
@@ -320,6 +328,10 @@ func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam) {
 			verdicts = append(verdicts, v)
 		}
 	}
+	writeGrid2(w, c, m, width, cols, verdicts)
+}
+
+func writeGrid2(w io.Writer, c paint, m marks, width int, cols []column, verdicts [][]string) {
 	if len(cols) == 0 {
 		return
 	}
@@ -398,6 +410,9 @@ func Legend(r *Report, unicode bool) string {
 		for _, res := range f.host.Services {
 			used[res.Status] = true
 		}
+	}
+	for _, res := range r.Censor {
+		used[res.Status] = true
 	}
 	var parts []string
 	for _, e := range []struct {

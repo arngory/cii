@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/http/httpproxy"
+
 	"github.com/arngory/cii/internal/ledger"
 	"github.com/arngory/cii/internal/version"
 )
@@ -63,13 +65,34 @@ type Net struct {
 	proxied bool
 }
 
-func envProxy() bool {
-	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
-		if os.Getenv(k) != "" {
-			return true
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := os.Getenv(k); v != "" {
+			return v
 		}
 	}
-	return false
+	return ""
+}
+
+func envProxyConfig() *httpproxy.Config {
+	all := firstEnv("ALL_PROXY", "all_proxy")
+	c := &httpproxy.Config{
+		HTTPProxy:  firstEnv("HTTP_PROXY", "http_proxy"),
+		HTTPSProxy: firstEnv("HTTPS_PROXY", "https_proxy"),
+		NoProxy:    firstEnv("NO_PROXY", "no_proxy"),
+	}
+	if c.HTTPProxy == "" {
+		c.HTTPProxy = all
+	}
+	if c.HTTPSProxy == "" {
+		c.HTTPSProxy = all
+	}
+	return c
+}
+
+func envProxy() bool {
+	c := envProxyConfig()
+	return c.HTTPProxy != "" || c.HTTPSProxy != ""
 }
 
 func (n *Net) Proxied() bool { return n.proxied }
@@ -87,9 +110,10 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	}
 	n := &Net{opts: opts, policy: policy, ledger: led, proxied: opts.Proxy != nil || envProxy()}
 
-	proxy := http.ProxyFromEnvironment
-	if opts.Proxy != nil {
-		proxy = http.ProxyURL(opts.Proxy)
+	proxy := http.ProxyURL(opts.Proxy)
+	if opts.Proxy == nil {
+		pf := envProxyConfig().ProxyFunc()
+		proxy = func(r *http.Request) (*url.URL, error) { return pf(r.URL) }
 	}
 	n.tr = &http.Transport{
 		Proxy: func(r *http.Request) (*url.URL, error) {

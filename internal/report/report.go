@@ -30,6 +30,7 @@ type Report struct {
 	IPv4        *Host          `json:"ipv4"`
 	IPv6        *Host          `json:"ipv6"`
 	Results     []*Host        `json:"results,omitempty"`
+	Censor      []probe.Result `json:"censor,omitempty"`
 	Data        []DataInfo     `json:"data"`
 	Attribution []string       `json:"attribution,omitempty"`
 	Network     []ledger.Entry `json:"network"`
@@ -155,6 +156,11 @@ func (r *Report) WriteDetailed(w io.Writer, color bool) {
 		writeHost(w, c, "IP", h)
 	}
 	writeProbes(w, c, []labeled{{"IPv4", r.IPv4}, {"IPv6", r.IPv6}})
+	if len(r.Censor) > 0 {
+		cols := []column{newColumn("result", r.Censor)}
+		writeTable(w, c, "Censorship", cols, sectionsOf(cols), nil)
+		fmt.Fprintln(w)
+	}
 
 	if len(r.Data) > 0 {
 		fmt.Fprintln(w, c.bold("Local data"))

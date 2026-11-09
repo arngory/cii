@@ -25,6 +25,16 @@ func (h *Host) SetRegion(s region.Summary, mask bool) {
 	h.Region = &s
 }
 
+func (r *Report) SetCensor(rs []probe.Result, mask bool) {
+	maskReasons(rs, mask)
+	for i := range rs {
+		if mask {
+			rs[i].Detail = MaskText(rs[i].Detail)
+		}
+	}
+	r.Censor = rs
+}
+
 func (h *Host) SetServices(rs []probe.Result, mask bool) {
 	maskReasons(rs, mask)
 	h.Services = rs

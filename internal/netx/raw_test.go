@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/arngory/cii/internal/ledger"
@@ -79,5 +81,30 @@ func TestEnvProxyDisablesRaw(t *testing.T) {
 	}
 	if _, err := n.LookupHost(context.Background(), "m", "a.example"); !errors.Is(err, ErrProxyRaw) {
 		t.Fatalf("lookup with env proxy: %v", err)
+	}
+}
+
+func TestAllProxyRoutesHTTP(t *testing.T) {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy", "NO_PROXY", "no_proxy"} {
+		t.Setenv(k, "")
+	}
+	hits := 0
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Write([]byte(r.Host))
+	}))
+	defer proxy.Close()
+	t.Setenv("ALL_PROXY", proxy.URL)
+	n := New(Options{}, NewPolicy(Rule{Module: "m", Pattern: "target.invalid"}), ledger.New())
+	if !n.Proxied() {
+		t.Fatal("ALL_PROXY not detected")
+	}
+	resp, err := n.HTTPClient("m").Get("http://target.invalid/")
+	if err != nil {
+		t.Fatalf("request via ALL_PROXY: %v", err)
+	}
+	resp.Body.Close()
+	if hits != 1 {
+		t.Fatalf("proxy hits = %d", hits)
 	}
 }
