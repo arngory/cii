@@ -53,11 +53,16 @@ type Options struct {
 	Providers []Provider
 	Offline   bool
 	Iface     string
+	Source    netip.Addr
 }
 
 func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address {
 	var res Address
-	if addrs, err := netx.InterfaceAddrs(o.Iface); err == nil {
+	if o.Source.IsValid() {
+		if o.Source.Is4() == (f == netx.IPv4) && netx.IsPublic(o.Source) {
+			res.Interface = []netip.Addr{o.Source}
+		}
+	} else if addrs, err := netx.InterfaceAddrs(o.Iface); err == nil {
 		for _, a := range addrs {
 			if a.Is4() == (f == netx.IPv4) && netx.IsPublic(a) {
 				res.Interface = append(res.Interface, a)

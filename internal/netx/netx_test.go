@@ -1,7 +1,6 @@
 package netx
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -94,17 +93,6 @@ func TestGuardBlocksUndeclaredAndRedirects(t *testing.T) {
 	}
 	if e := got["other 127.0.0.1"]; e.Blocked != 1 {
 		t.Errorf("blocked module not recorded: %+v", e)
-	}
-}
-
-func TestDialRefusedWithProxy(t *testing.T) {
-	led := ledger.New()
-	n := New(Options{Proxy: mustURL(t, "socks5://127.0.0.1:1")}, NewPolicy(Rule{Module: "m", Pattern: "example.com"}), led)
-	if _, err := n.Dial(context.Background(), "m", "tcp", "example.com:25"); !errors.Is(err, ErrProxyRaw) {
-		t.Fatalf("raw dial with proxy: %v", err)
-	}
-	if _, err := n.Dial(context.Background(), "m", "tcp", "other.com:25"); err == nil {
-		t.Fatal("undeclared raw dial allowed")
 	}
 }
 

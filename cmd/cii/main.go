@@ -256,7 +256,7 @@ func cmdIP(ctx context.Context, args []string) error {
 			continue
 		}
 		n := netx.New(opts, policy, led)
-		addr := ipdetect.Detect(ctx, n, f, ipdetect.Options{Providers: providers, Offline: c.offline, Iface: c.iface})
+		addr := ipdetect.Detect(ctx, n, f, ipdetect.Options{Providers: providers, Offline: c.offline, Iface: c.iface, Source: opts.Source})
 		var geo []geodb.Record
 		if addr.Address.IsValid() {
 			geo = dbs.Lookup(addr.Address)

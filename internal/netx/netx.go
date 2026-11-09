@@ -2,8 +2,6 @@ package netx
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
@@ -59,7 +57,6 @@ type Net struct {
 	opts   Options
 	policy *Policy
 	ledger *ledger.Ledger
-	dialer *net.Dialer
 	tr     *http.Transport
 	proxy  sync.Map
 }
@@ -75,7 +72,7 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	if opts.Source.IsValid() {
 		d.LocalAddr = &net.TCPAddr{IP: opts.Source.AsSlice()}
 	}
-	n := &Net{opts: opts, policy: policy, ledger: led, dialer: d}
+	n := &Net{opts: opts, policy: policy, ledger: led}
 
 	proxy := http.ProxyFromEnvironment
 	if opts.Proxy != nil {
@@ -138,52 +135,10 @@ func (g *guard) RoundTrip(req *http.Request) (*http.Response, error) {
 	return resp, err
 }
 
-var ErrProxyRaw = errors.New("raw connections are disabled while a proxy is configured")
-
-func (n *Net) Dial(ctx context.Context, module, network, addr string) (net.Conn, error) {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, fmt.Errorf("dial %s: %w", addr, err)
-	}
-	rule, ok := n.policy.Match(module, host)
-	if !ok {
-		n.ledger.Blocked(module, "not declared", normalizeHost(host), network)
-		return nil, &BlockedError{Module: module, Host: host}
-	}
-	if n.opts.Proxy != nil {
-		n.ledger.Blocked(module, rule.Purpose, normalizeHost(host), network)
-		return nil, ErrProxyRaw
-	}
-	n.ledger.Request(module, rule.Purpose, normalizeHost(host), network)
-	d := *n.dialer
-	if n.opts.Source.IsValid() && (network == "udp" || network == "udp4" || network == "udp6") {
-		d.LocalAddr = &net.UDPAddr{IP: n.opts.Source.AsSlice()}
-	}
-	dialNet := network
-	if n.opts.Family != Any {
-		dialNet = n.opts.Family.network(trimFamily(network))
-	}
-	c, err := d.DialContext(ctx, dialNet, addr)
-	if err != nil {
-		n.ledger.Error(module, rule.Purpose, normalizeHost(host), network)
-	}
-	return c, err
-}
-
 func proxyAddr(u *url.URL) string {
 	if u.Port() != "" {
 		return u.Host
 	}
 	port := map[string]string{"http": "80", "https": "443", "socks5": "1080", "socks5h": "1080"}[u.Scheme]
 	return net.JoinHostPort(u.Hostname(), port)
-}
-
-func trimFamily(network string) string {
-	switch network {
-	case "tcp4", "tcp6":
-		return "tcp"
-	case "udp4", "udp6":
-		return "udp"
-	}
-	return network
 }
