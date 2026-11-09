@@ -35,4 +35,16 @@ func TestCatalogs(t *testing.T) {
 	if got := SelectRegional([]string{"zz"}, config.Keys{}, true); len(got) != 0 {
 		t.Errorf("unknown catalog selected %d checks", len(got))
 	}
+	var all []string
+	for _, c := range Catalogs {
+		all = append(all, c.Code)
+	}
+	urls := map[string]bool{}
+	for _, ch := range SelectRegional(all, config.Keys{}, true) {
+		key := ch.Service + "\x00" + ch.Requests[0].URL
+		if urls[key] {
+			t.Errorf("%s selected twice", ch.Service)
+		}
+		urls[key] = true
+	}
 }

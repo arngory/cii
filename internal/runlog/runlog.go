@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -41,11 +41,14 @@ func Write(dir string, now time.Time, sections ...[]byte) (string, error) {
 		err = cerr
 	}
 	if err != nil {
+		os.Remove(path)
 		return "", err
 	}
 	prune(dir)
 	return path, nil
 }
+
+var logName = regexp.MustCompile(`^\d{8}-\d{6}-\d{2}\.log$`)
 
 func prune(dir string) {
 	entries, err := os.ReadDir(dir)
@@ -54,7 +57,7 @@ func prune(dir string) {
 	}
 	var logs []string
 	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".log") {
+		if !e.IsDir() && logName.MatchString(e.Name()) {
 			logs = append(logs, e.Name())
 		}
 	}

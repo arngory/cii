@@ -62,9 +62,21 @@ func CatalogsFor(country string) []string {
 
 func SelectRegional(codes []string, k config.Keys, extended bool) []probe.Check {
 	var out []probe.Check
+	seen := map[string]bool{}
 	for _, code := range codes {
-		if c := catalog(strings.ToUpper(code)); c != nil {
-			out = append(out, probe.Select(Module, c.checks, k, extended)...)
+		c := catalog(strings.ToUpper(code))
+		if c == nil {
+			continue
+		}
+		for _, ch := range probe.Select(Module, c.checks, k, extended) {
+			key := ch.Service
+			if len(ch.Requests) > 0 {
+				key += "\x00" + ch.Requests[0].URL
+			}
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, ch)
+			}
 		}
 	}
 	return out

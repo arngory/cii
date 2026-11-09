@@ -9,6 +9,10 @@ import (
 
 func TestWriteAndPrune(t *testing.T) {
 	dir := t.TempDir()
+	foreign := filepath.Join(dir, "other.log")
+	if err := os.WriteFile(foreign, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	base := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	var first string
 	for i := 0; i < Keep+3; i++ {
@@ -28,8 +32,11 @@ func TestWriteAndPrune(t *testing.T) {
 		t.Fatal("writing under a file path succeeded")
 	}
 	entries, _ := os.ReadDir(dir)
-	if len(entries) != Keep {
-		t.Fatalf("kept %d logs", len(entries))
+	if len(entries) != Keep+1 {
+		t.Fatalf("kept %d entries", len(entries))
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Fatal("foreign .log file was pruned")
 	}
 	if _, err := os.Stat(first); !os.IsNotExist(err) {
 		t.Fatal("oldest log not pruned")

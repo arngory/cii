@@ -404,8 +404,14 @@ func footer(r *report.Report, unicode bool, logPath string, logErr error) []stri
 	if legend := report.Legend(r, unicode); legend != "" {
 		parts = append(parts, legend)
 	}
-	if n := len(r.Network); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d hosts contacted", n))
+	hosts := map[string]bool{}
+	for _, e := range r.Network {
+		if e.Requests > 0 {
+			hosts[e.Host] = true
+		}
+	}
+	if len(hosts) > 0 {
+		parts = append(parts, fmt.Sprintf("%d hosts contacted", len(hosts)))
 	} else {
 		parts = append(parts, "no network contacts")
 	}
