@@ -58,7 +58,8 @@ func TestDialPolicyLedgerAndProxy(t *testing.T) {
 		byKey[e.Module+" "+e.Host+" "+e.Proto] = e
 	}
 	if byKey["m 127.0.0.1 tcp"].Requests != 1 || byKey["other 127.0.0.1 tcp"].Blocked != 1 ||
-		byKey["m a.example udp"].Blocked != 1 || byKey["m a.example dns"].Blocked != 1 {
+		byKey["m a.example udp"].Skipped != 1 || byKey["m a.example dns"].Skipped != 1 ||
+		byKey["m a.example udp"].Blocked != 0 {
 		t.Fatalf("ledger = %+v", led.Entries())
 	}
 }

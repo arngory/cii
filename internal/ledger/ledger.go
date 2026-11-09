@@ -12,6 +12,7 @@ type Entry struct {
 	Proto    string `json:"proto"`
 	Requests int    `json:"requests"`
 	Blocked  int    `json:"blocked,omitempty"`
+	Skipped  int    `json:"skipped,omitempty"`
 	Errors   int    `json:"errors,omitempty"`
 }
 
@@ -44,6 +45,12 @@ func (l *Ledger) Blocked(module, purpose, host, proto string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.get(module, purpose, host, proto).Blocked++
+}
+
+func (l *Ledger) Skipped(module, purpose, host, proto string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.get(module, purpose, host, proto).Skipped++
 }
 
 func (l *Ledger) Error(module, purpose, host, proto string) {

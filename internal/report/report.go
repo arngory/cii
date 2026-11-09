@@ -213,6 +213,9 @@ func writeLedger(w io.Writer, c paint, entries []ledger.Entry) {
 		if e.Errors > 0 {
 			status.text += fmt.Sprintf(", %d failed", e.Errors)
 		}
+		if e.Skipped > 0 {
+			status.text += fmt.Sprintf(", %d skipped (proxy)", e.Skipped)
+		}
 		if e.Blocked > 0 {
 			status.text += fmt.Sprintf(", %d BLOCKED", e.Blocked)
 			status.style = c.red

@@ -165,6 +165,7 @@ func Rules(opts Options) []netx.Rule {
 			}
 		}
 	}
+
 	return rules
 }
 

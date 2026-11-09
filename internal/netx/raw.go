@@ -18,7 +18,7 @@ func (n *Net) allow(module, host, proto string) (Rule, error) {
 		return rule, &BlockedError{Module: module, Host: host}
 	}
 	if n.proxied {
-		n.ledger.Blocked(module, rule.Purpose, normalizeHost(host), proto)
+		n.ledger.Skipped(module, rule.Purpose, normalizeHost(host), proto)
 		return rule, ErrProxyRaw
 	}
 	n.ledger.Request(module, rule.Purpose, normalizeHost(host), proto)

@@ -170,6 +170,9 @@ func writeTable(w io.Writer, c paint, title string, cols []column, sections []se
 				row = append(row, cell(c, r, ok))
 				if ok && detail == "" {
 					detail = r.Detail
+					if detail == "" && r.Status != probe.Yes && r.Status != probe.OK {
+						detail = r.Reason
+					}
 				}
 			}
 			if detail != "" {
