@@ -46,6 +46,7 @@ type Result struct {
 	IATA     string `json:"iata,omitempty"`
 	Node     string `json:"node,omitempty"`
 	Reason   string `json:"reason,omitempty"`
+	Detail   string `json:"detail,omitempty"`
 	Extended bool   `json:"extended,omitempty"`
 }
 

@@ -46,7 +46,10 @@ func fetch(url string) (io.ReadCloser, error) {
 	return resp.Body, nil
 }
 
-var territoryKey = regexp.MustCompile(`^([A-Z]{2})(-alt-[a-z]+)?$`)
+var (
+	territoryKey = regexp.MustCompile(`^([A-Z]{2})(-alt-[a-z]+)?$`)
+	iataCode     = regexp.MustCompile(`^[A-Z]{3}$`)
+)
 
 func countries(path string) error {
 	body, err := fetch(cldrURL)
@@ -114,6 +117,7 @@ func airports(path string) error {
 		rank int
 	}
 	best := map[string]entry{}
+	legacy := map[string]string{}
 	for {
 		rec, err := r.Read()
 		if err == io.EOF {
@@ -125,11 +129,28 @@ func airports(path string) error {
 		code := strings.ToUpper(strings.TrimSpace(rec[col["iata_code"]]))
 		cc := rec[col["iso_country"]]
 		typ := rec[col["type"]]
-		if len(code) != 3 || len(cc) != 2 || typ == "closed" {
+		if len(cc) != 2 || typ == "closed" {
+			continue
+		}
+		if rank[typ] >= rank["medium_airport"] {
+			if kw, ok := col["keywords"]; ok {
+				for _, tok := range strings.Split(rec[kw], ",") {
+					if tok = strings.TrimSpace(tok); iataCode.MatchString(tok) && tok != code {
+						legacy[tok] = cc
+					}
+				}
+			}
+		}
+		if len(code) != 3 {
 			continue
 		}
 		if e, ok := best[code]; !ok || rank[typ] > e.rank {
 			best[code] = entry{cc, rank[typ]}
+		}
+	}
+	for code, cc := range legacy {
+		if _, taken := best[code]; !taken {
+			best[code] = entry{cc, 0}
 		}
 	}
 	if len(best) < 5000 {
