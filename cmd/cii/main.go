@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/arngory/cii/internal/bench"
 	"github.com/arngory/cii/internal/censor"
 	"github.com/arngory/cii/internal/config"
 	"github.com/arngory/cii/internal/datasrc"
@@ -44,6 +45,7 @@ Usage:
   cii data status             show local databases
   cii data sources            list supported databases and their licenses
   cii censor [flags]          DNS resolvers and hijacking, DPI and geoblocks, Telegram (see docs/CENSOR_CHECKS.md)
+  cii bench [flags]           system info, disk, CPU, Cloudflare speed and iperf3 (see docs/BENCH.md)
   cii version
 
 Common flags:
@@ -97,6 +99,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdData(ctx, args)
 	case "censor":
 		return cmdCensor(ctx, args)
+	case "bench":
+		return cmdBench(ctx, args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -430,9 +434,12 @@ func footer(r *report.Report, unicode bool, logPath string, logErr error) []stri
 			hosts[e.Host] = true
 		}
 	}
-	if len(hosts) > 0 {
+	switch {
+	case len(hosts) == 1:
+		parts = append(parts, "1 host contacted")
+	case len(hosts) > 1:
 		parts = append(parts, fmt.Sprintf("%d hosts contacted", len(hosts)))
-	} else {
+	default:
 		parts = append(parts, "no network contacts")
 	}
 	if n := r.FailedChecks(); n > 0 {
@@ -693,4 +700,80 @@ func cmdCensor(ctx context.Context, args []string) error {
 	rep.SetCensor(censor.Run(ctx, n, opts), c.mask)
 	rep.Network = led.Entries()
 	return output(rep, &c)
+}
+
+func cmdBench(ctx context.Context, args []string) error {
+	var c common
+	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
+	c.register(fs)
+	opts := bench.Defaults()
+	var noDisk, noCPU, noNet, noIperf bool
+	var diskSize string
+	fs.BoolVar(&noDisk, "no-disk", false, "skip the disk test")
+	fs.BoolVar(&noCPU, "no-cpu", false, "skip the CPU test")
+	fs.BoolVar(&noNet, "no-speed", false, "skip the Cloudflare speed test")
+	fs.BoolVar(&noIperf, "no-iperf", false, "skip iperf3")
+	fs.StringVar(&opts.DiskDir, "disk-dir", "", "directory for the disk test file (default: temp dir)")
+	fs.StringVar(&diskSize, "disk-size", "1G", "disk test file size")
+	fs.StringVar(&opts.Servers, "servers", opts.Servers, "iperf3 servers: global, ru, all or host:ports[:provider[:location]],...")
+	fs.DurationVar(&opts.Duration, "duration", opts.Duration, "duration of each network transfer")
+	fs.BoolVar(&opts.SystemTools, "system", false, "also run installed iperf3 and fio")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	size, err := parseSize(diskSize)
+	if err != nil {
+		return fmt.Errorf("bad --disk-size: %w", err)
+	}
+	opts.DiskSize = size
+	opts.Disk, opts.CPU, opts.Net, opts.Iperf = !noDisk, !noCPU, !noNet && !c.offline, !noIperf && !c.offline
+	if opts.Duration <= 0 || opts.Duration > time.Minute {
+		return errors.New("--duration must be between 1s and 1m")
+	}
+	policy := netx.NewPolicy(bench.Rules(opts)...)
+	if c.plan {
+		report.WritePlan(os.Stdout, c.color(), policy.Rules())
+		return nil
+	}
+	f := netx.IPv4
+	if fams := c.families(); len(fams) == 1 {
+		f = fams[0]
+	}
+	netOpts, err := c.options(f)
+	if err != nil {
+		return err
+	}
+	led := ledger.New()
+	n := netx.New(netOpts, policy, led)
+	progress := func(string) {}
+	if !c.json && term.IsTerminal(int(os.Stderr.Fd())) {
+		progress = func(step string) { fmt.Fprintf(os.Stderr, "\r\033[K%s…", step) }
+	}
+	rep := report.New("bench", c.mask)
+	b := bench.Run(ctx, bench.Env{Net: n, Ledger: led}, opts, progress)
+	progress("")
+	rep.SetBench(&b)
+	rep.Network = led.Entries()
+	return output(rep, &c)
+}
+
+func parseSize(s string) (int64, error) {
+	s = strings.TrimSpace(strings.ToUpper(s))
+	mult := int64(1)
+	switch {
+	case strings.HasSuffix(s, "G"):
+		mult, s = 1<<30, strings.TrimSuffix(s, "G")
+	case strings.HasSuffix(s, "M"):
+		mult, s = 1<<20, strings.TrimSuffix(s, "M")
+	case strings.HasSuffix(s, "K"):
+		mult, s = 1<<10, strings.TrimSuffix(s, "K")
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("expected a number with optional K, M or G suffix, got %q", s)
+	}
+	return n * mult, nil
 }

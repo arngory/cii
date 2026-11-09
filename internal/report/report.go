@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/arngory/cii/internal/bench"
 	"github.com/arngory/cii/internal/geodb"
 	"github.com/arngory/cii/internal/ipdetect"
 	"github.com/arngory/cii/internal/ledger"
@@ -31,6 +32,7 @@ type Report struct {
 	IPv6        *Host          `json:"ipv6"`
 	Results     []*Host        `json:"results,omitempty"`
 	Censor      []probe.Result `json:"censor,omitempty"`
+	Bench       *bench.Report  `json:"bench,omitempty"`
 	Data        []DataInfo     `json:"data"`
 	Attribution []string       `json:"attribution,omitempty"`
 	Network     []ledger.Entry `json:"network"`
@@ -160,6 +162,9 @@ func (r *Report) WriteDetailed(w io.Writer, color bool) {
 		cols := []column{newColumn("result", r.Censor)}
 		writeTable(w, c, "Censorship", cols, sectionsOf(cols), nil)
 		fmt.Fprintln(w)
+	}
+	if r.Bench != nil {
+		writeBenchDetailed(w, c, r.Bench)
 	}
 
 	if len(r.Data) > 0 {

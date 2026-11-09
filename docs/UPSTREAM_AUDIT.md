@@ -52,7 +52,7 @@
 
 | Находка | Решение в cii |
 |---|---|
-| Ookla speedtest CLI скачивается с install.speedtest.net или с зеркала автора `dl.lamp.sh` при `--no-check-certificate` | не скачивается; системный `speedtest` — по флагу, лицензию принимает сам пользователь |
+| Ookla speedtest CLI скачивается с install.speedtest.net или с зеркала автора `dl.lamp.sh` при `--no-check-certificate` | не скачивается и не вызывается: лицензию за пользователя cii принять не может; скорость меряется через Cloudflare и iperf3 |
 | Автоматически передаётся `--accept-license --accept-gdpr` | не переносится |
 | UnixBench собирается из архива с `dl.lamp.sh` | исключено, вместо него свой CPU-тест |
 | `ipinfo.io` по HTTP | не используется |

@@ -23,11 +23,11 @@ type Style struct {
 	Width   int
 }
 
-type marks struct{ yes, no, partial, block, unknown, failed, none, sep string }
+type marks struct{ yes, no, partial, block, unknown, failed, none, sep, down, up string }
 
 var (
-	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · "}
-	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | "}
+	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · ", "↓", "↑"}
+	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | ", "down", "up"}
 )
 
 func UnicodeTerminal() bool {
@@ -125,6 +125,9 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 	writeServiceGrid(w, c, m, st.Width, fams)
 	if len(r.Censor) > 0 {
 		writeGrid2(w, c, m, st.Width, []column{newColumn("", r.Censor)}, [][]string{nil})
+	}
+	if r.Bench != nil {
+		writeBenchCompact(w, c, m, st.Width, r.Bench)
 	}
 
 	if len(footer) > 0 {

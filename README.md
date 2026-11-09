@@ -37,6 +37,7 @@ make build
 | `cii data status` | показывает локальные базы, даты и sha256 | нет |
 | `cii data sources` | список поддерживаемых баз и их лицензий | нет |
 | `cii censor` | резолверы и подмена DNS, DPI и геоблокировки, Telegram (см. [docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md)) | резолверы, проверяемые домены, DC Telegram |
+| `cii bench` | сведения о системе, диск, CPU, скорость через Cloudflare, iperf3 своим клиентом (см. [docs/BENCH.md](docs/BENCH.md)) | `speed.cloudflare.com`, выбранные iperf3-серверы |
 
 Общие флаги: `-4`, `-6`, `--iface`, `--source`, `--proxy`, `--timeout`, `--quick`, `--extended`, `--catalog`, `--no-risk`, `--json`, `--debug`, `--no-log`, `--mask`, `--no-color`, `--config`, `--data-dir`.
 
@@ -75,6 +76,7 @@ details: --debug or ~/.local/state/cii/logs/20260101-120000.log
 - [docs/SERVICE_CHECKS.md](docs/SERVICE_CHECKS.md) — проверки доступности сервисов; региональные каталоги — в [docs/catalogs/](docs/catalogs/)
 - [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md) — репутация адреса, DNSBL, почта, известные диапазоны
 - [docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md) — `cii censor`: DNS, DPI, геоблокировки, Telegram
+- [docs/BENCH.md](docs/BENCH.md) — `cii bench`: система, диск, CPU, скорость, iperf3
 - [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) — офлайн-базы, встроенные справочники и лицензии
 - [docs/UPSTREAM_AUDIT.md](docs/UPSTREAM_AUDIT.md) — разбор проектов-примеров
 - [docs/ROADMAP.md](docs/ROADMAP.md) — план работ

@@ -48,10 +48,11 @@
 
 ## 6. Бенчмарки (`cii bench`)
 
-- [ ] Свой iperf3-клиент; списки серверов: мировой и российский (собственный, с подсказкой от itdoginfo)
-- [ ] Скорость через Cloudflare
-- [ ] Сведения о системе, дисковый тест (O_DIRECT / F_NOCACHE / FILE_FLAG_NO_BUFFERING), CPU-тест
-- [ ] Системные iperf3, fio и Ookla — по флагу, если установлены; иначе подсказка установки для дистрибутива (apt, dnf, apk, pacman, opkg, brew, winget)
+- [x] Свой iperf3-клиент; списки серверов: мировой и российский (собственный, с подсказкой от itdoginfo)
+- [x] Скорость через Cloudflare
+- [x] Сведения о системе, дисковый тест (O_DIRECT / F_NOCACHE / FILE_FLAG_NO_BUFFERING), CPU-тест
+- [x] Системные iperf3 и fio — по флагу `--system`, если установлены; иначе подсказка установки для дистрибутива (apt, dnf, apk, pacman, opkg, zypper, pkg, brew, winget)
+- [ ] Ookla Speedtest CLI не подключается: его лицензию cii за пользователя принять не может
 
 ## 7. Сопровождение
 
