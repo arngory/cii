@@ -154,9 +154,16 @@ func writeTable(w io.Writer, c paint, title string, cols []column, sections []se
 				extended = true
 			}
 			row := []gcell{plain(name)}
+			detail := ""
 			for _, col := range cols {
 				r, ok := col.byKey[key(first)]
 				row = append(row, cell(c, r, ok))
+				if ok && detail == "" {
+					detail = r.Detail
+				}
+			}
+			if detail != "" {
+				row = append(row, gcell{text: probe.Truncate(detail, 80), style: c.dim})
 			}
 			rows = append(rows, row)
 		}

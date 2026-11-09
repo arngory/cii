@@ -28,7 +28,8 @@ make build
 |---|---|---|
 | `cii` | определяет публичные адреса, описывает их по локальным базам, проверяет регион и доступность сервисов | только хосты из `--plan` |
 | `cii --extended` | то же плюс проверки уровня B (внутренние API сервисов, см. [docs/REGION_CHECKS.md](docs/REGION_CHECKS.md)) | хосты из `--plan --extended` |
-| `cii --quick` | без проверок региона и сервисов | только echo-сервисы |
+| `cii --quick` | без проверок региона, сервисов и репутации | только echo-сервисы |
+| `cii --no-risk` | без проверок репутации, DNSBL и почты | — |
 | `cii --plan` | печатает все адреса, куда cii может обратиться, и выходит | нет |
 | `cii --offline` | берёт адреса с интерфейсов, ищет по локальным базам | нет |
 | `cii lookup IP...` | описывает указанные адреса по локальным базам | нет |
@@ -36,7 +37,7 @@ make build
 | `cii data status` | показывает локальные базы, даты и sha256 | нет |
 | `cii data sources` | список поддерживаемых баз и их лицензий | нет |
 
-Общие флаги: `-4`, `-6`, `--iface`, `--source`, `--proxy`, `--timeout`, `--quick`, `--extended`, `--catalog`, `--json`, `--debug`, `--no-log`, `--mask`, `--no-color`, `--config`, `--data-dir`.
+Общие флаги: `-4`, `-6`, `--iface`, `--source`, `--proxy`, `--timeout`, `--quick`, `--extended`, `--catalog`, `--no-risk`, `--json`, `--debug`, `--no-log`, `--mask`, `--no-color`, `--config`, `--data-dir`.
 
 ## Вывод
 
@@ -60,6 +61,7 @@ details: --debug or ~/.local/state/cii/logs/20260101-120000.log
 - Сервисы — сеткой по секциям. Страна рядом с сервисом показывается, только если она отличается от вердикта. При двух стеках у каждого сервиса две отметки: первая для IPv4, вторая для IPv6.
 - Отметки: `✓` да, `✗` нет, `◐` частично, `⊘` адрес заблокирован сервисом, `?` нет ответа, `!` ошибка; в терминале без UTF-8 — `+ - ~ x ? !`.
 - Региональный каталог сервисов подбирается по стране из вердикта (`--catalog auto`). Можно задать вручную: `--catalog JP,EU`, `all` или `none`.
+- Секции Reputation, DNSBL, Mail и Network описывают, как адрес выглядит со стороны: VPN/прокси/дата-центр, чёрные списки рассылок, исходящий 25-й порт, диапазоны Tor и облаков. Что для этого спрашивается и у кого — в [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md).
 
 `--debug` печатает полные таблицы по каждому источнику, причины неудачных проверок, сведения о локальных базах и журнал соединений: каждый хост, число запросов, назначение и попытки, заблокированные политикой (`BLOCKED`). Тот же подробный отчёт вместе с JSON при каждом запуске сохраняется в локальный лог: `~/.local/state/cii/logs` на Linux, `~/Library/Logs/cii` на macOS, `%LOCALAPPDATA%\cii\logs` на Windows. Права на файл — 0600, хранятся последние 20 запусков. Лог содержит ваш адрес (если не указан `--mask`) и никуда не отправляется. Отключение — `--no-log`, другой каталог — `CII_LOG_DIR`.
 
@@ -69,7 +71,8 @@ details: --debug or ~/.local/state/cii/logs/20260101-120000.log
 - [docs/NETWORK_POLICY.md](docs/NETWORK_POLICY.md) — сетевая политика и правила ToS/FUP
 - [docs/CONFIG.md](docs/CONFIG.md) — конфигурация, свои ключи, свой echo-сервис
 - [docs/REGION_CHECKS.md](docs/REGION_CHECKS.md) — проверки региона, уровни и исключения
-- [docs/SERVICE_CHECKS.md](docs/SERVICE_CHECKS.md) — проверки доступности сервисов
+- [docs/SERVICE_CHECKS.md](docs/SERVICE_CHECKS.md) — проверки доступности сервисов; региональные каталоги — в [docs/catalogs/](docs/catalogs/)
+- [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md) — репутация адреса, DNSBL, почта, известные диапазоны
 - [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) — офлайн-базы, встроенные справочники и лицензии
 - [docs/UPSTREAM_AUDIT.md](docs/UPSTREAM_AUDIT.md) — разбор проектов-примеров
 - [docs/ROADMAP.md](docs/ROADMAP.md) — план работ

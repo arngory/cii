@@ -12,6 +12,7 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
+	"github.com/arngory/cii/internal/risk"
 	"github.com/arngory/cii/internal/services"
 )
 
@@ -272,6 +273,24 @@ var groupTitles = map[probe.Group]string{
 	services.Streaming: "Streaming",
 	services.AI:        "AI",
 	services.Web:       "Web",
+	risk.Reputation:    "Reputation",
+	risk.DNSBL:         "DNSBL",
+	risk.Mail:          "Mail",
+	risk.Network:       "Network",
+}
+
+func wide(g probe.Group) bool {
+	return g == risk.Reputation || g == risk.Mail || g == risk.Network
+}
+
+func detailOf(r probe.Result) string {
+	switch {
+	case r.Detail != "" && r.Status != probe.Yes:
+		return r.Detail
+	case r.Detail != "" && (r.Group == risk.Reputation || r.Group == risk.Mail || r.Group == risk.Network):
+		return r.Detail
+	}
+	return ""
 }
 
 func groupTitle(g probe.Group) string {
@@ -323,7 +342,7 @@ func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam) {
 		fmt.Fprintln(w, c.dim(pad("", labelWidth)+"  marks: "+strings.Join(labels, " ")))
 	}
 	sections := make([][]item, len(groups))
-	cell := 0
+	widths := make([]int, len(groups))
 	for gi, g := range groups {
 		var items []item
 		for _, first := range rowsOf(cols, g) {
@@ -344,13 +363,28 @@ func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam) {
 			}
 			it.plain += rest
 			it.styled += rest
-			cell = max(cell, utf8.RuneCountInString(it.plain)+3)
+			if d := detailOf(first); d != "" && len(cols) == 1 {
+				d = " " + probe.Truncate(d, 48)
+				it.plain += d
+				it.styled += c.dim(d)
+			}
+			widths[gi] = max(widths[gi], utf8.RuneCountInString(it.plain)+3)
 			items = append(items, it)
 		}
 		sections[gi] = items
 	}
+	cell := 0
+	for gi := range groups {
+		if !wide(groups[gi]) {
+			cell = max(cell, widths[gi])
+		}
+	}
 	for gi, g := range groups {
-		writeColumns(w, c.bold(pad(groupTitle(g), labelWidth))+"  ", labelWidth+2, width, cell, sections[gi])
+		cw := cell
+		if wide(g) || cw == 0 {
+			cw = widths[gi]
+		}
+		writeColumns(w, c.bold(pad(groupTitle(g), labelWidth))+"  ", labelWidth+2, width, cw, sections[gi])
 	}
 }
 

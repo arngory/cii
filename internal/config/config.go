@@ -20,6 +20,11 @@ type Keys struct {
 	IPRegistryKey     string `yaml:"ipregistry_key"`
 	GeoapifyKey       string `yaml:"geoapify_key"`
 	IP2LocationKey    string `yaml:"ip2location_key"`
+	IPAPIisKey        string `yaml:"ipapi_is_key"`
+	ProxyCheckKey     string `yaml:"proxycheck_key"`
+	AbuseIPDBKey      string `yaml:"abuseipdb_key"`
+	IPQSKey           string `yaml:"ipqs_key"`
+	IPDataKey         string `yaml:"ipdata_key"`
 }
 
 type Config struct {
@@ -54,6 +59,11 @@ func Load(path string) (*Config, error) {
 	envOverride(&c.Keys.IPRegistryKey, "CII_IPREGISTRY_KEY")
 	envOverride(&c.Keys.GeoapifyKey, "CII_GEOAPIFY_KEY")
 	envOverride(&c.Keys.IP2LocationKey, "CII_IP2LOCATION_KEY")
+	envOverride(&c.Keys.IPAPIisKey, "CII_IPAPI_IS_KEY")
+	envOverride(&c.Keys.ProxyCheckKey, "CII_PROXYCHECK_KEY")
+	envOverride(&c.Keys.AbuseIPDBKey, "CII_ABUSEIPDB_KEY")
+	envOverride(&c.Keys.IPQSKey, "CII_IPQS_KEY")
+	envOverride(&c.Keys.IPDataKey, "CII_IPDATA_KEY")
 	return c, nil
 }
 

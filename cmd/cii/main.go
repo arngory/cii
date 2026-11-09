@@ -28,6 +28,7 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/report"
+	"github.com/arngory/cii/internal/risk"
 	"github.com/arngory/cii/internal/runlog"
 	"github.com/arngory/cii/internal/services"
 	"github.com/arngory/cii/internal/version"
@@ -53,6 +54,7 @@ Common flags:
   --quick            skip region and service checks
   --extended         also run tier-B checks that use vendors' internal APIs (see docs/REGION_CHECKS.md)
   --catalog LIST     regional service catalogs: auto (by detected country), all, none, or codes like JP,EU
+  --no-risk          skip IP reputation, DNSBL and outbound SMTP checks
   --plan             print every destination that may be contacted, then exit
   --json             machine-readable output
   --debug            detailed tables, failed checks, data sources and every network contact
@@ -103,9 +105,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog bool
-	iface, source, proxy, cfgPath, dataDir, catalog                           string
-	timeout                                                                   time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk bool
+	iface, source, proxy, cfgPath, dataDir, catalog                                   string
+	timeout                                                                           time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -119,6 +121,7 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.quick, "quick", false, "skip region and service checks")
 	fs.BoolVar(&c.extended, "extended", false, "run tier-B checks")
 	fs.StringVar(&c.catalog, "catalog", "auto", "regional service catalogs")
+	fs.BoolVar(&c.noRisk, "no-risk", false, "skip reputation, DNSBL and SMTP checks")
 	fs.BoolVar(&c.plan, "plan", false, "print destinations and exit")
 	fs.BoolVar(&c.json, "json", false, "JSON output")
 	fs.BoolVar(&c.mask, "mask", false, "mask addresses")
@@ -226,17 +229,24 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	var checks []probe.Check
 	var catalogs []string
+	riskOn := !c.quick && !c.noRisk
 	if !c.quick {
 		checks = append(region.Select(cfg.Keys, c.extended), services.Select(cfg.Keys, c.extended)...)
 		if catalogs, err = c.catalogs(); err != nil {
 			return err
 		}
 	}
+	if riskOn {
+		checks = append(checks, risk.Checks(cfg.Keys, c.extended)...)
+	}
 	policy := netx.NewPolicy()
 	if !c.offline {
 		policy.Add(ipdetect.Rules(providers)...)
 		policy.Add(probe.Rules(checks)...)
 		policy.Add(probe.Rules(services.SelectRegional(catalogs, cfg.Keys, c.extended))...)
+		if riskOn {
+			policy.Add(risk.Rules(risk.Options{})...)
+		}
 	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
@@ -298,6 +308,12 @@ func cmdIP(ctx context.Context, args []string) error {
 			if !c.offline {
 				regional := services.SelectRegional(c.catalogsFor(catalogs, summary.Verdict), cfg.Keys, c.extended)
 				svc = append(svc, probe.Run(ctx, probe.Env{Nets: nets, Keys: cfg.Keys}, h.family, h.addr.Address, regional)...)
+				if riskOn {
+					svc = append(svc, risk.Run(ctx, nets[h.family], h.addr.Address, risk.Options{})...)
+				}
+			}
+			if riskOn {
+				svc = append(svc, risk.Offline(c.dir(), h.addr.Address)...)
 			}
 			if len(svc) > 0 {
 				host.SetServices(svc, c.mask)
@@ -501,6 +517,9 @@ func cmdData(ctx context.Context, args []string) error {
 			}
 			fmt.Printf("%-18s %s%s\n  %s; %s; %s\n  %s\n", s.ID, s.Title, def, s.Kind, s.License, key, s.Homepage)
 		}
+		for _, s := range risk.DataSources {
+			fmt.Printf("risk:%-13s %s [default]\n  %s; %s; no key\n  %s\n", s.ID, s.Title, s.Kind, s.Terms, s.Homepage)
+		}
 		return nil
 	case "status":
 		m, err := datasrc.LoadManifest(c.dir())
@@ -515,6 +534,14 @@ func cmdData(ctx context.Context, args []string) error {
 			e := m.Entries[id]
 			fmt.Printf("%-18s %s  fetched %s  built %s  %d bytes  sha256 %s\n", e.ID, e.DBType,
 				e.FetchedAt.Format("2006-01-02"), time.Unix(int64(e.BuildEpoch), 0).UTC().Format("2006-01-02"), e.Size, shortHash(e.SHA256))
+		}
+		rm, err := risk.DataManifest(c.dir())
+		if err != nil {
+			return err
+		}
+		for _, id := range slices.Sorted(maps.Keys(rm)) {
+			e := rm[id]
+			fmt.Printf("risk:%-13s %d prefixes  fetched %s  %d bytes  sha256 %s\n", e.ID, e.Prefixes, e.FetchedAt.Format("2006-01-02"), e.Size, shortHash(e.SHA256))
 		}
 		return nil
 	case "update":
@@ -539,16 +566,28 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 			}
 		}
 	}
+	var riskIDs []string
 	for _, id := range ids {
+		if rid, ok := strings.CutPrefix(id, "risk:"); ok {
+			if _, known := risk.DataSourceByID(rid); !known {
+				return fmt.Errorf("unknown source %q (see `cii data sources`)", id)
+			}
+			riskIDs = append(riskIDs, rid)
+			continue
+		}
 		s, ok := datasrc.ByID(id)
 		if !ok {
 			return fmt.Errorf("unknown source %q (see `cii data sources`)", id)
 		}
 		srcs = append(srcs, s)
 	}
+	updateRisk := len(riskIDs) > 0 || len(ids) == 0
 	policy := netx.NewPolicy()
 	if !c.offline {
 		policy.Add(datasrc.Rules(srcs)...)
+		if updateRisk {
+			policy.Add(risk.DataRules()...)
+		}
 	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
@@ -578,10 +617,22 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 		}
 		fmt.Printf("ok  %s, %d bytes, sha256 %s\n", e.DBType, e.Size, shortHash(e.SHA256))
 	}
+	total := len(srcs)
+	if updateRisk {
+		done, err := risk.Update(ctx, n, c.dir(), riskIDs...)
+		for _, e := range done {
+			fmt.Printf("risk:%-13s ok  %d prefixes, sha256 %s\n", e.ID, e.Prefixes, shortHash(e.SHA256))
+		}
+		if err != nil {
+			failed++
+			fmt.Println("risk data FAILED:", err)
+		}
+		total++
+	}
 	fmt.Println()
 	report.WriteContacts(os.Stdout, c.color(), led.Entries())
 	if failed > 0 {
-		return fmt.Errorf("%d of %d sources failed", failed, len(srcs))
+		return fmt.Errorf("%d of %d sources failed", failed, total)
 	}
 	return nil
 }
