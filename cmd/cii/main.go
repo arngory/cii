@@ -771,6 +771,7 @@ func cmdBench(ctx context.Context, args []string) error {
 
 func parseSize(s string) (int64, error) {
 	s = strings.TrimSpace(strings.ToUpper(s))
+	given := s
 	mult := int64(1)
 	switch {
 	case strings.HasSuffix(s, "G"):
@@ -782,7 +783,7 @@ func parseSize(s string) (int64, error) {
 	}
 	n, err := strconv.ParseInt(s, 10, 64)
 	if err != nil || n <= 0 || n > math.MaxInt64/mult {
-		return 0, fmt.Errorf("expected a number with optional K, M or G suffix, got %q", s)
+		return 0, fmt.Errorf("expected a number with optional K, M or G suffix up to 8589934591G, got %q", given)
 	}
 	return n * mult, nil
 }
