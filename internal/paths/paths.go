@@ -41,3 +41,27 @@ func DataDir() string {
 	}
 	return filepath.Join(".", "."+appDir, "data")
 }
+
+func LogDir() string {
+	if d := os.Getenv("CII_LOG_DIR"); d != "" {
+		return d
+	}
+	switch runtime.GOOS {
+	case "windows":
+		if d := os.Getenv("LOCALAPPDATA"); d != "" {
+			return filepath.Join(d, appDir, "logs")
+		}
+	case "darwin":
+		if h, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(h, "Library", "Logs", appDir)
+		}
+	default:
+		if d := os.Getenv("XDG_STATE_HOME"); d != "" {
+			return filepath.Join(d, appDir, "logs")
+		}
+		if h, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(h, ".local", "state", appDir, "logs")
+		}
+	}
+	return filepath.Join(".", "."+appDir, "logs")
+}

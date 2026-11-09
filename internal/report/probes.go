@@ -8,7 +8,6 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
-	"github.com/arngory/cii/internal/services"
 )
 
 func maskReasons(rs []probe.Result, mask bool) {
@@ -36,10 +35,21 @@ type section struct {
 	title string
 }
 
-var (
-	regionSections  = []section{{region.GeoIP, "GeoIP"}, {region.Platform, "Platforms"}, {region.CDN, "CDN"}}
-	serviceSections = []section{{services.Streaming, "Streaming"}, {services.AI, "AI"}, {services.Web, "Web"}}
-)
+var regionSections = []section{{region.GeoIP, "GeoIP"}, {region.Platform, "Platforms"}, {region.CDN, "CDN"}}
+
+func sectionsOf(cols []column) []section {
+	var out []section
+	seen := map[probe.Group]bool{}
+	for _, col := range cols {
+		for _, r := range col.results {
+			if !seen[r.Group] {
+				seen[r.Group] = true
+				out = append(out, section{r.Group, groupTitle(r.Group)})
+			}
+		}
+	}
+	return out
+}
 
 type column struct {
 	label   string
@@ -97,7 +107,7 @@ func writeProbes(w io.Writer, c paint, hosts []labeled) {
 		fmt.Fprintln(w)
 	}
 	if len(serviceCols) > 0 {
-		extended = writeTable(w, c, "Services", serviceCols, serviceSections, nil) || extended
+		extended = writeTable(w, c, "Services", serviceCols, sectionsOf(serviceCols), nil) || extended
 		fmt.Fprintln(w)
 	}
 	var fails []string

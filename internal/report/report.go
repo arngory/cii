@@ -141,7 +141,7 @@ func (r *Report) WriteJSON(w io.Writer) error {
 	return enc.Encode(r)
 }
 
-func (r *Report) WriteText(w io.Writer, color bool) {
+func (r *Report) WriteDetailed(w io.Writer, color bool) {
 	c := paint(color)
 	fmt.Fprintf(w, "%s %s — complete information about current IP\n\n", c.bold(r.Tool.Name), r.Tool.Version)
 

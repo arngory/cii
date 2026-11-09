@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -11,8 +12,11 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 
 	"github.com/arngory/cii/internal/config"
 	"github.com/arngory/cii/internal/datasrc"
@@ -24,6 +28,7 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/report"
+	"github.com/arngory/cii/internal/runlog"
 	"github.com/arngory/cii/internal/services"
 	"github.com/arngory/cii/internal/version"
 )
@@ -47,8 +52,11 @@ Common flags:
   --offline          never touch the network (local interfaces + databases only)
   --quick            skip region and service checks
   --extended         also run tier-B checks that use vendors' internal APIs (see docs/REGION_CHECKS.md)
+  --catalog LIST     regional service catalogs: auto (by detected country), all, none, or codes like JP,EU
   --plan             print every destination that may be contacted, then exit
   --json             machine-readable output
+  --debug            detailed tables, failed checks, data sources and every network contact
+  --no-log           do not write the local log (default: %s)
   --mask             mask addresses (for screenshots)
   --no-color         disable colours
   --config FILE      config file (default: %s)
@@ -68,7 +76,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Fprintf(os.Stderr, usage, config.DefaultPath(), paths.DataDir())
+	fmt.Fprintf(os.Stderr, usage, paths.LogDir(), config.DefaultPath(), paths.DataDir())
 }
 
 func run(ctx context.Context, args []string) error {
@@ -95,9 +103,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor, quick, extended bool
-	iface, source, proxy, cfgPath, dataDir                      string
-	timeout                                                     time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog bool
+	iface, source, proxy, cfgPath, dataDir, catalog                           string
+	timeout                                                                   time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -110,10 +118,13 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.offline, "offline", false, "no network")
 	fs.BoolVar(&c.quick, "quick", false, "skip region and service checks")
 	fs.BoolVar(&c.extended, "extended", false, "run tier-B checks")
+	fs.StringVar(&c.catalog, "catalog", "auto", "regional service catalogs")
 	fs.BoolVar(&c.plan, "plan", false, "print destinations and exit")
 	fs.BoolVar(&c.json, "json", false, "JSON output")
 	fs.BoolVar(&c.mask, "mask", false, "mask addresses")
 	fs.BoolVar(&c.noColor, "no-color", false, "disable colours")
+	fs.BoolVar(&c.debug, "debug", false, "detailed output")
+	fs.BoolVar(&c.noLog, "no-log", false, "do not write a local log")
 	fs.StringVar(&c.cfgPath, "config", "", "config file")
 	fs.StringVar(&c.dataDir, "data-dir", "", "database directory")
 	fs.Usage = printUsage
@@ -214,13 +225,18 @@ func cmdIP(ctx context.Context, args []string) error {
 		return errors.New("--quick and --extended are mutually exclusive")
 	}
 	var checks []probe.Check
+	var catalogs []string
 	if !c.quick {
 		checks = append(region.Select(cfg.Keys, c.extended), services.Select(cfg.Keys, c.extended)...)
+		if catalogs, err = c.catalogs(); err != nil {
+			return err
+		}
 	}
 	policy := netx.NewPolicy()
 	if !c.offline {
 		policy.Add(ipdetect.Rules(providers)...)
 		policy.Add(probe.Rules(checks)...)
+		policy.Add(probe.Rules(services.SelectRegional(catalogs, cfg.Keys, c.extended))...)
 	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
@@ -277,6 +293,9 @@ func cmdIP(ctx context.Context, args []string) error {
 						svc = append(svc, r)
 					}
 				}
+				summary := region.Summarize(results)
+				regional := services.SelectRegional(c.catalogsFor(catalogs, summary.Verdict), cfg.Keys, c.extended)
+				svc = append(svc, probe.Run(ctx, probe.Env{Nets: nets, Keys: cfg.Keys}, h.family, h.addr.Address, regional)...)
 				if len(svc) > 0 {
 					host.SetServices(svc, c.mask)
 				}
@@ -289,6 +308,43 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	rep.Network = led.Entries()
 	return output(rep, &c)
+}
+
+func (c *common) catalogs() ([]string, error) {
+	var all []string
+	for _, cat := range services.Catalogs {
+		all = append(all, cat.Code)
+	}
+	switch strings.ToLower(c.catalog) {
+	case "auto", "all":
+		return all, nil
+	case "none", "":
+		return nil, nil
+	}
+	var out []string
+	for _, code := range strings.Split(strings.ToUpper(c.catalog), ",") {
+		code = strings.TrimSpace(code)
+		if !slices.Contains(all, code) {
+			return nil, fmt.Errorf("unknown catalog %q (known: %s, all, none, auto)", code, strings.Join(all, ", "))
+		}
+		out = append(out, code)
+	}
+	return out, nil
+}
+
+func (c *common) catalogsFor(allowed, verdict []string) []string {
+	if strings.ToLower(c.catalog) != "auto" {
+		return allowed
+	}
+	var out []string
+	for _, country := range verdict {
+		for _, code := range services.CatalogsFor(country) {
+			if slices.Contains(allowed, code) && !slices.Contains(out, code) {
+				out = append(out, code)
+			}
+		}
+	}
+	return out
 }
 
 func localOpinions(geo []geodb.Record) []probe.Result {
@@ -310,11 +366,70 @@ func setHost(r *report.Report, f netx.Family, h *report.Host) {
 }
 
 func output(r *report.Report, c *common) error {
-	if c.json {
+	logPath, logErr := writeLog(r, c)
+	switch {
+	case c.json:
 		return r.WriteJSON(os.Stdout)
+	case c.debug:
+		r.WriteDetailed(os.Stdout, c.color())
+		if logPath != "" {
+			fmt.Println("log:", logPath)
+		}
+		return nil
 	}
-	r.WriteText(os.Stdout, c.color())
+	unicode := report.UnicodeTerminal()
+	r.WriteCompact(os.Stdout, report.Style{Color: c.color(), Unicode: unicode, Width: terminalWidth()}, footer(r, unicode, logPath, logErr))
 	return nil
+}
+
+func writeLog(r *report.Report, c *common) (string, error) {
+	if c.noLog {
+		return "", nil
+	}
+	var text, js bytes.Buffer
+	r.WriteDetailed(&text, false)
+	if err := r.WriteJSON(&js); err != nil {
+		return "", err
+	}
+	return runlog.Write(paths.LogDir(), time.Now(), text.Bytes(), []byte("\n--- JSON ---\n"), js.Bytes())
+}
+
+func footer(r *report.Report, unicode bool, logPath string, logErr error) []string {
+	var parts []string
+	if legend := report.Legend(r, unicode); legend != "" {
+		parts = append(parts, legend)
+	}
+	if n := len(r.Network); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d hosts contacted", n))
+	} else {
+		parts = append(parts, "no network contacts")
+	}
+	if n := r.FailedChecks(); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d checks failed", n))
+	}
+	if r.Extended() {
+		parts = append(parts, "* --extended check")
+	}
+	parts = append(parts, r.Attribution...)
+	switch {
+	case logErr != nil:
+		parts = append(parts, "log not written: "+logErr.Error())
+	case logPath != "":
+		parts = append(parts, "details: --debug or "+logPath)
+	default:
+		parts = append(parts, "details: --debug")
+	}
+	return parts
+}
+
+func terminalWidth() int {
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		return w
+	}
+	if w, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && w > 0 {
+		return w
+	}
+	return 100
 }
 
 func cmdLookup(args []string) error {

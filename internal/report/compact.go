@@ -1,0 +1,433 @@
+package report
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"slices"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/arngory/cii/internal/geodb"
+	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/refdata"
+	"github.com/arngory/cii/internal/region"
+	"github.com/arngory/cii/internal/services"
+)
+
+type Style struct {
+	Color   bool
+	Unicode bool
+	Width   int
+}
+
+type marks struct{ yes, no, partial, block, unknown, failed, none, sep string }
+
+var (
+	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · "}
+	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | "}
+)
+
+func UnicodeTerminal() bool {
+	for _, k := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		if v := os.Getenv(k); v != "" {
+			v = strings.ToUpper(v)
+			return strings.Contains(v, "UTF-8") || strings.Contains(v, "UTF8")
+		}
+	}
+	return true
+}
+
+type fam struct {
+	label string
+	host  *Host
+}
+
+func (r *Report) allResults() []probe.Result {
+	var out []probe.Result
+	for _, f := range r.families() {
+		if f.host.Region != nil {
+			out = append(out, f.host.Region.Results...)
+		}
+		out = append(out, f.host.Services...)
+	}
+	return out
+}
+
+func (r *Report) FailedChecks() int {
+	n := 0
+	for _, res := range r.allResults() {
+		if res.Status == probe.Failed {
+			n++
+		}
+	}
+	return n
+}
+
+func (r *Report) Extended() bool {
+	for _, res := range r.allResults() {
+		if res.Extended {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Report) families() []fam {
+	var out []fam
+	for _, f := range []fam{{"IPv4", r.IPv4}, {"IPv6", r.IPv6}} {
+		if f.host != nil {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
+	c := paint(st.Color)
+	m := asciiMarks
+	if st.Unicode {
+		m = unicodeMarks
+	}
+	if st.Width < 40 {
+		st.Width = 80
+	}
+	fams := r.families()
+	for _, f := range fams {
+		writeLine(w, st.Width, c.bold(f.label)+"  ", 6, hostLine(c, m, f.host))
+	}
+	for _, h := range r.Results {
+		writeLine(w, st.Width, c.bold(h.Query)+"  ", utf8.RuneCountInString(h.Query)+2, hostLine(c, m, h))
+	}
+
+	var withRegion []fam
+	for _, f := range fams {
+		if f.host.Region != nil {
+			withRegion = append(withRegion, f)
+		}
+	}
+	if len(withRegion) > 0 {
+		fmt.Fprintln(w)
+	}
+	for _, f := range withRegion {
+		label := "Region"
+		if len(withRegion) > 1 {
+			label += " " + f.label
+		}
+		writeLine(w, st.Width, c.bold(label)+"  ", utf8.RuneCountInString(label)+2, regionParts(c, f.host.Region))
+		if edges := cdnParts(c, f.host.Region); len(edges) > 0 {
+			writeLine(w, st.Width, c.dim(pad("CDN", utf8.RuneCountInString(label)))+"  ", utf8.RuneCountInString(label)+2, edges)
+		}
+	}
+
+	writeServiceGrid(w, c, m, st.Width, fams)
+
+	if len(footer) > 0 {
+		fmt.Fprintln(w)
+		parts := make([]gcell, len(footer))
+		for i, f := range footer {
+			parts[i] = gcell{text: f, style: c.dim}
+		}
+		writeLine(w, st.Width, "", 0, parts)
+	}
+}
+
+func pad(s string, n int) string {
+	return s + strings.Repeat(" ", max(0, n-utf8.RuneCountInString(s)))
+}
+
+func hostLine(c paint, m marks, h *Host) []gcell {
+	if h.Address == "" {
+		reason := "unavailable"
+		if strings.Contains(h.Error, "offline") {
+			reason = "not on local interfaces (offline)"
+		}
+		return []gcell{{text: "—  " + reason, style: c.dim}}
+	}
+	parts := []gcell{{text: h.Address, style: c.green}}
+	if place := bestPlace(h.Geo); place != "" {
+		parts = append(parts, plain(place))
+	}
+	if as := bestASN(h.Geo); as != "" {
+		parts = append(parts, plain(as))
+	}
+	return parts
+}
+
+func bestPlace(geo []geodb.Record) string {
+	var country, name, city string
+	for _, g := range geo {
+		if country == "" && g.Country != "" {
+			country, name = g.Country, g.CountryName
+		}
+		if city == "" && g.City != "" {
+			city = g.City
+		}
+	}
+	if country == "" {
+		return ""
+	}
+	if name == "" {
+		name = refdata.CountryName(country)
+	}
+	s := strings.TrimSpace(country + " " + name)
+	if city != "" {
+		s += ", " + city
+	}
+	return s
+}
+
+func bestASN(geo []geodb.Record) string {
+	for _, g := range geo {
+		if g.ASN != 0 {
+			return strings.TrimSpace(fmt.Sprintf("AS%d %s", g.ASN, g.ASOrg))
+		}
+	}
+	return ""
+}
+
+func regionParts(c paint, s *region.Summary) []gcell {
+	parts := []gcell{verdictCell(c, s.Verdict)}
+	for _, g := range []struct {
+		group probe.Group
+		title string
+	}{{region.GeoIP, "GeoIP"}, {region.Platform, "platforms"}} {
+		agree, total := 0, 0
+		for _, r := range s.Results {
+			if r.Group == g.group && r.Status == probe.OK {
+				total++
+				if slices.Contains(s.Verdict, r.Country) {
+					agree++
+				}
+			}
+		}
+		if total > 0 {
+			style := c.dim
+			if agree < total {
+				style = c.yellow
+			}
+			parts = append(parts, gcell{text: fmt.Sprintf("%s %d/%d", g.title, agree, total), style: style})
+		}
+	}
+	for _, r := range s.Attention {
+		parts = append(parts, gcell{text: serviceName(r) + " says " + r.Country, style: c.yellow})
+	}
+	for _, r := range s.Results {
+		if r.Group != region.CDN && r.Status == probe.Unknown && strings.HasPrefix(r.Reason, "service default") {
+			parts = append(parts, gcell{text: serviceName(r) + ": " + strings.TrimPrefix(r.Reason, "service "), style: c.dim})
+		}
+	}
+	return parts
+}
+
+func cdnParts(c paint, s *region.Summary) []gcell {
+	var parts []gcell
+	for _, r := range s.Results {
+		if r.Group != region.CDN || r.IATA == "" {
+			continue
+		}
+		text := serviceName(r) + " " + r.IATA
+		if r.Country != "" {
+			text += " " + r.Country
+		}
+		parts = append(parts, gcell{text: text, style: c.dim})
+	}
+	return parts
+}
+
+func serviceName(r probe.Result) string {
+	if r.Extended {
+		return r.Service + "*"
+	}
+	return r.Service
+}
+
+func writeLine(w io.Writer, width int, label string, labelWidth int, parts []gcell) {
+	sep := " · "
+	var b strings.Builder
+	b.WriteString(label)
+	col := labelWidth
+	for i, p := range parts {
+		n := utf8.RuneCountInString(p.text)
+		if i > 0 {
+			if col+len(sep)+n > width {
+				b.WriteString("\n" + strings.Repeat(" ", labelWidth))
+				col = labelWidth
+			} else {
+				b.WriteString(sep)
+				col += len(sep)
+			}
+		}
+		text := p.text
+		if p.style != nil {
+			text = p.style(text)
+		}
+		b.WriteString(text)
+		col += n
+	}
+	b.WriteByte('\n')
+	io.WriteString(w, b.String())
+}
+
+var groupTitles = map[probe.Group]string{
+	services.Streaming: "Streaming",
+	services.AI:        "AI",
+	services.Web:       "Web",
+}
+
+func groupTitle(g probe.Group) string {
+	if t, ok := groupTitles[g]; ok {
+		return t
+	}
+	if t := services.Title(g); t != "" {
+		return t
+	}
+	s := string(g)
+	if s == "" {
+		return ""
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam) {
+	var cols []column
+	var verdicts [][]string
+	for _, f := range fams {
+		if len(f.host.Services) > 0 {
+			cols = append(cols, newColumn(f.label, f.host.Services))
+			var v []string
+			if f.host.Region != nil {
+				v = f.host.Region.Verdict
+			}
+			verdicts = append(verdicts, v)
+		}
+	}
+	if len(cols) == 0 {
+		return
+	}
+	var groups []probe.Group
+	labelWidth := 0
+	for _, col := range cols {
+		for _, r := range col.results {
+			if !slices.Contains(groups, r.Group) {
+				groups = append(groups, r.Group)
+				labelWidth = max(labelWidth, utf8.RuneCountInString(groupTitle(r.Group)))
+			}
+		}
+	}
+	fmt.Fprintln(w)
+	if len(cols) > 1 {
+		labels := make([]string, len(cols))
+		for i, col := range cols {
+			labels[i] = col.label
+		}
+		fmt.Fprintln(w, c.dim(pad("", labelWidth)+"  marks: "+strings.Join(labels, " ")))
+	}
+	sections := make([][]item, len(groups))
+	cell := 0
+	for gi, g := range groups {
+		var items []item
+		for _, first := range rowsOf(cols, g) {
+			var it item
+			country := ""
+			for i, col := range cols {
+				r, ok := col.byKey[key(first)]
+				sym, st := mark(c, m, r, ok)
+				it.plain += sym
+				it.styled += st(sym)
+				if ok && r.Country != "" && !slices.Contains(verdicts[i], r.Country) {
+					country = r.Country
+				}
+			}
+			rest := " " + serviceName(first)
+			if country != "" {
+				rest += " " + country
+			}
+			it.plain += rest
+			it.styled += rest
+			cell = max(cell, utf8.RuneCountInString(it.plain)+3)
+			items = append(items, it)
+		}
+		sections[gi] = items
+	}
+	for gi, g := range groups {
+		writeColumns(w, c.bold(pad(groupTitle(g), labelWidth))+"  ", labelWidth+2, width, cell, sections[gi])
+	}
+}
+
+func Legend(r *Report, unicode bool) string {
+	m := asciiMarks
+	if unicode {
+		m = unicodeMarks
+	}
+	used := map[probe.Status]bool{}
+	for _, f := range r.families() {
+		for _, res := range f.host.Services {
+			used[res.Status] = true
+		}
+	}
+	var parts []string
+	for _, e := range []struct {
+		st   probe.Status
+		sym  string
+		text string
+	}{{probe.No, m.no, "no"}, {probe.Partial, m.partial, "partial"}, {probe.IPBlock, m.block, "blocked"}, {probe.Unknown, m.unknown, "unknown"}, {probe.Failed, m.failed, "error"}} {
+		if used[e.st] {
+			parts = append(parts, e.sym+" "+e.text)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return m.yes + " yes, " + strings.Join(parts, ", ")
+}
+
+type item struct{ plain, styled string }
+
+func mark(c paint, m marks, r probe.Result, ok bool) (string, func(string) string) {
+	if !ok {
+		return m.none, c.dim
+	}
+	switch r.Status {
+	case probe.Yes, probe.OK:
+		return m.yes, c.green
+	case probe.No:
+		return m.no, c.red
+	case probe.Partial:
+		return m.partial, c.yellow
+	case probe.IPBlock:
+		return m.block, c.red
+	case probe.Failed:
+		return m.failed, c.dim
+	}
+	return m.unknown, c.dim
+}
+
+func writeColumns(w io.Writer, label string, labelWidth, width, cell int, items []item) {
+	if len(items) == 0 {
+		return
+	}
+	perRow := max(1, (width-labelWidth)/cell)
+	rows := (len(items) + perRow - 1) / perRow
+	var b strings.Builder
+	for row := 0; row < rows; row++ {
+		if row == 0 {
+			b.WriteString(label)
+		} else {
+			b.WriteString(strings.Repeat(" ", labelWidth))
+		}
+		for col := 0; col < perRow; col++ {
+			i := col*rows + row
+			if i >= len(items) {
+				break
+			}
+			it := items[i]
+			b.WriteString(it.styled)
+			if col < perRow-1 && (col+1)*rows+row < len(items) {
+				b.WriteString(strings.Repeat(" ", cell-utf8.RuneCountInString(it.plain)))
+			}
+		}
+		b.WriteByte('\n')
+	}
+	io.WriteString(w, b.String())
+}
