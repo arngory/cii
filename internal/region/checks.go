@@ -2,7 +2,6 @@ package region
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -10,54 +9,83 @@ import (
 
 	"github.com/arngory/cii/internal/config"
 	"github.com/arngory/cii/internal/netx"
+	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
 )
 
 var rdapHosts = []string{"rdap.arin.net", "rdap.apnic.net", "rdap.lacnic.net", "rdap.registro.br", "rdap.afrinic.net"}
 
-var Checks = []Check{
-	{Service: "RDAP (RIR)", Group: GeoIP, URL: "https://rdap.db.ripe.net/ip/{ip}", ExtraHosts: rdapHosts, Custom: rdap},
-	{Service: "ipinfo.io", Group: GeoIP, URL: "https://ipinfo.io/{ip}/json", Extract: jsonPath("country"),
-		Authorize: func(req *http.Request, k config.Keys) {
-			if k.IPinfoToken != "" {
-				req.Header.Set("Authorization", "Bearer "+k.IPinfoToken)
-			}
-		}},
-	{Service: "ipapi.co", Group: GeoIP, URL: "https://ipapi.co/{ip}/json/", Extract: jsonPath("country_code")},
-	{Service: "ifconfig.co", Group: GeoIP, URL: "https://ifconfig.co/country-iso?ip={ip}", Extract: wholeBody},
-	{Service: "ip2location.io", Group: GeoIP, URL: "https://api.ip2location.io/?ip={ip}", Extract: jsonPath("country_code"),
-		Authorize: func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IP2LocationKey) }},
-	{Service: "country.is", Group: GeoIP, URL: "https://api.country.is/{ip}", Extract: jsonPath("country")},
-	{Service: "geojs.io", Group: GeoIP, URL: "https://get.geojs.io/v1/ip/country.json?ip={ip}", Extract: jsonPath("[0].country")},
-	{Service: "ipbase.com", Group: GeoIP, URL: "https://api.ipbase.com/v2/info?ip={ip}", Extract: jsonPath("data.location.country.alpha2")},
-	{Service: "ipquery.io", Group: GeoIP, URL: "https://api.ipquery.io/{ip}", Extract: jsonPath("location.country_code")},
-	{Service: "ipwho.is", Group: GeoIP, URL: "https://ipwho.is/{ip}", Extract: jsonPath("country_code")},
-	{Service: "ip-api.com", Group: GeoIP, Transport: netx.IPv4, URL: "http://ip-api.com/json/{ip}?fields=status,countryCode", Extract: jsonPath("countryCode")},
-	{Service: "ipregistry.co", Group: GeoIP, URL: "https://api.ipregistry.co/{ip}", Extract: jsonPath("location.country.code"),
-		KeyOK:     func(k config.Keys) bool { return k.IPRegistryKey != "" },
-		Authorize: func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IPRegistryKey) }},
-	{Service: "geoapify.com", Group: GeoIP, URL: "https://api.geoapify.com/v1/ipinfo?ip={ip}", Extract: jsonPath("country.iso_code"),
-		KeyOK:     func(k config.Keys) bool { return k.GeoapifyKey != "" },
-		Authorize: func(req *http.Request, k config.Keys) { setQuery(req, "apiKey", k.GeoapifyKey) }},
-	{Service: "MaxMind GeoLite", Group: GeoIP, URL: "https://geolite.info/geoip/v2.1/country/{ip}", Extract: jsonPath("country.iso_code"),
-		KeyOK: func(k config.Keys) bool { return k.MaxMindAccountID != "" && k.MaxMindLicenseKey != "" },
-		Authorize: func(req *http.Request, k config.Keys) {
-			req.SetBasicAuth(k.MaxMindAccountID, k.MaxMindLicenseKey)
-		}},
+func country(rawURL string, extract func(*probe.Response) string) ([]probe.Request, func([]*probe.Response) []probe.Result) {
+	return probe.Get(rawURL), probe.CountryFrom(extract, 0)
+}
 
-	{Service: "Cloudflare", Group: Platform, URL: "https://www.cloudflare.com/cdn-cgi/trace", Custom: cloudflareTrace},
-	{Service: "Google", Group: Platform, URL: "https://accounts.google.com/v3/signin/identifier?flowName=GlifSetupAndroid", Extract: bodyRegex(`name="region" value="([^"]*)"`)},
-	{Service: "YouTube", Group: Platform, URL: "https://www.youtube.com/sw.js_data", Extract: jsonPathAfter(")]}'", "[0][2][0][0][1]")},
-	{Service: "Reddit", Group: Platform, URL: "https://www.reddit.com/api/v1/not-found", BlockStatus: http.StatusForbidden, Extract: bodyRegex(`country code: ([A-Z]{2})`)},
-	{Service: "TikTok", Group: Platform, URL: "https://www.tiktok.com/api/v1/web-cookie-privacy/config?appId=1988", Extract: jsonPath("body.appProps.region")},
-	{Service: "Apple", Group: Platform, URL: "https://gspe1-ssl.ls.apple.com/pep/gcc", Extract: wholeBody},
-	{Service: "Steam", Group: Platform, Method: http.MethodHead, NoRedirect: true, URL: "https://store.steampowered.com/", Extract: headerRegex("Set-Cookie", `steamCountry=([A-Z]{2})`)},
-	{Service: "Microsoft", Group: Platform, URL: "https://login.live.com/", Extract: bodyRegex(`"sRequestCountry":"([^"]*)"`)},
-	{Service: "Ookla", Group: Platform, URL: "https://www.speedtest.net/api/js/config-sdk", Extract: jsonPath("location.countryCode")},
-	{Service: "JetBrains", Group: Platform, URL: "https://data.services.jetbrains.com/geo", Extract: jsonPath("code")},
-	{Service: "PlayStation", Group: Platform, Method: http.MethodHead, NoRedirect: true, URL: "https://www.playstation.com/", Extract: headerRegex("Set-Cookie", `(?i)^country=([A-Z]{2})`)},
+func geoip(service, rawURL string, extract func(*probe.Response) string) probe.Check {
+	req, eval := country(rawURL, extract)
+	return probe.Check{Service: service, Group: GeoIP, Requests: req, Eval: eval}
+}
 
-	{Service: "YouTube", Group: CDN, URL: "https://redirector.googlevideo.com/report_mapping?di=no", Custom: youtubeCDN},
+func platform(service, rawURL string, extract func(*probe.Response) string) probe.Check {
+	req, eval := country(rawURL, extract)
+	return probe.Check{Service: service, Group: Platform, Requests: req, Eval: eval}
+}
+
+func head(rawURL string) []probe.Request {
+	return []probe.Request{{Method: http.MethodHead, URL: rawURL, NoRedirect: true}}
+}
+
+var Checks = []probe.Check{
+	{Service: "RDAP (RIR)", Group: GeoIP, Requests: probe.Get("https://rdap.db.ripe.net/ip/{ip}"), ExtraHosts: rdapHosts, Eval: rdap},
+	withAuth(geoip("ipinfo.io", "https://ipinfo.io/{ip}/json", probe.JSONPath("country")), nil, func(req *http.Request, k config.Keys) {
+		if k.IPinfoToken != "" {
+			req.Header.Set("Authorization", "Bearer "+k.IPinfoToken)
+		}
+	}),
+	geoip("ipapi.co", "https://ipapi.co/{ip}/json/", probe.JSONPath("country_code")),
+	geoip("ifconfig.co", "https://ifconfig.co/country-iso?ip={ip}", probe.WholeBody),
+	withAuth(geoip("ip2location.io", "https://api.ip2location.io/?ip={ip}", probe.JSONPath("country_code")), nil,
+		func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IP2LocationKey) }),
+	geoip("country.is", "https://api.country.is/{ip}", probe.JSONPath("country")),
+	geoip("geojs.io", "https://get.geojs.io/v1/ip/country.json?ip={ip}", probe.JSONPath("[0].country")),
+	geoip("ipbase.com", "https://api.ipbase.com/v2/info?ip={ip}", probe.JSONPath("data.location.country.alpha2")),
+	geoip("ipquery.io", "https://api.ipquery.io/{ip}", probe.JSONPath("location.country_code")),
+	geoip("ipwho.is", "https://ipwho.is/{ip}", probe.JSONPath("country_code")),
+	ipv4Only(geoip("ip-api.com", "http://ip-api.com/json/{ip}?fields=status,countryCode", probe.JSONPath("countryCode"))),
+	withAuth(geoip("ipregistry.co", "https://api.ipregistry.co/{ip}", probe.JSONPath("location.country.code")),
+		func(k config.Keys) bool { return k.IPRegistryKey != "" },
+		func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IPRegistryKey) }),
+	withAuth(geoip("geoapify.com", "https://api.geoapify.com/v1/ipinfo?ip={ip}", probe.JSONPath("country.iso_code")),
+		func(k config.Keys) bool { return k.GeoapifyKey != "" },
+		func(req *http.Request, k config.Keys) { setQuery(req, "apiKey", k.GeoapifyKey) }),
+	withAuth(geoip("MaxMind GeoLite", "https://geolite.info/geoip/v2.1/country/{ip}", probe.JSONPath("country.iso_code")),
+		func(k config.Keys) bool { return k.MaxMindAccountID != "" && k.MaxMindLicenseKey != "" },
+		func(req *http.Request, k config.Keys) { req.SetBasicAuth(k.MaxMindAccountID, k.MaxMindLicenseKey) }),
+
+	{Service: "Cloudflare", Group: Platform, Requests: probe.Get("https://www.cloudflare.com/cdn-cgi/trace"), Eval: cloudflareTrace},
+	platform("Google", "https://accounts.google.com/v3/signin/identifier?flowName=GlifSetupAndroid", probe.BodyRegex(`name="region" value="([^"]*)"`)),
+	platform("YouTube", "https://www.youtube.com/sw.js_data", probe.JSONPathAfter(")]}'", "[0][2][0][0][1]")),
+	{Service: "Reddit", Group: Platform, Requests: probe.Get("https://www.reddit.com/api/v1/not-found"),
+		Eval: probe.CountryFrom(probe.BodyRegex(`country code: ([A-Z]{2})`), http.StatusForbidden)},
+	platform("TikTok", "https://www.tiktok.com/api/v1/web-cookie-privacy/config?appId=1988", probe.JSONPath("body.appProps.region")),
+	platform("Apple", "https://gspe1-ssl.ls.apple.com/pep/gcc", probe.WholeBody),
+	{Service: "Steam", Group: Platform, Requests: head("https://store.steampowered.com/"),
+		Eval: probe.CountryFrom(probe.HeaderRegex("Set-Cookie", `steamCountry=([A-Z]{2})`), 0)},
+	platform("Microsoft", "https://login.live.com/", probe.BodyRegex(`"sRequestCountry":"([^"]*)"`)),
+	platform("Ookla", "https://www.speedtest.net/api/js/config-sdk", probe.JSONPath("location.countryCode")),
+	platform("JetBrains", "https://data.services.jetbrains.com/geo", probe.JSONPath("code")),
+	{Service: "PlayStation", Group: Platform, Requests: head("https://www.playstation.com/"),
+		Eval: probe.CountryFrom(probe.HeaderRegex("Set-Cookie", `(?i)^country=([A-Z]{2})`), 0)},
+
+	{Service: "YouTube", Group: CDN, Requests: probe.Get("https://redirector.googlevideo.com/report_mapping?di=no"), Eval: youtubeCDN},
+}
+
+func withAuth(c probe.Check, keyOK func(config.Keys) bool, authorize func(*http.Request, config.Keys)) probe.Check {
+	c.KeyOK, c.Authorize = keyOK, authorize
+	return c
+}
+
+func ipv4Only(c probe.Check) probe.Check {
+	c.Transport = netx.IPv4
+	return c
 }
 
 func setQuery(req *http.Request, name, value string) {
@@ -69,7 +97,8 @@ func setQuery(req *http.Request, name, value string) {
 	req.URL.RawQuery = q.Encode()
 }
 
-func rdap(r *response) []Result {
+func rdap(rs []*probe.Response) []probe.Result {
+	r := rs[0]
 	var doc struct {
 		Country  string `json:"country"`
 		Entities []struct {
@@ -89,7 +118,7 @@ func rdap(r *response) []Result {
 			}
 		}
 	}
-	return []Result{countryResult(GeoIP, "RDAP (RIR)", cc, r.Status)}
+	return []probe.Result{probe.CountryResult(cc, r.Status)}
 }
 
 func vcardCountry(raw json.RawMessage) string {
@@ -122,18 +151,22 @@ func vcardCountry(raw json.RawMessage) string {
 
 var traceLine = regexp.MustCompile(`(?m)^(loc|colo)=([A-Za-z]+)\s*$`)
 
-func cloudflareTrace(r *response) []Result {
+func cloudflareTrace(rs []*probe.Response) []probe.Result {
 	fields := map[string]string{}
-	for _, m := range traceLine.FindAllStringSubmatch(string(r.Body), -1) {
+	for _, m := range traceLine.FindAllStringSubmatch(string(rs[0].Body), -1) {
 		fields[m[1]] = m[2]
 	}
-	edge := Result{Group: CDN, Service: "Cloudflare", IATA: strings.ToUpper(fields["colo"])}
-	if cc := refdata.IATACountry(edge.IATA); cc != "" {
-		edge.Status, edge.Country = OK, cc
-	} else {
-		edge.Status = Unknown
+	loc := probe.CountryResult(fields["loc"], rs[0].Status)
+	loc.Group = Platform
+	return []probe.Result{loc, edge("Cloudflare", strings.ToUpper(fields["colo"]), "")}
+}
+
+func edge(service, iata, node string) probe.Result {
+	r := probe.Result{Group: CDN, Service: service, IATA: iata, Node: node, Status: probe.Unknown}
+	if cc := refdata.IATACountry(iata); cc != "" {
+		r.Status, r.Country = probe.OK, cc
 	}
-	return []Result{countryResult(Platform, "Cloudflare", fields["loc"], r.Status), edge}
+	return r
 }
 
 var (
@@ -145,24 +178,22 @@ var (
 	}
 )
 
-func youtubeCDN(r *response) []Result {
-	res := Result{Group: CDN, Service: "YouTube", Status: Unknown}
+func youtubeCDN(rs []*probe.Response) []probe.Result {
+	r := rs[0]
 	m := youtubeNode.FindSubmatch(r.Body)
 	if m == nil {
-		if r.Status >= 400 {
-			res.Status, res.Reason = Failed, fmt.Sprintf("HTTP %d", r.Status)
+		if f, failed := probe.HTTPFailure(r.Status); failed {
+			return []probe.Result{f}
 		}
-		return []Result{res}
+		return []probe.Result{{Status: probe.Unknown}}
 	}
-	res.Node = string(m[1])
+	node := string(m[1])
+	iata := ""
 	for _, re := range nodeIATA {
-		if mm := re.FindStringSubmatch(res.Node); mm != nil {
-			res.IATA = strings.ToUpper(mm[1])
+		if mm := re.FindStringSubmatch(node); mm != nil {
+			iata = strings.ToUpper(mm[1])
 			break
 		}
 	}
-	if cc := refdata.IATACountry(res.IATA); cc != "" {
-		res.Status, res.Country = OK, cc
-	}
-	return []Result{res}
+	return []probe.Result{edge("YouTube", iata, node)}
 }

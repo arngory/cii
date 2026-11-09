@@ -3,19 +3,21 @@ package region
 import (
 	"slices"
 	"sort"
+
+	"github.com/arngory/cii/internal/probe"
 )
 
 type Summary struct {
-	Verdict   []string `json:"verdict"`
-	Results   []Result `json:"results"`
-	Attention []Result `json:"attention,omitempty"`
+	Verdict   []string       `json:"verdict"`
+	Results   []probe.Result `json:"results"`
+	Attention []probe.Result `json:"attention,omitempty"`
 }
 
-func Summarize(results []Result) Summary {
+func Summarize(results []probe.Result) Summary {
 	s := Summary{Verdict: []string{}, Results: results}
-	byGroup := map[Group][]string{}
+	byGroup := map[probe.Group][]string{}
 	for _, r := range results {
-		if r.Status == OK && (r.Group == GeoIP || r.Group == Platform) {
+		if r.Status == probe.OK && (r.Group == GeoIP || r.Group == Platform) {
 			byGroup[r.Group] = append(byGroup[r.Group], r.Country)
 		}
 	}
@@ -43,7 +45,7 @@ func Summarize(results []Result) Summary {
 	}
 	sort.Strings(s.Verdict)
 	for _, r := range results {
-		if r.Status == OK && r.Group != CDN && !slices.Contains(s.Verdict, r.Country) {
+		if r.Status == probe.OK && r.Group != CDN && !slices.Contains(s.Verdict, r.Country) {
 			s.Attention = append(s.Attention, r)
 		}
 	}

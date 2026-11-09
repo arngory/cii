@@ -1,63 +1,29 @@
 package region
 
 import (
-	"context"
-	"net/http"
-	"net/http/httptest"
-	"net/netip"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/arngory/cii/internal/config"
-	"github.com/arngory/cii/internal/ledger"
-	"github.com/arngory/cii/internal/netx"
+	"github.com/arngory/cii/internal/probe"
 )
 
-func TestJSONPath(t *testing.T) {
-	r := &response{Body: []byte(`)]}'
-[["x",null,[[["en","DE"]]]]]`)}
-	if got := jsonPathAfter(")]}'", "[0][2][0][0][1]")(r); got != "DE" {
-		t.Errorf("prefixed path = %q", got)
-	}
-	r = &response{Body: []byte(`{"data":{"location":{"country":{"alpha2":"NL"}}},"list":[{"c":"FR"}]}`)}
-	for path, want := range map[string]string{"data.location.country.alpha2": "NL", "list[0].c": "FR", "list[1].c": "", "data.x.y": "", "list[": ""} {
-		if got := jsonPath(path)(r); got != want {
-			t.Errorf("jsonPath(%q) = %q, want %q", path, got, want)
-		}
-	}
-	if got := jsonPath("[0].country")(&response{Body: []byte(`[{"country":"US"}]`)}); got != "US" {
-		t.Errorf("leading index = %q", got)
-	}
-}
-
-func TestCountryResult(t *testing.T) {
-	cases := []struct {
-		raw    string
-		status int
-		want   Status
-	}{
-		{"us\n", 200, OK}, {"ZZ", 200, Unknown}, {"", 429, Failed}, {"", 500, Failed}, {"DE", 404, OK}, {"<html>", 200, Unknown},
-	}
-	for _, c := range cases {
-		if got := countryResult(GeoIP, "x", c.raw, c.status); got.Status != c.want {
-			t.Errorf("countryResult(%q, %d) = %+v, want %s", c.raw, c.status, got, c.want)
-		}
-	}
+func resp(body string) []*probe.Response {
+	return []*probe.Response{{Status: 200, Body: []byte(body)}}
 }
 
 func TestRDAP(t *testing.T) {
-	top := rdap(&response{Status: 200, Body: []byte(`{"country":"ru"}`)})
-	arin := rdap(&response{Status: 200, Body: []byte(`{"country":null,"entities":[
+	top := rdap(resp(`{"country":"ru"}`))
+	arin := rdap(resp(`{"country":null,"entities":[
 		{"roles":["abuse"],"vcardArray":["vcard",[["adr",{"label":"x\nCanada"},"text",[]]]]},
-		{"roles":["registrant"],"vcardArray":["vcard",[["fn",{},"text","Google"],["adr",{"label":"1600 Amphitheatre\nCA\nUnited States"},"text",[]]]]}]}`)})
+		{"roles":["registrant"],"vcardArray":["vcard",[["fn",{},"text","Google"],["adr",{"label":"1600 Amphitheatre\nCA\nUnited States"},"text",[]]]]}]}`))
 	if top[0].Country != "RU" || arin[0].Country != "US" {
 		t.Fatalf("rdap = %+v / %+v", top, arin)
 	}
 }
 
 func TestCloudflareTraceAndYouTubeCDN(t *testing.T) {
-	res := cloudflareTrace(&response{Status: 200, Body: []byte("fl=1\nip=1.2.3.4\ncolo=FRA\nloc=NL\n")})
+	res := cloudflareTrace(resp("fl=1\nip=1.2.3.4\ncolo=FRA\nloc=NL\n"))
 	if len(res) != 2 || res[0].Group != Platform || res[0].Country != "NL" || res[1].Group != CDN || res[1].Country != "DE" || res[1].IATA != "FRA" {
 		t.Fatalf("cloudflareTrace = %+v", res)
 	}
@@ -68,32 +34,35 @@ func TestCloudflareTraceAndYouTubeCDN(t *testing.T) {
 		"1.2.3.4 => 12345 (x) [D]":           "",
 		"1.2.3.4 => xxamsa-rt1 (::/0) [ggc]": "NL",
 	} {
-		r := youtubeCDN(&response{Status: 200, Body: []byte(body)})[0]
-		if r.Country != want {
+		if r := youtubeCDN(resp(body))[0]; r.Country != want {
 			t.Errorf("youtubeCDN(%q) = %+v, want %q", body, r, want)
 		}
 	}
 }
 
+func TestNetflixFast(t *testing.T) {
+	res := netflixFast(resp(`{"client":{"location":{"country":"DE"}},"targets":[{"url":"https://ipv4-c001-fra001-ix.1.oca.nflxvideo.net/speedtest?x","location":{"country":"DE"}}]}`))
+	if len(res) != 2 || res[0].Country != "DE" || res[1].Group != CDN || res[1].IATA != "FRA" || res[1].Node != "c001-fra001-ix" || res[1].Country != "DE" {
+		t.Fatalf("netflixFast = %+v", res)
+	}
+}
+
 func TestSummarizeWeightsGroupsEqually(t *testing.T) {
-	var results []Result
+	var results []probe.Result
 	for i := 0; i < 6; i++ {
-		results = append(results, Result{Group: GeoIP, Service: "g", Status: OK, Country: "US"})
+		results = append(results, probe.Result{Group: GeoIP, Service: "g", Status: probe.OK, Country: "US"})
 	}
 	results = append(results,
-		Result{Group: GeoIP, Service: "g7", Status: OK, Country: "DE"},
-		Result{Group: Platform, Service: "p1", Status: OK, Country: "DE"},
-		Result{Group: CDN, Service: "c", Status: OK, Country: "FR"},
-		Result{Group: Platform, Service: "p2", Status: Failed},
+		probe.Result{Group: GeoIP, Service: "g7", Status: probe.OK, Country: "DE"},
+		probe.Result{Group: Platform, Service: "p1", Status: probe.OK, Country: "DE"},
+		probe.Result{Group: CDN, Service: "c", Status: probe.OK, Country: "FR"},
+		probe.Result{Group: Platform, Service: "p2", Status: probe.Failed},
 	)
 	s := Summarize(results)
-	if len(s.Verdict) != 1 || s.Verdict[0] != "DE" {
-		t.Fatalf("verdict = %v", s.Verdict)
+	if len(s.Verdict) != 1 || s.Verdict[0] != "DE" || len(s.Attention) != 6 {
+		t.Fatalf("summary = %+v", s)
 	}
-	if len(s.Attention) != 6 {
-		t.Fatalf("attention = %+v", s.Attention)
-	}
-	tie := Summarize([]Result{{Group: GeoIP, Status: OK, Country: "US"}, {Group: GeoIP, Status: OK, Country: "DE"}})
+	tie := Summarize([]probe.Result{{Group: GeoIP, Status: probe.OK, Country: "US"}, {Group: GeoIP, Status: probe.OK, Country: "DE"}})
 	if strings.Join(tie.Verdict, ",") != "DE,US" {
 		t.Fatalf("tie = %v", tie.Verdict)
 	}
@@ -102,53 +71,8 @@ func TestSummarizeWeightsGroupsEqually(t *testing.T) {
 	}
 }
 
-func TestRunUsesPolicyKeysAndTransport(t *testing.T) {
-	var gotAuth, gotQuery string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/geo/203.0.113.9":
-			gotAuth, gotQuery = r.Header.Get("Authorization"), r.URL.Query().Get("key")
-			w.Write([]byte(`{"country":"SE"}`))
-		case "/blocked":
-			w.WriteHeader(http.StatusForbidden)
-		default:
-			http.Redirect(w, r, "http://elsewhere.invalid/", http.StatusFound)
-		}
-	}))
-	defer srv.Close()
-	checks := []Check{
-		{Service: "geo", Group: GeoIP, URL: srv.URL + "/geo/{ip}", Extract: jsonPath("country"),
-			Authorize: func(req *http.Request, k config.Keys) {
-				req.Header.Set("Authorization", "Bearer "+k.IPinfoToken)
-				setQuery(req, "key", k.IP2LocationKey)
-			}},
-		{Service: "blk", Group: Platform, URL: srv.URL + "/blocked", BlockStatus: http.StatusForbidden, Extract: wholeBody},
-		{Service: "redir", Group: Platform, URL: srv.URL + "/redir", Extract: wholeBody},
-		{Service: "v6only", Group: GeoIP, Transport: netx.IPv6, URL: srv.URL + "/x", Extract: wholeBody},
-	}
-	led := ledger.New()
-	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(checks)...), led)
-	env := Env{Nets: map[netx.Family]*netx.Net{netx.IPv4: n}, Keys: config.Keys{IPinfoToken: "T", IP2LocationKey: "K"}}
-	res := Run(context.Background(), env, netx.IPv4, netip.MustParseAddr("203.0.113.9"), checks)
-	if len(res) != 4 {
-		t.Fatalf("results = %+v", res)
-	}
-	if res[0].Country != "SE" || gotAuth != "Bearer T" || gotQuery != "K" {
-		t.Errorf("geo = %+v auth=%q key=%q", res[0], gotAuth, gotQuery)
-	}
-	if res[1].Status != IPBlock {
-		t.Errorf("blocked = %+v", res[1])
-	}
-	if res[2].Status != Failed || !strings.Contains(res[2].Reason, "blocked by policy") {
-		t.Errorf("redirect = %+v", res[2])
-	}
-	if res[3].Status != Failed || !strings.Contains(res[3].Reason, "ipv6") {
-		t.Errorf("transport = %+v", res[3])
-	}
-}
-
-func TestSelectRespectsKeys(t *testing.T) {
-	has := func(cs []Check, name string) bool {
+func TestSelect(t *testing.T) {
+	has := func(cs []probe.Check, name string) bool {
 		for _, c := range cs {
 			if c.Service == name {
 				return true
@@ -156,17 +80,10 @@ func TestSelectRespectsKeys(t *testing.T) {
 		}
 		return false
 	}
-	if has(Select(config.Keys{}), "ipregistry.co") || !has(Select(config.Keys{IPRegistryKey: "k"}), "ipregistry.co") {
+	if has(Select(config.Keys{}, false), "ipregistry.co") || !has(Select(config.Keys{IPRegistryKey: "k"}, false), "ipregistry.co") {
 		t.Error("ipregistry selection ignores key")
 	}
-	if !has(Select(config.Keys{}), "ipinfo.io") {
-		t.Error("keyless ipinfo.io missing")
-	}
-}
-
-func TestTruncateKeepsUTF8(t *testing.T) {
-	got := truncate("абвгд", 5)
-	if !utf8.ValidString(got) || got != "аб…" {
-		t.Fatalf("truncate = %q", got)
+	if has(Select(config.Keys{}, false), "Twitch") || !has(Select(config.Keys{}, true), "Twitch") {
+		t.Error("tier B selection ignores --extended")
 	}
 }

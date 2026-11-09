@@ -15,6 +15,7 @@ import (
 	"github.com/arngory/cii/internal/ipdetect"
 	"github.com/arngory/cii/internal/ledger"
 	"github.com/arngory/cii/internal/netx"
+	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/version"
 )
@@ -48,6 +49,7 @@ type Host struct {
 	Error     string          `json:"error,omitempty"`
 	Geo       []geodb.Record  `json:"geo,omitempty"`
 	Region    *region.Summary `json:"region,omitempty"`
+	Services  []probe.Result  `json:"services,omitempty"`
 }
 
 type DataInfo struct {
@@ -152,7 +154,7 @@ func (r *Report) WriteText(w io.Writer, color bool) {
 	for _, h := range r.Results {
 		writeHost(w, c, "IP", h)
 	}
-	writeRegion(w, c, []*Host{r.IPv4, r.IPv6}, []string{"IPv4", "IPv6"})
+	writeProbes(w, c, []labeled{{"IPv4", r.IPv4}, {"IPv6", r.IPv6}})
 
 	if len(r.Data) > 0 {
 		fmt.Fprintln(w, c.bold("Local data"))

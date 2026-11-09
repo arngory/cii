@@ -58,6 +58,24 @@
 | Cloudflare | тот же `cdn-cgi/trace` | `colo=` |
 | YouTube | `redirector.googlevideo.com/report_mapping?di=no` | код из имени узла (`yyz10s25` → YYZ) |
 
+## Уровень B — только с `--extended`
+
+Эти проверки обращаются к внутренним API сервисов с идентификаторами, которые сами сервисы встраивают в свои официальные веб- и мобильные клиенты. Все такие идентификаторы собраны в одном файле — `internal/clientids/clientids.go`. По умолчанию проверки выключены, их хосты не попадают в политику и в `--plan`. В отчёте они помечены `*`, а в JSON — полем `"extended": true`.
+
+| Сервис | Запрос | Что используется |
+|---|---|---|
+| Twitch | `POST gql.twitch.tv/gql` | публичный `Client-Id` веб-клиента Twitch, persisted query |
+| ChatGPT | `POST ab.chatgpt.com/v1/initialize` | клиентский ключ Statsig из веб-клиента |
+| Claude | `GET claude.ai/api/bootstrap` | User-Agent и заголовок платформы Android-приложения |
+| Netflix | `GET api.fast.com/netflix/speedtest/v2` | токен из страницы fast.com; из того же ответа — CDN-узел Netflix |
+| Spotify | `GET spclient.wg.spotify.com/signup/public/v1/account` | ключ и `X-Client-Id` страницы регистрации |
+| Disney+ | `POST disney.api.edge.bamgrid.com/graph/v1/device/graphql` | публичный API-ключ устройства Android |
+
+Риски, которые вы принимаете, включая флаг:
+- такие запросы, скорее всего, противоречат условиям использования этих сервисов, даже при одном запросе за запуск;
+- сервисы меняют идентификаторы и внутренние API без предупреждения — тогда проверка вернёт `unknown` или `error`, а исправлять нужно `clientids.go`;
+- проверки уровня B написаны по рабочей реализации ipregion и покрыты тестами на записанных ответах, но **в среде разработки вживую не запускались**: автоматическая проверка безопасности этой среды запрещает такие запросы.
+
 ## Исключено
 
 | Что | Почему |
@@ -65,4 +83,3 @@
 | демо-токен MaxMind со страницы демо, `ipinfo.io/widget/demo`, `demo.ip-api.com` с поддельным `Origin` | демо-эндпоинты сайтов, а не API (уровень C) |
 | встроенные ключи ipregistry, geoapify, air-port-codes | чужие ключи (уровень C); ipregistry и geoapify доступны с вашими ключами, справочник аэропортов встроен |
 | `speed.cloudflare.com/meta` | без поддельного `Referer` отвечает 403; та же информация есть в `cdn-cgi/trace` |
-| Twitch (GQL), ChatGPT (Statsig), Claude (bootstrap с UA мобильного приложения), Netflix (fast.com), Spotify (signup), Disney+ (GraphQL), Netflix CDN | уровень B: внутренние API с ключами и client ID, встроенными в чужие клиенты. Не реализовано, решение — за владельцем проекта (см. [NETWORK_POLICY.md](NETWORK_POLICY.md)) |

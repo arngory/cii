@@ -1,20 +1,21 @@
-package region
+package probe
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 )
 
-func jsonPath(path string) func(*response) string {
-	return jsonPathAfter("", path)
+func JSONPath(path string) func(*Response) string {
+	return JSONPathAfter("", path)
 }
 
-func jsonPathAfter(prefix, path string) func(*response) string {
+func JSONPathAfter(prefix, path string) func(*Response) string {
 	steps := parsePath(path)
-	return func(r *response) string {
+	return func(r *Response) string {
 		var v any
 		if json.Unmarshal(bytes.TrimPrefix(bytes.TrimSpace(r.Body), []byte(prefix)), &v) != nil {
 			return ""
@@ -69,9 +70,9 @@ func walk(v any, steps []string) any {
 	return v
 }
 
-func bodyRegex(expr string) func(*response) string {
+func BodyRegex(expr string) func(*Response) string {
 	re := regexp.MustCompile(expr)
-	return func(r *response) string {
+	return func(r *Response) string {
 		if m := re.FindSubmatch(r.Body); m != nil {
 			return string(m[1])
 		}
@@ -79,9 +80,9 @@ func bodyRegex(expr string) func(*response) string {
 	}
 }
 
-func headerRegex(name, expr string) func(*response) string {
+func HeaderRegex(name, expr string) func(*Response) string {
 	re := regexp.MustCompile(expr)
-	return func(r *response) string {
+	return func(r *Response) string {
 		for _, v := range r.Header.Values(name) {
 			if m := re.FindStringSubmatch(v); m != nil {
 				return m[1]
@@ -91,6 +92,16 @@ func headerRegex(name, expr string) func(*response) string {
 	}
 }
 
-func wholeBody(r *response) string {
+func WholeBody(r *Response) string {
 	return string(bytes.TrimSpace(r.Body))
+}
+
+func CountryFrom(extract func(*Response) string, blockStatus int) func([]*Response) []Result {
+	return func(rs []*Response) []Result {
+		r := rs[0]
+		if blockStatus != 0 && r.Status == blockStatus {
+			return []Result{{Status: IPBlock, Reason: fmt.Sprintf("HTTP %d", r.Status)}}
+		}
+		return []Result{CountryResult(extract(r), r.Status)}
+	}
 }

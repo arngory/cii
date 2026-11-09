@@ -18,7 +18,10 @@
 | `internal/ipdetect` | Публичные адреса: интерфейсы, затем echo-сервисы по порядку (форматы `plain`, `trace`, `json:поле`), с проверкой семейства ответа |
 | `internal/geodb` | Поиск по локальным `.mmdb` (схемы GeoIP2/DB-IP и IPinfo Lite приводятся к одному `Record`), атрибуция по лицензиям |
 | `internal/datasrc` | Реестр баз (ID, лицензия, хосты, нужен ли ключ), загрузка с проверкой формата mmdb, атомарная замена файла, `manifest.json` с sha256 |
-| `internal/region` | Проверки региона: декларативный каталог (URL, способ извлечь страну, ключ пользователя), запуск с ограничением параллельности, вердикт с равным весом групп. Перечень — в [REGION_CHECKS.md](REGION_CHECKS.md) |
+| `internal/probe` | Общий движок проверок: `Check` (запросы, уровень A/B, ключ пользователя, функция оценки), запуск с ограничением параллельности через `netx`, извлечение данных (JSON-путь, регулярки, заголовки), `Select` и правила политики |
+| `internal/region` | Каталог проверок региона и вердикт с равным весом групп. Перечень — в [REGION_CHECKS.md](REGION_CHECKS.md) |
+| `internal/services` | Каталог проверок доступности сервисов. Перечень — в [SERVICE_CHECKS.md](SERVICE_CHECKS.md) |
+| `internal/clientids` | Все сторонние идентификаторы клиентов, нужные проверкам уровня B, в одном месте |
 | `internal/refdata` | Встроенные справочники: названия стран (CLDR) и «IATA → страна» (OurAirports); генерируются `go generate ./internal/refdata` |
 | `internal/config` | Необязательный `config.yaml`: свои ключи, свой список echo-сервисов, набор баз по умолчанию |
 | `internal/report` | Текстовый и JSON-вывод, маскирование адресов, план, журнал |
@@ -30,7 +33,7 @@
 2. При `--plan` — напечатать правила и выйти.
 3. Открыть все `.mmdb` из каталога данных.
 4. Для каждого семейства (IPv4, IPv6): определить адрес, найти записи во всех базах.
-5. Для каждого найденного адреса — проверки региона (если не `--quick` и не `--offline`); локальные базы участвуют в вердикте как мнения группы GeoIP.
+5. Для каждого найденного адреса — проверки региона и сервисов (если не `--quick` и не `--offline`; уровень B — только с `--extended`); локальные базы участвуют в вердикте как мнения группы GeoIP.
 6. Приложить журнал соединений и вывести отчёт.
 
 ## Отчёт (`--json`, схема `cii.report/v1`)
@@ -39,7 +42,9 @@
 |---|---|
 | `schema`, `tool`, `generated_at`, `mode` | метаданные (`mode`: `online`, `offline`, `lookup`) |
 | `ipv4`, `ipv6` | `address`, `source` (`echo:<провайдер>` или `interface`), `interface[]`, `error`, `geo[]`, `region` |
-| `region` | `verdict[]` (одна страна или несколько при равенстве), `results[]` (`group`, `service`, `status`, `country`, `iata`, `node`, `reason`), `attention[]` |
+| `region` | `verdict[]` (одна страна или несколько при равенстве), `results[]`, `attention[]` |
+| `services` | список результатов |
+| результат проверки | `group`, `service`, `status` (`ok`, `yes`, `no`, `partial`, `unknown`, `ipblock`, `error`), `country`, `iata`, `node`, `reason`, `extended` |
 | `results[]` | то же для `cii lookup`, плюс `query` |
 | `geo[]` | `source`, `network`, `country`, `country_name`, `registered_country`, `continent`, `region`, `city`, `latitude`, `longitude`, `asn`, `as_org`, `as_domain` |
 | `data[]` | использованные базы: `id`, `type`, `built` |

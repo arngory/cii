@@ -1,0 +1,126 @@
+package probe
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/netip"
+	"strings"
+	"testing"
+	"unicode/utf8"
+
+	"github.com/arngory/cii/internal/config"
+	"github.com/arngory/cii/internal/ledger"
+	"github.com/arngory/cii/internal/netx"
+)
+
+func TestJSONPath(t *testing.T) {
+	r := &Response{Body: []byte(`)]}'
+[["x",null,[[["en","DE"]]]]]`)}
+	if got := JSONPathAfter(")]}'", "[0][2][0][0][1]")(r); got != "DE" {
+		t.Errorf("prefixed path = %q", got)
+	}
+	r = &Response{Body: []byte(`{"data":{"location":{"country":{"alpha2":"NL"}}},"list":[{"c":"FR"}]}`)}
+	for path, want := range map[string]string{"data.location.country.alpha2": "NL", "list[0].c": "FR", "list[1].c": "", "data.x.y": "", "list[": ""} {
+		if got := JSONPath(path)(r); got != want {
+			t.Errorf("JSONPath(%q) = %q, want %q", path, got, want)
+		}
+	}
+	if got := JSONPath("[0].country")(&Response{Body: []byte(`[{"country":"US"}]`)}); got != "US" {
+		t.Errorf("leading index = %q", got)
+	}
+}
+
+func TestCountryResult(t *testing.T) {
+	cases := []struct {
+		raw    string
+		status int
+		want   Status
+	}{
+		{"us\n", 200, OK}, {"ZZ", 200, Unknown}, {"", 429, Failed}, {"", 500, Failed}, {"DE", 404, OK}, {"<html>", 200, Unknown},
+	}
+	for _, c := range cases {
+		if got := CountryResult(c.raw, c.status); got.Status != c.want {
+			t.Errorf("CountryResult(%q, %d) = %+v, want %s", c.raw, c.status, got, c.want)
+		}
+	}
+}
+
+func TestTruncateKeepsUTF8(t *testing.T) {
+	if got := Truncate("абвгд", 5); !utf8.ValidString(got) || got != "аб…" {
+		t.Fatalf("Truncate = %q", got)
+	}
+}
+
+func TestRun(t *testing.T) {
+	var gotAuth, gotBody, gotHeader string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/geo/203.0.113.9":
+			gotAuth = r.Header.Get("Authorization")
+			w.Write([]byte(`{"country":"SE"}`))
+		case "/post":
+			b := make([]byte, 64)
+			n, _ := r.Body.Read(b)
+			gotBody, gotHeader = string(b[:n]), r.Header.Get("X-Client")
+			w.Write([]byte(`{"country":"NO"}`))
+		case "/blocked":
+			w.WriteHeader(http.StatusForbidden)
+		default:
+			http.Redirect(w, r, "http://elsewhere.invalid/", http.StatusFound)
+		}
+	}))
+	defer srv.Close()
+	checks := []Check{
+		{Service: "geo", Group: "g", Requests: Get(srv.URL + "/geo/{ip}"), Eval: CountryFrom(JSONPath("country"), 0),
+			Authorize: func(req *http.Request, k config.Keys) { req.Header.Set("Authorization", "Bearer "+k.IPinfoToken) }},
+		{Service: "post", Group: "g", Tier: TierB, Requests: []Request{{Method: http.MethodPost, URL: srv.URL + "/post", Body: `{"q":1}`, Header: map[string]string{"X-Client": "id"}}},
+			Eval: CountryFrom(JSONPath("country"), 0)},
+		{Service: "blk", Group: "g", Requests: Get(srv.URL + "/blocked"), Eval: CountryFrom(WholeBody, http.StatusForbidden)},
+		{Service: "redir", Group: "g", Requests: Get(srv.URL + "/redir"), Eval: CountryFrom(WholeBody, 0)},
+		{Service: "v6only", Group: "g", Transport: netx.IPv6, Requests: Get(srv.URL + "/x"), Eval: CountryFrom(WholeBody, 0)},
+	}
+	led := ledger.New()
+	n := netx.New(netx.Options{}, netx.NewPolicy(Rules("m", checks)...), led)
+	env := Env{Module: "m", Nets: map[netx.Family]*netx.Net{netx.IPv4: n}, Keys: config.Keys{IPinfoToken: "T"}}
+	res := Run(context.Background(), env, netx.IPv4, netip.MustParseAddr("203.0.113.9"), checks)
+	if len(res) != 5 {
+		t.Fatalf("results = %+v", res)
+	}
+	if res[0].Country != "SE" || gotAuth != "Bearer T" || res[0].Service != "geo" || res[0].Group != "g" || res[0].Extended {
+		t.Errorf("geo = %+v auth=%q", res[0], gotAuth)
+	}
+	if res[1].Country != "NO" || gotBody != `{"q":1}` || gotHeader != "id" || !res[1].Extended {
+		t.Errorf("post = %+v body=%q header=%q", res[1], gotBody, gotHeader)
+	}
+	if res[2].Status != IPBlock {
+		t.Errorf("blocked = %+v", res[2])
+	}
+	if res[3].Status != Failed || !strings.Contains(res[3].Reason, "blocked by policy") {
+		t.Errorf("redirect = %+v", res[3])
+	}
+	if res[4].Status != Failed || !strings.Contains(res[4].Reason, "ipv6") {
+		t.Errorf("transport = %+v", res[4])
+	}
+}
+
+func TestSelect(t *testing.T) {
+	checks := []Check{
+		{Service: "a"},
+		{Service: "b", Tier: TierB},
+		{Service: "k", KeyOK: func(k config.Keys) bool { return k.GeoapifyKey != "" }},
+	}
+	names := func(cs []Check) string {
+		var s []string
+		for _, c := range cs {
+			s = append(s, c.Service)
+		}
+		return strings.Join(s, ",")
+	}
+	if got := names(Select(checks, config.Keys{}, false)); got != "a" {
+		t.Errorf("default = %s", got)
+	}
+	if got := names(Select(checks, config.Keys{GeoapifyKey: "x"}, true)); got != "a,b,k" {
+		t.Errorf("extended+key = %s", got)
+	}
+}

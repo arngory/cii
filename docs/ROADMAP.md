@@ -18,14 +18,14 @@
 - [x] CDN-площадки Cloudflare и YouTube, встроенный справочник IATA
 - [x] Вердикт с равным весом групп, список расхождений, локальные базы как мнения
 - [x] Встроенные названия стран (CLDR)
-- [ ] Уровень B (Twitch, ChatGPT, Claude, Netflix, Spotify, Disney+) — ждёт решения, см. [REGION_CHECKS.md](REGION_CHECKS.md)
+- [x] Уровень B (Twitch, ChatGPT, Claude, Netflix, Spotify, Disney+) за флагом `--extended`; вживую не проверен
 
 ## 3. Сервисы (RegionRestrictionCheck + IPQuality + ipregion)
 
-- [ ] Декларативный каталог проверок (YAML): метод, URL, правила разбора, уровень A/B, источник
-- [ ] Go-реализации сложных проверок
-- [ ] Дедупликация пересечений: Netflix, YouTube, Disney+, TikTok, ChatGPT, Reddit, Prime Video и др.
-- [ ] Регионы, начиная с самых востребованных; тесты на записанных ответах
+- [x] Общий движок `probe` для региона и сервисов: каталог в Go-структурах, уровни A/B, ключи пользователя
+- [x] Мультирегиональный набор: Netflix, Prime Video, Reddit, Wikipedia, 17 API ИИ-сервисов; уровень B — Disney+, Spotify, YouTube Premium, DAZN
+- [x] Дедупликация пересечений RegionRestrictionCheck, IPQuality и ipregion
+- [ ] Региональные каталоги RegionRestrictionCheck: HK, TW, JP, NA, SA, EU, OC, KR, SEA, AF — по одному региону, с тестами на записанных ответах
 
 ## 4. Риски и почта (IPQuality)
 
