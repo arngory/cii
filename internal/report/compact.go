@@ -94,10 +94,10 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 	}
 	fams := r.families()
 	for _, f := range fams {
-		writeLine(w, st.Width, c.bold(f.label)+"  ", 6, hostLine(c, m, f.host))
+		writeLine(w, st.Width, m.sep, c.bold(f.label)+"  ", 6, hostLine(c, m, f.host))
 	}
 	for _, h := range r.Results {
-		writeLine(w, st.Width, c.bold(h.Query)+"  ", utf8.RuneCountInString(h.Query)+2, hostLine(c, m, h))
+		writeLine(w, st.Width, m.sep, c.bold(h.Query)+"  ", utf8.RuneCountInString(h.Query)+2, hostLine(c, m, h))
 	}
 
 	var withRegion []fam
@@ -114,9 +114,9 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 		if len(withRegion) > 1 {
 			label += " " + f.label
 		}
-		writeLine(w, st.Width, c.bold(label)+"  ", utf8.RuneCountInString(label)+2, regionParts(c, f.host.Region))
+		writeLine(w, st.Width, m.sep, c.bold(label)+"  ", utf8.RuneCountInString(label)+2, regionParts(c, f.host.Region))
 		if edges := cdnParts(c, f.host.Region); len(edges) > 0 {
-			writeLine(w, st.Width, c.dim(pad("CDN", utf8.RuneCountInString(label)))+"  ", utf8.RuneCountInString(label)+2, edges)
+			writeLine(w, st.Width, m.sep, c.dim(pad("CDN", utf8.RuneCountInString(label)))+"  ", utf8.RuneCountInString(label)+2, edges)
 		}
 	}
 
@@ -128,7 +128,7 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 		for i, f := range footer {
 			parts[i] = gcell{text: f, style: c.dim}
 		}
-		writeLine(w, st.Width, "", 0, parts)
+		writeLine(w, st.Width, m.sep, "", 0, parts)
 	}
 }
 
@@ -242,20 +242,19 @@ func serviceName(r probe.Result) string {
 	return r.Service
 }
 
-func writeLine(w io.Writer, width int, label string, labelWidth int, parts []gcell) {
-	sep := " · "
+func writeLine(w io.Writer, width int, sep, label string, labelWidth int, parts []gcell) {
 	var b strings.Builder
 	b.WriteString(label)
 	col := labelWidth
 	for i, p := range parts {
 		n := utf8.RuneCountInString(p.text)
 		if i > 0 {
-			if col+len(sep)+n > width {
+			if col+utf8.RuneCountInString(sep)+n > width {
 				b.WriteString("\n" + strings.Repeat(" ", labelWidth))
 				col = labelWidth
 			} else {
 				b.WriteString(sep)
-				col += len(sep)
+				col += utf8.RuneCountInString(sep)
 			}
 		}
 		text := p.text

@@ -21,8 +21,11 @@ func TestWriteAndPrune(t *testing.T) {
 		}
 	}
 	same, err := Write(dir, base.Add(time.Duration(Keep+2)*time.Second), []byte("x"))
-	if err != nil || filepath.Base(same) != "20261109-120022-1.log" {
+	if err != nil || filepath.Base(same) != "20261109-120022-01.log" {
 		t.Fatalf("collision name = %q, %v", same, err)
+	}
+	if _, err := Write(same, base, []byte("x")); err == nil {
+		t.Fatal("writing under a file path succeeded")
 	}
 	entries, _ := os.ReadDir(dir)
 	if len(entries) != Keep {

@@ -284,8 +284,8 @@ func cmdIP(ctx context.Context, args []string) error {
 		host := report.NewHost(h.addr, h.geo, c.mask)
 		if h.addr.Address.IsValid() {
 			results := localOpinions(h.geo)
+			var svc []probe.Result
 			if !c.offline {
-				var svc []probe.Result
 				for _, r := range probe.Run(ctx, probe.Env{Nets: nets, Keys: cfg.Keys}, h.family, h.addr.Address, checks) {
 					if region.Owns(r.Group) {
 						results = append(results, r)
@@ -293,15 +293,17 @@ func cmdIP(ctx context.Context, args []string) error {
 						svc = append(svc, r)
 					}
 				}
-				summary := region.Summarize(results)
+			}
+			summary := region.Summarize(results)
+			if !c.offline {
 				regional := services.SelectRegional(c.catalogsFor(catalogs, summary.Verdict), cfg.Keys, c.extended)
 				svc = append(svc, probe.Run(ctx, probe.Env{Nets: nets, Keys: cfg.Keys}, h.family, h.addr.Address, regional)...)
-				if len(svc) > 0 {
-					host.SetServices(svc, c.mask)
-				}
+			}
+			if len(svc) > 0 {
+				host.SetServices(svc, c.mask)
 			}
 			if len(results) > 0 {
-				host.SetRegion(region.Summarize(results), c.mask)
+				host.SetRegion(summary, c.mask)
 			}
 		}
 		setHost(rep, h.family, host)
@@ -367,6 +369,9 @@ func setHost(r *report.Report, f netx.Family, h *report.Host) {
 
 func output(r *report.Report, c *common) error {
 	logPath, logErr := writeLog(r, c)
+	if logErr != nil && (c.json || c.debug) {
+		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
+	}
 	switch {
 	case c.json:
 		return r.WriteJSON(os.Stdout)
