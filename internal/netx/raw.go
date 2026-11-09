@@ -5,11 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 )
 
 var ErrProxyRaw = errors.New("raw connections and DNS lookups are disabled while a proxy is in effect")
 
 func (n *Net) Options() Options { return n.opts }
+
+func ledgerHost(rule Rule, host string) string {
+	if strings.HasPrefix(rule.Pattern, "*.") {
+		return rule.Pattern
+	}
+	return normalizeHost(host)
+}
 
 func (n *Net) allow(module, host, proto string) (Rule, error) {
 	rule, ok := n.policy.Match(module, host)
@@ -18,10 +26,10 @@ func (n *Net) allow(module, host, proto string) (Rule, error) {
 		return rule, &BlockedError{Module: module, Host: host}
 	}
 	if n.proxied {
-		n.ledger.Skipped(module, rule.Purpose, normalizeHost(host), proto)
+		n.ledger.Skipped(module, rule.Purpose, ledgerHost(rule, host), proto)
 		return rule, ErrProxyRaw
 	}
-	n.ledger.Request(module, rule.Purpose, normalizeHost(host), proto)
+	n.ledger.Request(module, rule.Purpose, ledgerHost(rule, host), proto)
 	return rule, nil
 }
 
@@ -57,7 +65,7 @@ func (n *Net) Dial(ctx context.Context, module, network, addr string) (net.Conn,
 	}
 	c, err := d.DialContext(ctx, dialNet, addr)
 	if err != nil {
-		n.ledger.Error(module, rule.Purpose, normalizeHost(host), network)
+		n.ledger.Error(module, rule.Purpose, ledgerHost(rule, host), network)
 	}
 	return c, err
 }
@@ -70,7 +78,7 @@ func (n *Net) LookupHost(ctx context.Context, module, name string) ([]string, er
 	addrs, err := net.DefaultResolver.LookupHost(ctx, name)
 	var dnsErr *net.DNSError
 	if err != nil && !(errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
-		n.ledger.Error(module, rule.Purpose, normalizeHost(name), "dns")
+		n.ledger.Error(module, rule.Purpose, ledgerHost(rule, name), "dns")
 	}
 	return addrs, err
 }

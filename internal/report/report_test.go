@@ -4,6 +4,9 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+
+	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/risk"
 )
 
 func TestMaskAddr(t *testing.T) {
@@ -17,6 +20,30 @@ func TestMaskAddr(t *testing.T) {
 		if got := MaskAddr(netip.MustParseAddr(in), false); got != in {
 			t.Errorf("unmasked %s = %s", in, got)
 		}
+	}
+}
+
+func TestSetServicesMasksMailBanner(t *testing.T) {
+	results := func() []probe.Result {
+		return []probe.Result{
+			{Group: risk.Mail, Service: "smtp", Detail: "554 5.7.1 Client host [203.0.113.5] blocked", Reason: "from 203.0.113.5"},
+			{Group: risk.DNSBL, Service: "zen.spamhaus.org", Detail: "127.0.0.4 exploits"},
+		}
+	}
+	var masked, plain Host
+	masked.SetServices(results(), true)
+	plain.SetServices(results(), false)
+	if d := masked.Services[0].Detail; d != "554 5.7.1 Client host [203.0.*.*] blocked" {
+		t.Errorf("masked mail detail = %q", d)
+	}
+	if r := masked.Services[0].Reason; strings.Contains(r, "113.5") {
+		t.Errorf("masked mail reason = %q", r)
+	}
+	if d := masked.Services[1].Detail; d != "127.0.0.4 exploits" {
+		t.Errorf("masked DNSBL detail = %q", d)
+	}
+	if d := plain.Services[0].Detail; !strings.Contains(d, "203.0.113.5") {
+		t.Errorf("plain mail detail = %q", d)
 	}
 }
 

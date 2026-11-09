@@ -680,6 +680,9 @@ func cmdCensor(ctx context.Context, args []string) error {
 			return fmt.Errorf("unknown mode %q (known: %s, all)", m, strings.Join(censor.Modes, ", "))
 		}
 	}
+	if !censor.ValidProtocol(protocol) {
+		return fmt.Errorf("unknown protocol %q (known: http, https, both)", protocol)
+	}
 	opts := censor.Options{Modes: strings.Split(mode, ","), DomainsFile: domainsFile, Domain: domain, Protocol: protocol, Retries: retries}
 	policy := netx.NewPolicy(censor.Rules(opts)...)
 	if c.plan {

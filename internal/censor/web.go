@@ -244,6 +244,14 @@ func classifyHTTP(host string, o outcome) probe.Result {
 	return res
 }
 
+func ValidProtocol(p string) bool {
+	switch strings.ToLower(p) {
+	case "", "both", "http", "https":
+		return true
+	}
+	return false
+}
+
 func (r *runner) protocols() (http, https bool) {
 	switch strings.ToLower(r.opts.Protocol) {
 	case "http":

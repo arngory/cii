@@ -228,11 +228,13 @@ func interpret(z Zone, addrs []string, err error) (probe.Status, string, string)
 		case errors.Is(err, netx.ErrProxyRaw):
 			return probe.Unknown, "", proxyReason
 		case errors.As(err, &be):
-			return probe.Failed, "", "blocked by policy: " + be.Host
+			return probe.Failed, "", "blocked by policy: *." + z.Zone
 		case errors.As(err, &dnsErr) && dnsErr.IsNotFound:
 			return probe.Yes, "", ""
 		case errors.As(err, &dnsErr) && dnsErr.IsTimeout, errors.Is(err, context.DeadlineExceeded):
 			return probe.Failed, "", "timeout"
+		case errors.As(err, &dnsErr):
+			return probe.Failed, "", probe.Truncate("resolve: "+dnsErr.Err, 120)
 		}
 		return probe.Failed, "", probe.Truncate(err.Error(), 120)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
+	"github.com/arngory/cii/internal/risk"
 )
 
 func maskReasons(rs []probe.Result, mask bool) {
@@ -37,6 +38,11 @@ func (r *Report) SetCensor(rs []probe.Result, mask bool) {
 
 func (h *Host) SetServices(rs []probe.Result, mask bool) {
 	maskReasons(rs, mask)
+	for i := range rs {
+		if mask && rs[i].Group == risk.Mail {
+			rs[i].Detail = MaskText(rs[i].Detail)
+		}
+	}
 	h.Services = rs
 }
 

@@ -58,8 +58,28 @@ func TestDialPolicyLedgerAndProxy(t *testing.T) {
 		byKey[e.Module+" "+e.Host+" "+e.Proto] = e
 	}
 	if byKey["m 127.0.0.1 tcp"].Requests != 1 || byKey["other 127.0.0.1 tcp"].Blocked != 1 ||
-		byKey["m a.example udp"].Skipped != 1 || byKey["m a.example dns"].Skipped != 1 ||
-		byKey["m a.example udp"].Blocked != 0 {
+		byKey["m *.example udp"].Skipped != 1 || byKey["m *.example dns"].Skipped != 1 ||
+		byKey["m *.example udp"].Blocked != 0 {
+		t.Fatalf("ledger = %+v", led.Entries())
+	}
+}
+
+func TestWildcardLookupKeepsQueryNameOutOfLedger(t *testing.T) {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
+	led := ledger.New()
+	n := New(Options{}, NewPolicy(Rule{Module: "m", Pattern: "*.zone.invalid", Purpose: "p"}, Rule{Module: "m", Pattern: "exact.invalid", Purpose: "p"}), led)
+	for _, name := range []string{"4.3.2.81.zone.invalid", "Exact.Invalid."} {
+		if _, err := n.allow("m", name, "dns"); err != nil {
+			t.Fatalf("allow(%s): %v", name, err)
+		}
+	}
+	hosts := map[string]int{}
+	for _, e := range led.Entries() {
+		hosts[e.Host] += e.Requests
+	}
+	if len(hosts) != 2 || hosts["*.zone.invalid"] != 1 || hosts["exact.invalid"] != 1 {
 		t.Fatalf("ledger = %+v", led.Entries())
 	}
 }

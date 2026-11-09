@@ -53,7 +53,7 @@
 | `geo[]` | `source`, `network`, `country`, `country_name`, `registered_country`, `continent`, `region`, `city`, `latitude`, `longitude`, `asn`, `as_org`, `as_domain` |
 | `data[]` | использованные базы: `id`, `type`, `built` |
 | `attribution[]` | строки атрибуции, которых требуют лицензии баз |
-| `network[]` | журнал соединений |
+| `network[]` | журнал соединений; для DNS-запросов и сырых соединений по правилу с маской в `host` записывается сама маска (`*.zen.spamhaus.org`), а не запрошенное имя: в DNSBL-запросе оно содержит проверяемый адрес |
 | `masked` | были ли адреса замаскированы (`--mask`) |
 
 ## Будущие модули

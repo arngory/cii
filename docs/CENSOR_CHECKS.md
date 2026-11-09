@@ -14,7 +14,7 @@ cii censor --mode dns,telegram
 cii censor --domains my-list.txt --protocol https
 ```
 
-Режимы (`--mode`, через запятую, по умолчанию `all`): `dns`, `dpi`, `geoblock`, `telegram` (`tg`). Флаги `--domains FILE` и `--domain HOST` заменяют встроенные списки своими; `--protocol` — `http`, `https` или `both`; `--retries N` — дополнительные попытки на цель (по умолчанию 0: одна попытка). Общие флаги cii (`-4`/`-6`, `--iface`, `--source`, `--timeout`, `--json`, `--debug`, `--mask`) работают как обычно.
+Режимы (`--mode`, через запятую, по умолчанию `all`): `dns`, `dpi`, `geoblock`, `telegram` (`tg`). Флаги `--domains FILE` и `--domain HOST` заменяют встроенные списки своими; `--protocol` — `http`, `https` или `both` (другое значение — ошибка); `--retries N` — дополнительные попытки на цель (по умолчанию 0: одна попытка). Общие флаги cii (`-4`/`-6`, `--iface`, `--source`, `--timeout`, `--json`, `--debug`, `--mask`) работают как обычно.
 
 ## DNS
 

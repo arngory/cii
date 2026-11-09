@@ -132,8 +132,37 @@ func TestInterpretErrors(t *testing.T) {
 	if s, _, reason := interpret(z, nil, netx.ErrProxyRaw); s != probe.Unknown || reason != proxyReason {
 		t.Errorf("proxy = %v %q", s, reason)
 	}
-	if s, _, _ := interpret(z, nil, &netx.BlockedError{Module: Module, Host: "x"}); s != probe.Failed {
-		t.Errorf("blocked = %v", s)
+	name := "4.3.2.81." + z.Zone
+	if s, _, reason := interpret(z, nil, &netx.BlockedError{Module: Module, Host: name}); s != probe.Failed || reason != "blocked by policy: *."+z.Zone {
+		t.Errorf("blocked = %v %q", s, reason)
+	}
+	failure := &net.DNSError{Err: "server misbehaving", Name: name, Server: "127.0.0.53:53"}
+	if s, _, reason := interpret(z, nil, failure); s != probe.Failed || reason != "resolve: server misbehaving" {
+		t.Errorf("dns failure = %v %q", s, reason)
+	}
+}
+
+func TestLedgerHasNoReversedAddress(t *testing.T) {
+	proxy, _ := url.Parse("http://127.0.0.1:1")
+	for _, addr := range []string{"81.2.3.4", "2a00:1450::1"} {
+		ip := netip.MustParseAddr(addr)
+		led := ledger.New()
+		n := netx.New(netx.Options{Timeout: time.Second, Proxy: proxy}, netx.NewPolicy(Rules(Options{NoMail: true})...), led)
+		results := run(context.Background(), n, n, time.Second, ip, Options{NoMail: true})
+		entries := led.Entries()
+		if len(entries) == 0 || len(results) != len(zonesFor(ip)) {
+			t.Fatalf("%s: %d ledger entries, %d results", addr, len(entries), len(results))
+		}
+		for _, e := range entries {
+			if strings.Contains(e.Host, reverse(ip)) || !strings.HasPrefix(e.Host, "*.") || e.Skipped != 1 {
+				t.Errorf("%s: ledger entry %+v", addr, e)
+			}
+		}
+		for _, r := range results {
+			if strings.Contains(r.Reason+r.Detail, reverse(ip)) {
+				t.Errorf("%s: result %+v", addr, r)
+			}
+		}
 	}
 }
 

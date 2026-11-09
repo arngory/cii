@@ -310,6 +310,11 @@ func TestParseTargetAndRules(t *testing.T) {
 	if _, bad := selectedModes(Options{Modes: []string{"tg", "bogus"}}); len(bad) != 1 || bad[0] != "bogus" {
 		t.Errorf("bad modes = %v", bad)
 	}
+	for p, ok := range map[string]bool{"": true, "both": true, "HTTP": true, "https": true, "htps": false, "http,https": false, " https": false} {
+		if ValidProtocol(p) != ok {
+			t.Errorf("ValidProtocol(%q) = %v", p, !ok)
+		}
+	}
 }
 
 func TestRunWithProxyDisablesRaw(t *testing.T) {
