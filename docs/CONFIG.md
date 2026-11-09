@@ -13,6 +13,9 @@ keys:
   ipinfo_token: ""
   maxmind_account_id: ""
   maxmind_license_key: ""
+  ipregistry_key: ""
+  geoapify_key: ""
+  ip2location_key: ""
 
 data:
   sources: [dbip-country-lite, dbip-asn-lite, ipinfo-lite]
@@ -32,7 +35,14 @@ data:
 
 ## `keys`
 
-Только **ваши собственные** ключи. Переменные окружения `CII_IPINFO_TOKEN`, `CII_MAXMIND_ACCOUNT_ID` и `CII_MAXMIND_LICENSE_KEY` имеют приоритет над файлом. Ключи никогда не попадают в отчёты, ошибки и `manifest.json`.
+Только **ваши собственные** ключи. Переменные окружения `CII_IPINFO_TOKEN`, `CII_MAXMIND_ACCOUNT_ID`, `CII_MAXMIND_LICENSE_KEY`, `CII_IPREGISTRY_KEY`, `CII_GEOAPIFY_KEY` и `CII_IP2LOCATION_KEY` имеют приоритет над файлом. Ключи никогда не попадают в отчёты, ошибки и `manifest.json`.
+
+| Ключ | Где используется |
+|---|---|
+| `ipinfo_token` | загрузка IPinfo Lite; запросы к ipinfo.io без анонимных лимитов |
+| `maxmind_account_id`, `maxmind_license_key` | загрузка GeoLite2; веб-сервис GeoLite в проверках региона |
+| `ipregistry_key`, `geoapify_key` | включают соответствующие проверки региона |
+| `ip2location_key` | снимает суточный лимит анонимных запросов к ip2location.io |
 
 ## `data.sources`
 

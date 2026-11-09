@@ -17,6 +17,8 @@ cii написан с нуля на Go, но идеи, наборы провер
 - IP Geolocation by DB-IP (https://db-ip.com), CC BY 4.0
 - IP address data powered by IPinfo (https://ipinfo.io), CC BY-SA 4.0
 - This product includes GeoLite2 data created by MaxMind (https://www.maxmind.com) — только при загрузке пользователем со своим ключом
+- Названия стран — Unicode CLDR (https://cldr.unicode.org), Unicode License v3
+- Коды аэропортов — OurAirports (https://ourairports.com), Public Domain
 
 ## Библиотеки
 

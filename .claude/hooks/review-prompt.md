@@ -8,6 +8,8 @@ Report only real defects in code:
 - build, vet, test or gofmt failures;
 - dead code, needless complexity or duplication that a concrete simpler version would fix;
 
+`tools/` holds developer-time generators that are not part of the shipped binary; they may use `net/http` directly.
+
 Do NOT report: comments or their wording, wording of docs, style preferences without a concrete defect, speculative future features, or anything outside the diff unless the diff breaks it.
 
 For each finding give `path:line`, what is wrong, and the concrete fix. Be terse.

@@ -18,6 +18,14 @@ make cross
 
 Тесты не ходят в интернет: HTTP проверяется на `httptest`, базы — на синтетических записях.
 
+Встроенные справочники обновляются вручную:
+
+```bash
+go generate ./internal/refdata
+```
+
+Генератор `tools/gendata` — инструмент разработчика: он не входит в бинарник `cii` и потому обращается к CLDR и OurAirports напрямую через `net/http`, без `internal/netx`.
+
 ## Релизы
 
 Тег `v*` запускает `.github/workflows/release.yml`:

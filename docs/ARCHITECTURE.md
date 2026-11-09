@@ -18,6 +18,8 @@
 | `internal/ipdetect` | Публичные адреса: интерфейсы, затем echo-сервисы по порядку (форматы `plain`, `trace`, `json:поле`), с проверкой семейства ответа |
 | `internal/geodb` | Поиск по локальным `.mmdb` (схемы GeoIP2/DB-IP и IPinfo Lite приводятся к одному `Record`), атрибуция по лицензиям |
 | `internal/datasrc` | Реестр баз (ID, лицензия, хосты, нужен ли ключ), загрузка с проверкой формата mmdb, атомарная замена файла, `manifest.json` с sha256 |
+| `internal/region` | Проверки региона: декларативный каталог (URL, способ извлечь страну, ключ пользователя), запуск с ограничением параллельности, вердикт с равным весом групп. Перечень — в [REGION_CHECKS.md](REGION_CHECKS.md) |
+| `internal/refdata` | Встроенные справочники: названия стран (CLDR) и «IATA → страна» (OurAirports); генерируются `go generate ./internal/refdata` |
 | `internal/config` | Необязательный `config.yaml`: свои ключи, свой список echo-сервисов, набор баз по умолчанию |
 | `internal/report` | Текстовый и JSON-вывод, маскирование адресов, план, журнал |
 | `internal/paths` | Каталоги конфига и данных по ОС (XDG, `%LOCALAPPDATA%`, `~/Library/Application Support`) |
@@ -28,14 +30,16 @@
 2. При `--plan` — напечатать правила и выйти.
 3. Открыть все `.mmdb` из каталога данных.
 4. Для каждого семейства (IPv4, IPv6): определить адрес, найти записи во всех базах.
-5. Приложить журнал соединений и вывести отчёт.
+5. Для каждого найденного адреса — проверки региона (если не `--quick` и не `--offline`); локальные базы участвуют в вердикте как мнения группы GeoIP.
+6. Приложить журнал соединений и вывести отчёт.
 
 ## Отчёт (`--json`, схема `cii.report/v1`)
 
 | Поле | Содержимое |
 |---|---|
 | `schema`, `tool`, `generated_at`, `mode` | метаданные (`mode`: `online`, `offline`, `lookup`) |
-| `ipv4`, `ipv6` | `address`, `source` (`echo:<провайдер>` или `interface`), `interface[]`, `error`, `geo[]` |
+| `ipv4`, `ipv6` | `address`, `source` (`echo:<провайдер>` или `interface`), `interface[]`, `error`, `geo[]`, `region` |
+| `region` | `verdict[]` (одна страна или несколько при равенстве), `results[]` (`group`, `service`, `status`, `country`, `iata`, `node`, `reason`), `attention[]` |
 | `results[]` | то же для `cii lookup`, плюс `query` |
 | `geo[]` | `source`, `network`, `country`, `country_name`, `registered_country`, `continent`, `region`, `city`, `latitude`, `longitude`, `asn`, `as_org`, `as_domain` |
 | `data[]` | использованные базы: `id`, `type`, `built` |
@@ -49,7 +53,6 @@
 
 | Модуль | Источник идей | Суть |
 |---|---|---|
-| `geo-opinions` | ipregion | что думают о стране IP сами сервисы и GeoIP-провайдеры, вердикт по большинству |
 | `services` | RegionRestrictionCheck, IPQuality, ipregion | доступность стримингов, ИИ-сервисов, CDN по регионам; декларативный каталог (YAML) + Go для сложных случаев, уровни A/B |
 | `risk` | IPQuality | DNSBL с учётом FUP, Tor, диапазоны облаков, тип сети; платные базы только с ключом пользователя |
 | `mail` | IPQuality | открыт ли исходящий 25-й порт |

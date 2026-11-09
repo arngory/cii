@@ -10,12 +10,15 @@
 - [x] Отчёт: текст и JSON `cii.report/v1`, маскирование
 - [x] Кросс-сборка, CI, release-workflow (с опциональным `IPINFO_TOKEN`)
 
-## 2. Мнения о регионе (по мотивам ipregion)
+## 2. Мнения о регионе (по мотивам ipregion) — готово
 
-- [ ] Онлайн-GeoIP-провайдеры только с бесплатным анонимным доступом, разрешённым их условиями, плюс провайдеры с ключом пользователя
-- [ ] Регион по ответам самих сервисов (YouTube, Netflix, Spotify, Steam, Apple, Google и др.)
-- [ ] Вердикт по большинству, раздел «внимание» при расхождениях
-- [ ] Встроенный CLDR-справочник названий стран
+- [x] 11 бесплатных GeoIP-провайдеров без ключа + ipregistry, geoapify, GeoLite web — с ключом пользователя
+- [x] RDAP с редиректом к нужному RIR (страна регистрации)
+- [x] Регион по ответам 11 сервисов уровня A (Cloudflare, Google, YouTube, Reddit, TikTok, Apple, Steam, Microsoft, Ookla, JetBrains, PlayStation)
+- [x] CDN-площадки Cloudflare и YouTube, встроенный справочник IATA
+- [x] Вердикт с равным весом групп, список расхождений, локальные базы как мнения
+- [x] Встроенные названия стран (CLDR)
+- [ ] Уровень B (Twitch, ChatGPT, Claude, Netflix, Spotify, Disney+) — ждёт решения, см. [REGION_CHECKS.md](REGION_CHECKS.md)
 
 ## 3. Сервисы (RegionRestrictionCheck + IPQuality + ipregion)
 

@@ -17,6 +17,9 @@ type Keys struct {
 	IPinfoToken       string `yaml:"ipinfo_token"`
 	MaxMindAccountID  string `yaml:"maxmind_account_id"`
 	MaxMindLicenseKey string `yaml:"maxmind_license_key"`
+	IPRegistryKey     string `yaml:"ipregistry_key"`
+	GeoapifyKey       string `yaml:"geoapify_key"`
+	IP2LocationKey    string `yaml:"ip2location_key"`
 }
 
 type Config struct {
@@ -48,6 +51,9 @@ func Load(path string) (*Config, error) {
 	envOverride(&c.Keys.IPinfoToken, "CII_IPINFO_TOKEN")
 	envOverride(&c.Keys.MaxMindAccountID, "CII_MAXMIND_ACCOUNT_ID")
 	envOverride(&c.Keys.MaxMindLicenseKey, "CII_MAXMIND_LICENSE_KEY")
+	envOverride(&c.Keys.IPRegistryKey, "CII_IPREGISTRY_KEY")
+	envOverride(&c.Keys.GeoapifyKey, "CII_GEOAPIFY_KEY")
+	envOverride(&c.Keys.IP2LocationKey, "CII_IP2LOCATION_KEY")
 	return c, nil
 }
 

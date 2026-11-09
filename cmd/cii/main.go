@@ -21,6 +21,7 @@ import (
 	"github.com/arngory/cii/internal/ledger"
 	"github.com/arngory/cii/internal/netx"
 	"github.com/arngory/cii/internal/paths"
+	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/report"
 	"github.com/arngory/cii/internal/version"
 )
@@ -42,6 +43,7 @@ Common flags:
   --proxy URL        http://, https:// or socks5:// proxy for HTTP traffic
   --timeout DUR      per-request timeout (default 10s)
   --offline          never touch the network (local interfaces + databases only)
+  --quick            skip region checks (GeoIP providers, platforms, CDN)
   --plan             print every destination that may be contacted, then exit
   --json             machine-readable output
   --mask             mask addresses (for screenshots)
@@ -90,9 +92,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor bool
-	iface, source, proxy, cfgPath, dataDir     string
-	timeout                                    time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick bool
+	iface, source, proxy, cfgPath, dataDir            string
+	timeout                                           time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -103,6 +105,7 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.proxy, "proxy", "", "proxy URL")
 	fs.DurationVar(&c.timeout, "timeout", 10*time.Second, "per-request timeout")
 	fs.BoolVar(&c.offline, "offline", false, "no network")
+	fs.BoolVar(&c.quick, "quick", false, "skip region checks")
 	fs.BoolVar(&c.plan, "plan", false, "print destinations and exit")
 	fs.BoolVar(&c.json, "json", false, "JSON output")
 	fs.BoolVar(&c.mask, "mask", false, "mask addresses")
@@ -203,9 +206,14 @@ func cmdIP(ctx context.Context, args []string) error {
 	if len(providers) == 0 {
 		providers = ipdetect.DefaultProviders
 	}
+	var checks []region.Check
+	if !c.quick {
+		checks = region.Select(cfg.Keys)
+	}
 	policy := netx.NewPolicy()
 	if !c.offline {
 		policy.Add(ipdetect.Rules(providers)...)
+		policy.Add(region.Rules(checks)...)
 	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
@@ -227,10 +235,17 @@ func cmdIP(ctx context.Context, args []string) error {
 	rep := report.New(mode, c.mask)
 	rep.SetData(dbs)
 
+	type found struct {
+		family netx.Family
+		addr   ipdetect.Address
+		geo    []geodb.Record
+	}
+	var hosts []found
+	env := region.Env{Nets: map[netx.Family]*netx.Net{}, Keys: cfg.Keys}
 	for _, f := range c.families() {
 		opts, err := c.options(f)
 		if err != nil {
-			setHost(rep, f, report.NewHost(ipdetect.Address{Error: err.Error()}, nil, c.mask))
+			hosts = append(hosts, found{family: f, addr: ipdetect.Address{Error: err.Error()}})
 			continue
 		}
 		n := netx.New(opts, policy, led)
@@ -238,11 +253,36 @@ func cmdIP(ctx context.Context, args []string) error {
 		var geo []geodb.Record
 		if addr.Address.IsValid() {
 			geo = dbs.Lookup(addr.Address)
+			env.Nets[f] = n
 		}
-		setHost(rep, f, report.NewHost(addr, geo, c.mask))
+		hosts = append(hosts, found{family: f, addr: addr, geo: geo})
+	}
+	for _, h := range hosts {
+		host := report.NewHost(h.addr, h.geo, c.mask)
+		if h.addr.Address.IsValid() {
+			var results []region.Result
+			if !c.offline {
+				results = region.Run(ctx, env, h.family, h.addr.Address, checks)
+			}
+			results = append(localOpinions(h.geo), results...)
+			if len(results) > 0 {
+				host.SetRegion(region.Summarize(results), c.mask)
+			}
+		}
+		setHost(rep, h.family, host)
 	}
 	rep.Network = led.Entries()
 	return output(rep, &c)
+}
+
+func localOpinions(geo []geodb.Record) []region.Result {
+	var out []region.Result
+	for _, g := range geo {
+		if g.Country != "" {
+			out = append(out, region.Result{Group: region.GeoIP, Service: "local:" + g.Source, Status: region.OK, Country: g.Country})
+		}
+	}
+	return out
 }
 
 func setHost(r *report.Report, f netx.Family, h *report.Host) {

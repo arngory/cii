@@ -1,0 +1,68 @@
+# Проверки региона
+
+Модуль `region` спрашивает у GeoIP-провайдеров и у самих сервисов, в какой стране они «видят» ваш адрес, и выводит общий вердикт. Идея и набор источников — из [vernette/ipregion](https://github.com/vernette/ipregion), реализация своя. Каждая проверка — один запрос на адрес за запуск, с честным User-Agent. `--quick` отключает модуль, `--plan` показывает все его хосты.
+
+## Группы и вердикт
+
+| Группа | Что это | Участвует в вердикте |
+|---|---|---|
+| **GeoIP** | базы геолокации: онлайн-провайдеры, которым передаётся адрес, и локальные `.mmdb` (`local:<id>`) | да |
+| **Platforms** | страна, которую сервис определил по входящему соединению | да |
+| **CDN** | площадка (IATA-код), через которую сервис отдаёт трафик; страна берётся по встроенному справочнику аэропортов | нет |
+
+Вердикт: каждая из групп GeoIP и Platforms даёт одинаковый суммарный вес, независимо от числа проверок в ней; побеждает страна с наибольшим весом, при равенстве выводятся все. Результаты из GeoIP и Platforms, расходящиеся с вердиктом, перечисляются отдельно («Disagrees with the verdict»).
+
+Статусы: `ok` (страна получена), `unknown` (ответ без страны или с `ZZ`), `ipblock` (сервис отказал этому адресу), `error` (сбой сети, лимит, HTTP-ошибка; причина выводится в «Failed checks»).
+
+## Уровень A — включено по умолчанию
+
+### GeoIP (адрес передаётся явно)
+
+| Сервис | Запрос | Ключ | Заметки |
+|---|---|---|---|
+| RDAP (RIR) | `rdap.db.ripe.net/ip/{ip}` с редиректом к нужному RIR | — | страна регистрации, а не геолокация; для ARIN — из адреса регистранта. Разрешены RIPE, ARIN, APNIC, LACNIC, registro.br, AFRINIC; редирект к другим NIR блокируется политикой |
+| ipinfo.io | `ipinfo.io/{ip}/json` | `ipinfo_token` — необязательно | без токена действуют лимиты анонимного доступа |
+| ipapi.co | `ipapi.co/{ip}/json/` | — | бесплатный лимит без ключа |
+| ifconfig.co | `ifconfig.co/country-iso?ip=` | — | открытый сервис echoip, ограничение частоты |
+| ip2location.io | `api.ip2location.io/?ip=` | `ip2location_key` — необязательно | без ключа — суточный лимит (сервис сообщает его в ответе) |
+| country.is | `api.country.is/{ip}` | — | открытый сервис |
+| geojs.io | `get.geojs.io/v1/ip/country.json?ip=` | — | |
+| ipbase.com | `api.ipbase.com/v2/info?ip=` | — | бесплатный лимит без ключа |
+| ipquery.io | `api.ipquery.io/{ip}` | — | |
+| ipwho.is | `ipwho.is/{ip}` | — | бесплатно для некоммерческого использования |
+| ip-api.com | `http://ip-api.com/json/{ip}` | — | бесплатно для некоммерческого использования, только HTTP и только по IPv4; для IPv6-адреса запрос идёт по IPv4 |
+| ipregistry.co | `api.ipregistry.co/{ip}` | `ipregistry_key` — **обязательно** | без вашего ключа не запускается |
+| geoapify.com | `api.geoapify.com/v1/ipinfo?ip=` | `geoapify_key` — **обязательно** | без вашего ключа не запускается |
+| MaxMind GeoLite | `geolite.info/geoip/v2.1/country/{ip}` | `maxmind_account_id` + `maxmind_license_key` — **обязательно** | бесплатный веб-сервис GeoLite вашей учётной записи |
+
+### Platforms (по входящему соединению)
+
+| Сервис | Запрос | Откуда страна |
+|---|---|---|
+| Cloudflare | `www.cloudflare.com/cdn-cgi/trace` | `loc=`; из того же ответа берётся `colo=` для группы CDN |
+| Google | `accounts.google.com/v3/signin/identifier` | скрытое поле `region` (`ZZ` = не определено) |
+| YouTube | `www.youtube.com/sw.js_data` | данные service worker |
+| Reddit | `www.reddit.com/api/v1/not-found` | текст страницы 404; 403 = `ipblock` |
+| TikTok | `www.tiktok.com/api/v1/web-cookie-privacy/config` | `body.appProps.region` |
+| Apple | `gspe1-ssl.ls.apple.com/pep/gcc` | тело ответа |
+| Steam | `HEAD store.steampowered.com` | cookie `steamCountry` |
+| Microsoft | `login.live.com` | `sRequestCountry` в странице |
+| Ookla | `www.speedtest.net/api/js/config-sdk` | `location.countryCode` |
+| JetBrains | `data.services.jetbrains.com/geo` | `code` |
+| PlayStation | `HEAD www.playstation.com` (без перехода по редиректу) | cookie `country` |
+
+### CDN
+
+| Сервис | Запрос | Площадка |
+|---|---|---|
+| Cloudflare | тот же `cdn-cgi/trace` | `colo=` |
+| YouTube | `redirector.googlevideo.com/report_mapping?di=no` | код из имени узла (`yyz10s25` → YYZ) |
+
+## Исключено
+
+| Что | Почему |
+|---|---|
+| демо-токен MaxMind со страницы демо, `ipinfo.io/widget/demo`, `demo.ip-api.com` с поддельным `Origin` | демо-эндпоинты сайтов, а не API (уровень C) |
+| встроенные ключи ipregistry, geoapify, air-port-codes | чужие ключи (уровень C); ipregistry и geoapify доступны с вашими ключами, справочник аэропортов встроен |
+| `speed.cloudflare.com/meta` | без поддельного `Referer` отвечает 403; та же информация есть в `cdn-cgi/trace` |
+| Twitch (GQL), ChatGPT (Statsig), Claude (bootstrap с UA мобильного приложения), Netflix (fast.com), Spotify (signup), Disney+ (GraphQL), Netflix CDN | уровень B: внутренние API с ключами и client ID, встроенными в чужие клиенты. Не реализовано, решение — за владельцем проекта (см. [NETWORK_POLICY.md](NETWORK_POLICY.md)) |
