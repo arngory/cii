@@ -235,7 +235,7 @@ func TestCookieAndPorts(t *testing.T) {
 			t.Errorf("portRange(%q) = %d %d %v", spec, lo, hi, err)
 		}
 	}
-	for _, bad := range []string{"", "x", "5210-5201", "1-"} {
+	for _, bad := range []string{"", "x", "5210-5201", "1-", "0", "70000", "1-99999999", "-5201", "5201-5202-5203"} {
 		if _, _, err := portRange(bad); err == nil {
 			t.Errorf("portRange(%q) accepted", bad)
 		}
@@ -243,22 +243,42 @@ func TestCookieAndPorts(t *testing.T) {
 }
 
 func TestServerSets(t *testing.T) {
-	if got := serversFor("all"); len(got) != len(globalServers)+len(ruServers) {
-		t.Errorf("all = %d", len(got))
+	all, err := serversFor("all, ru, global")
+	if err != nil || len(all) != len(globalServers)+len(ruServers) {
+		t.Errorf("all = %d %v", len(all), err)
 	}
-	if got := serversFor(""); len(got) != len(globalServers) {
-		t.Errorf("default = %d", len(got))
+	for _, list := range []string{"", " ", "global", "global,"} {
+		if got, err := serversFor(list); err != nil || len(got) != len(globalServers) {
+			t.Errorf("serversFor(%q) = %d %v", list, len(got), err)
+		}
 	}
-	got := serversFor("RU, host.example:5201-5205:Prov:Place, bad, nohost:x")
-	if len(got) != len(ruServers)+1 {
-		t.Fatalf("mixed = %+v", got)
+	got, err := serversFor("RU, host.example:5201-5205:Prov:Place, [2001:db8::1]:5201, host.example:5201-5205")
+	if err != nil || len(got) != len(ruServers)+2 {
+		t.Fatalf("mixed = %+v %v", got, err)
 	}
-	custom := got[len(got)-1]
-	if custom.Host != "host.example" || custom.Ports != "5201-5205" || custom.Provider != "Prov" || custom.Location != "Place" {
+	custom := got[len(ruServers)]
+	if custom.Host != "host.example" || custom.Ports != "5201-5205" || custom.Provider != "Prov" || custom.Location != "Place" || !custom.IPv6 {
 		t.Errorf("custom = %+v", custom)
 	}
+	literal := got[len(ruServers)+1]
+	if literal.Host != "2001:db8::1" || literal.Ports != "5201" || literal.Provider != "custom" || literal.Location != "2001:db8::1" || !literal.IPv6 {
+		t.Errorf("literal = %+v", literal)
+	}
+	for _, bad := range []string{"global,myhost", "nohost:x", ":5201", "host.example:0", "host.example:70000", "[2001:db8::1]", "[]:5201"} {
+		if got, err := serversFor(bad); err == nil {
+			t.Errorf("serversFor(%q) = %+v", bad, got)
+		}
+		if err := (Options{Duration: time.Second, Servers: bad}).Validate(); err == nil || !strings.Contains(err.Error(), "--servers") {
+			t.Errorf("Validate(%q) = %v", bad, err)
+		}
+	}
+	for dur, ok := range map[time.Duration]bool{time.Second: true, time.Minute: true, 300 * time.Millisecond: false, 1500 * time.Millisecond: false, 2 * time.Minute: false, 0: false} {
+		if err := (Options{Duration: dur}).Validate(); (err == nil) != ok {
+			t.Errorf("Validate(%s) = %v", dur, err)
+		}
+	}
 	seen := map[string]bool{}
-	for _, s := range serversFor("all") {
+	for _, s := range all {
 		if seen[s.Host] {
 			t.Errorf("duplicate host %s", s.Host)
 		}
@@ -350,6 +370,40 @@ func TestDiskSmall(t *testing.T) {
 	}
 	if _, err := diskTest(context.Background(), filepath.Join(t.TempDir(), "missing"), 4<<20, time.Millisecond); err == nil {
 		t.Error("missing dir accepted")
+	}
+}
+
+func TestScratchFileIsExclusive(t *testing.T) {
+	dir := t.TempDir()
+	a, b := scratchName(dir, "bench"), scratchName(dir, "bench")
+	if a == b || filepath.Dir(a) != dir || !strings.HasPrefix(filepath.Base(a), ".cii-bench-") {
+		t.Fatalf("scratch names %q %q", a, b)
+	}
+	victim := filepath.Join(dir, "victim")
+	if err := os.WriteFile(victim, []byte("keep"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if f, _, err := openDirect(victim); err == nil {
+		f.Close()
+		t.Error("existing file reused")
+	}
+	link := filepath.Join(dir, "link")
+	if err := os.Symlink(victim, link); err == nil {
+		if f, _, err := openDirect(link); err == nil {
+			f.Close()
+			t.Error("symlink followed")
+		}
+	}
+	if got, err := os.ReadFile(victim); err != nil || string(got) != "keep" {
+		t.Errorf("victim = %q %v", got, err)
+	}
+	f, _, err := openDirect(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if _, err := os.Stat(a); err != nil {
+		t.Error(err)
 	}
 }
 

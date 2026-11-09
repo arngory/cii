@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 
 	"github.com/arngory/cii/internal/bench"
 )
@@ -248,7 +247,7 @@ func fmtIOPS(v float64) string {
 	if v >= 1000 {
 		return fmt.Sprintf("%.1fk", v/1000)
 	}
-	return strings.TrimSuffix(fmt.Sprintf("%.0f", v), ".0")
+	return fmt.Sprintf("%.0f", v)
 }
 
 func fmtMs(v float64) string {

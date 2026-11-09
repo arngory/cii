@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -171,7 +170,12 @@ func FioTest(ctx context.Context, path, dir string, size int64) (FioReport, erro
 		dir = os.TempDir()
 	}
 	size = max(size, minDiskSize)
-	file := filepath.Join(dir, fmt.Sprintf(".cii-fio-%d", os.Getpid()))
+	file := scratchName(dir, "fio")
+	f, err := os.OpenFile(file, exclusiveFlags, 0o600)
+	if err != nil {
+		return FioReport{}, err
+	}
+	f.Close()
 	defer os.Remove(file)
 	rep := FioReport{}
 	for _, j := range fioJobs {

@@ -730,8 +730,8 @@ func cmdBench(ctx context.Context, args []string) error {
 	}
 	opts.DiskSize = size
 	opts.Disk, opts.CPU, opts.Net, opts.Iperf = !noDisk, !noCPU, !noNet && !c.offline, !noIperf && !c.offline
-	if opts.Duration < time.Second || opts.Duration > time.Minute || opts.Duration%time.Second != 0 {
-		return errors.New("--duration must be a whole number of seconds between 1s and 1m")
+	if err := opts.Validate(); err != nil {
+		return err
 	}
 	policy := netx.NewPolicy(bench.Rules(opts)...)
 	if c.plan {

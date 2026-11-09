@@ -53,7 +53,7 @@ func diskTest(ctx context.Context, dir string, size int64, randDur time.Duration
 	if err == nil && free < uint64(size)*2 {
 		return DiskReport{}, fmt.Errorf("%s has %d MiB free, need %d MiB", dir, free>>20, (size*2)>>20)
 	}
-	f, direct, err := openDirect(filepath.Join(dir, fmt.Sprintf(".cii-bench-%d", os.Getpid())))
+	f, direct, err := openDirect(scratchName(dir, "bench"))
 	if err != nil {
 		return DiskReport{}, err
 	}
@@ -85,6 +85,14 @@ func diskTest(ctx context.Context, dir string, size int64, randDur time.Duration
 		rep.Random = append(rep.Random, r)
 	}
 	return rep, nil
+}
+
+const exclusiveFlags = os.O_RDWR | os.O_CREATE | os.O_EXCL
+
+func scratchName(dir, kind string) string {
+	var suffix [8]byte
+	rand.Read(suffix[:])
+	return filepath.Join(dir, fmt.Sprintf(".cii-%s-%x", kind, suffix))
 }
 
 func sequential(ctx context.Context, f *os.File, size int64) (DiskResult, error) {

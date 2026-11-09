@@ -2,6 +2,7 @@ package censor
 
 import (
 	"net/url"
+	"strings"
 
 	"github.com/arngory/cii/internal/netx"
 )
@@ -33,8 +34,12 @@ func (rs resolver) forFamily(fam netx.Family) resolver {
 	if fam == netx.IPv6 {
 		rs.IP = rs.IP6
 	}
-	if rs.DoH == "" {
-		rs.DoH = (&url.URL{Scheme: "https", Host: rs.IP, Path: "/dns-query"}).String()
+	if rs.DoH == "" && rs.IP != "" {
+		host := rs.IP
+		if strings.Contains(host, ":") {
+			host = "[" + host + "]"
+		}
+		rs.DoH = (&url.URL{Scheme: "https", Host: host, Path: "/dns-query"}).String()
 	}
 	return rs
 }

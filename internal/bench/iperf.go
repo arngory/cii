@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -69,36 +70,16 @@ func makeCookie() []byte {
 }
 
 func portRange(spec string) (int, int, error) {
-	lo, hi, ok := splitRange(spec)
-	if !ok {
+	first, last, ranged := strings.Cut(spec, "-")
+	if !ranged {
+		last = first
+	}
+	lo, errLo := strconv.Atoi(first)
+	hi, errHi := strconv.Atoi(last)
+	if errLo != nil || errHi != nil || lo < 1 || hi > 65535 || hi < lo {
 		return 0, 0, fmt.Errorf("bad port range %q", spec)
 	}
 	return lo, hi, nil
-}
-
-func splitRange(spec string) (int, int, bool) {
-	a, b, found := cutDash(spec)
-	lo, err := strconv.Atoi(a)
-	if err != nil {
-		return 0, 0, false
-	}
-	if !found {
-		return lo, lo, true
-	}
-	hi, err := strconv.Atoi(b)
-	if err != nil || hi < lo {
-		return 0, 0, false
-	}
-	return lo, hi, true
-}
-
-func cutDash(s string) (string, string, bool) {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '-' {
-			return s[:i], s[i+1:], true
-		}
-	}
-	return s, "", false
 }
 
 const clientNative = "cii"
@@ -222,7 +203,7 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 	runCtx, stopRun := context.WithCancel(ctx)
 	defer stopRun()
 	started := false
-	var elapsed time.Duration
+	var finished atomic.Int64
 
 	for {
 		state, err := readState(ctrl)
@@ -280,11 +261,15 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 				}
 				stopRun()
 				runWG.Wait()
-				elapsed = time.Since(begin)
+				finished.Store(int64(time.Since(begin)))
 				ctrl.Write([]byte{stateTestEnd})
 			}()
 		case stateExchangeResults:
 			runWG.Wait()
+			elapsed := time.Duration(finished.Load())
+			if elapsed <= 0 {
+				elapsed = dur
+			}
 			res := iperfResults{SenderHasRetransmits: -1, Streams: make([]iperfStreamResult, 0, len(streams))}
 			if !reverse {
 				res.SenderHasRetransmits = 0
@@ -306,9 +291,6 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 			var remoteBytes int64
 			for _, s := range remote.Streams {
 				remoteBytes += s.Bytes
-			}
-			if elapsed <= 0 {
-				elapsed = dur
 			}
 			total := remoteBytes
 			if reverse {

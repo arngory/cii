@@ -2,6 +2,7 @@ package bench
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -28,47 +29,62 @@ var ruServers = []IperfServer{
 	{Host: "st.irkutsk.ertelecom.ru", Ports: "5201-5209", Provider: "Ertelecom", Location: "Irkutsk, RU"},
 }
 
-var serverSets = map[string][]IperfServer{"global": globalServers, "ru": ruServers}
-
-func ServerSets() []string { return []string{"global", "ru", "all"} }
-
-func serversFor(set string) []IperfServer {
+func serversFor(list string) ([]IperfServer, error) {
 	var out []IperfServer
-	for _, entry := range strings.Split(set, ",") {
-		entry = strings.TrimSpace(entry)
-		switch key := strings.ToLower(entry); key {
-		case "":
-			out = append(out, globalServers...)
-		case "all":
-			out = append(out, globalServers...)
-			out = append(out, ruServers...)
-		case "global", "ru":
-			out = append(out, serverSets[key]...)
-		default:
-			if s, ok := parseServer(entry); ok {
+	seen := map[string]bool{}
+	add := func(servers ...IperfServer) {
+		for _, s := range servers {
+			if key := s.Host + " " + s.Ports; !seen[key] {
+				seen[key] = true
 				out = append(out, s)
 			}
 		}
 	}
-	return out
+	if strings.TrimSpace(list) == "" {
+		list = "global"
+	}
+	for _, entry := range strings.Split(list, ",") {
+		entry = strings.TrimSpace(entry)
+		switch strings.ToLower(entry) {
+		case "":
+		case "global":
+			add(globalServers...)
+		case "ru":
+			add(ruServers...)
+		case "all":
+			add(globalServers...)
+			add(ruServers...)
+		default:
+			s, err := parseServer(entry)
+			if err != nil {
+				return nil, err
+			}
+			add(s)
+		}
+	}
+	return out, nil
 }
 
-func parseServer(spec string) (IperfServer, bool) {
-	f := strings.Split(spec, ":")
-	if len(f) < 2 || f[0] == "" {
-		return IperfServer{}, false
+func parseServer(spec string) (IperfServer, error) {
+	host, rest, ok := strings.Cut(spec, ":")
+	if strings.HasPrefix(spec, "[") {
+		host, rest, ok = strings.Cut(spec[1:], "]:")
 	}
-	if _, _, err := portRange(f[1]); err != nil {
-		return IperfServer{}, false
+	if !ok || host == "" {
+		return IperfServer{}, fmt.Errorf("bad server %q: expected host:ports[:provider[:location]]", spec)
 	}
-	s := IperfServer{Host: f[0], Ports: f[1], Provider: "custom", Location: f[0]}
-	if len(f) >= 3 && f[2] != "" {
-		s.Provider = f[2]
+	f := strings.SplitN(rest, ":", 3)
+	if _, _, err := portRange(f[0]); err != nil {
+		return IperfServer{}, fmt.Errorf("bad server %q: %w", spec, err)
 	}
-	if len(f) >= 4 && f[3] != "" {
-		s.Location = f[3]
+	s := IperfServer{Host: host, Ports: f[0], Provider: "custom", Location: host, IPv6: true}
+	if len(f) >= 2 && f[1] != "" {
+		s.Provider = f[1]
 	}
-	return s, true
+	if len(f) == 3 && f[2] != "" {
+		s.Location = f[2]
+	}
+	return s, nil
 }
 
 func lookTool(tool string) (string, error) {

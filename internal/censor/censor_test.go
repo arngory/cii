@@ -289,6 +289,20 @@ func TestParseTargetAndRules(t *testing.T) {
 	if !hosts["youtube.com"] || !hosts["*.youtube.com"] || hosts["1.1.1.1"] || hosts["149.154.175.50"] {
 		t.Errorf("dpi rules = %v", hosts)
 	}
+	if got := resolvers[0].forFamily(netx.IPv6).DoH; got != "https://[2606:4700:4700::1111]/dns-query" {
+		t.Errorf("IPv6 DoH endpoint = %q", got)
+	}
+	if got := resolvers[0].forFamily(netx.IPv4).DoH; got != "https://1.1.1.1/dns-query" {
+		t.Errorf("IPv4 DoH endpoint = %q", got)
+	}
+	for _, fam := range []netx.Family{netx.IPv4, netx.IPv6} {
+		for _, rs := range resolversFor(fam) {
+			req, err := http.NewRequest(http.MethodPost, rs.DoH, nil)
+			if err != nil || req.URL.Hostname() == "" || req.URL.Port() != "" || req.URL.Path != "/dns-query" {
+				t.Errorf("%s %s DoH endpoint %q: %v", rs.Name, fam, rs.DoH, err)
+			}
+		}
+	}
 	all := Rules(Options{})
 	if len(all) <= len(rules) {
 		t.Error("all-mode rules not larger than dpi rules")

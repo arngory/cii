@@ -2,6 +2,8 @@ package bench
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/arngory/cii/internal/ledger"
@@ -36,13 +38,24 @@ type Report struct {
 
 const cloudflareSpeedHost = "speed.cloudflare.com"
 
+func (o Options) Validate() error {
+	if o.Duration < time.Second || o.Duration > time.Minute || o.Duration%time.Second != 0 {
+		return errors.New("--duration must be a whole number of seconds between 1s and 1m")
+	}
+	if _, err := serversFor(o.Servers); err != nil {
+		return fmt.Errorf("--servers: %w", err)
+	}
+	return nil
+}
+
 func Rules(opts Options) []netx.Rule {
 	var rules []netx.Rule
 	if opts.Net {
 		rules = append(rules, netx.Rule{Module: Module, Pattern: cloudflareSpeedHost, Purpose: Module + ": Cloudflare speed test"})
 	}
 	if opts.Iperf {
-		for _, s := range serversFor(opts.Servers) {
+		servers, _ := serversFor(opts.Servers)
+		for _, s := range servers {
 			rules = append(rules, netx.Rule{Module: Module, Pattern: s.Host, Purpose: Module + ": iperf3 " + s.Provider + ", " + s.Location})
 		}
 	}
@@ -109,9 +122,9 @@ func runFio(ctx context.Context, rep *Report, opts Options) *FioReport {
 }
 
 func runIperf(ctx context.Context, env Env, rep *Report, opts Options, progress func(string)) []IperfRun {
-	servers := serversFor(opts.Servers)
-	if len(servers) == 0 {
-		rep.Notes = append(rep.Notes, "iperf3: no servers match "+opts.Servers)
+	servers, err := serversFor(opts.Servers)
+	if err != nil {
+		rep.Notes = append(rep.Notes, "iperf3: "+err.Error())
 		return nil
 	}
 	if env.Net.Proxied() {
