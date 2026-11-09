@@ -16,30 +16,30 @@ import (
 var rdapHosts = []string{"rdap.arin.net", "rdap.apnic.net", "rdap.lacnic.net", "rdap.registro.br", "rdap.afrinic.net"}
 
 var Checks = []Check{
-	{Service: "RDAP (RIR)", Group: GeoIP, ByIP: true, URL: "https://rdap.db.ripe.net/ip/{ip}", ExtraHosts: rdapHosts, Custom: rdap},
-	{Service: "ipinfo.io", Group: GeoIP, ByIP: true, URL: "https://ipinfo.io/{ip}/json", Extract: jsonPath("country"),
+	{Service: "RDAP (RIR)", Group: GeoIP, URL: "https://rdap.db.ripe.net/ip/{ip}", ExtraHosts: rdapHosts, Custom: rdap},
+	{Service: "ipinfo.io", Group: GeoIP, URL: "https://ipinfo.io/{ip}/json", Extract: jsonPath("country"),
 		Authorize: func(req *http.Request, k config.Keys) {
 			if k.IPinfoToken != "" {
 				req.Header.Set("Authorization", "Bearer "+k.IPinfoToken)
 			}
 		}},
-	{Service: "ipapi.co", Group: GeoIP, ByIP: true, URL: "https://ipapi.co/{ip}/json/", Extract: jsonPath("country_code")},
-	{Service: "ifconfig.co", Group: GeoIP, ByIP: true, URL: "https://ifconfig.co/country-iso?ip={ip}", Extract: wholeBody},
-	{Service: "ip2location.io", Group: GeoIP, ByIP: true, URL: "https://api.ip2location.io/?ip={ip}", Extract: jsonPath("country_code"),
+	{Service: "ipapi.co", Group: GeoIP, URL: "https://ipapi.co/{ip}/json/", Extract: jsonPath("country_code")},
+	{Service: "ifconfig.co", Group: GeoIP, URL: "https://ifconfig.co/country-iso?ip={ip}", Extract: wholeBody},
+	{Service: "ip2location.io", Group: GeoIP, URL: "https://api.ip2location.io/?ip={ip}", Extract: jsonPath("country_code"),
 		Authorize: func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IP2LocationKey) }},
-	{Service: "country.is", Group: GeoIP, ByIP: true, URL: "https://api.country.is/{ip}", Extract: jsonPath("country")},
-	{Service: "geojs.io", Group: GeoIP, ByIP: true, URL: "https://get.geojs.io/v1/ip/country.json?ip={ip}", Extract: jsonPath("[0].country")},
-	{Service: "ipbase.com", Group: GeoIP, ByIP: true, URL: "https://api.ipbase.com/v2/info?ip={ip}", Extract: jsonPath("data.location.country.alpha2")},
-	{Service: "ipquery.io", Group: GeoIP, ByIP: true, URL: "https://api.ipquery.io/{ip}", Extract: jsonPath("location.country_code")},
-	{Service: "ipwho.is", Group: GeoIP, ByIP: true, URL: "https://ipwho.is/{ip}", Extract: jsonPath("country_code")},
-	{Service: "ip-api.com", Group: GeoIP, ByIP: true, Transport: netx.IPv4, URL: "http://ip-api.com/json/{ip}?fields=status,countryCode", Extract: jsonPath("countryCode")},
-	{Service: "ipregistry.co", Group: GeoIP, ByIP: true, URL: "https://api.ipregistry.co/{ip}", Extract: jsonPath("location.country.code"),
+	{Service: "country.is", Group: GeoIP, URL: "https://api.country.is/{ip}", Extract: jsonPath("country")},
+	{Service: "geojs.io", Group: GeoIP, URL: "https://get.geojs.io/v1/ip/country.json?ip={ip}", Extract: jsonPath("[0].country")},
+	{Service: "ipbase.com", Group: GeoIP, URL: "https://api.ipbase.com/v2/info?ip={ip}", Extract: jsonPath("data.location.country.alpha2")},
+	{Service: "ipquery.io", Group: GeoIP, URL: "https://api.ipquery.io/{ip}", Extract: jsonPath("location.country_code")},
+	{Service: "ipwho.is", Group: GeoIP, URL: "https://ipwho.is/{ip}", Extract: jsonPath("country_code")},
+	{Service: "ip-api.com", Group: GeoIP, Transport: netx.IPv4, URL: "http://ip-api.com/json/{ip}?fields=status,countryCode", Extract: jsonPath("countryCode")},
+	{Service: "ipregistry.co", Group: GeoIP, URL: "https://api.ipregistry.co/{ip}", Extract: jsonPath("location.country.code"),
 		KeyOK:     func(k config.Keys) bool { return k.IPRegistryKey != "" },
 		Authorize: func(req *http.Request, k config.Keys) { setQuery(req, "key", k.IPRegistryKey) }},
-	{Service: "geoapify.com", Group: GeoIP, ByIP: true, URL: "https://api.geoapify.com/v1/ipinfo?ip={ip}", Extract: jsonPath("country.iso_code"),
+	{Service: "geoapify.com", Group: GeoIP, URL: "https://api.geoapify.com/v1/ipinfo?ip={ip}", Extract: jsonPath("country.iso_code"),
 		KeyOK:     func(k config.Keys) bool { return k.GeoapifyKey != "" },
 		Authorize: func(req *http.Request, k config.Keys) { setQuery(req, "apiKey", k.GeoapifyKey) }},
-	{Service: "MaxMind GeoLite", Group: GeoIP, ByIP: true, URL: "https://geolite.info/geoip/v2.1/country/{ip}", Extract: jsonPath("country.iso_code"),
+	{Service: "MaxMind GeoLite", Group: GeoIP, URL: "https://geolite.info/geoip/v2.1/country/{ip}", Extract: jsonPath("country.iso_code"),
 		KeyOK: func(k config.Keys) bool { return k.MaxMindAccountID != "" && k.MaxMindLicenseKey != "" },
 		Authorize: func(req *http.Request, k config.Keys) {
 			req.SetBasicAuth(k.MaxMindAccountID, k.MaxMindLicenseKey)

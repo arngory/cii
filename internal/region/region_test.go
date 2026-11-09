@@ -117,7 +117,7 @@ func TestRunUsesPolicyKeysAndTransport(t *testing.T) {
 	}))
 	defer srv.Close()
 	checks := []Check{
-		{Service: "geo", Group: GeoIP, ByIP: true, URL: srv.URL + "/geo/{ip}", Extract: jsonPath("country"),
+		{Service: "geo", Group: GeoIP, URL: srv.URL + "/geo/{ip}", Extract: jsonPath("country"),
 			Authorize: func(req *http.Request, k config.Keys) {
 				req.Header.Set("Authorization", "Bearer "+k.IPinfoToken)
 				setQuery(req, "key", k.IP2LocationKey)

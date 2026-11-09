@@ -57,9 +57,7 @@ type Check struct {
 	Group       Group
 	Method      string
 	URL         string
-	Header      map[string]string
 	ExtraHosts  []string
-	ByIP        bool
 	Transport   netx.Family
 	NoRedirect  bool
 	BlockStatus int
@@ -144,9 +142,6 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 	req, err := http.NewRequestWithContext(ctx, method, strings.ReplaceAll(c.URL, "{ip}", ip.String()), nil)
 	if err != nil {
 		return fail(err.Error())
-	}
-	for k, v := range c.Header {
-		req.Header.Set(k, v)
 	}
 	if c.Authorize != nil {
 		c.Authorize(req, env.Keys)
