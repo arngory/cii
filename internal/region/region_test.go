@@ -71,6 +71,25 @@ func TestSummarizeWeightsGroupsEqually(t *testing.T) {
 	}
 }
 
+func TestYouTubeFallbackCountry(t *testing.T) {
+	unlisted := []probe.Result{
+		{Group: GeoIP, Service: "a", Status: probe.OK, Country: "XX"},
+		{Group: Platform, Service: "Reddit", Status: probe.OK, Country: "XX"},
+		{Group: Platform, Service: "YouTube", Status: probe.OK, Country: "US"},
+	}
+	s := Summarize(unlisted)
+	if strings.Join(s.Verdict, ",") != "XX" || len(s.Attention) != 0 || s.Results[2].Status != probe.Unknown {
+		t.Fatalf("unlisted country summary = %+v", s)
+	}
+	us := Summarize([]probe.Result{
+		{Group: GeoIP, Service: "a", Status: probe.OK, Country: "US"},
+		{Group: Platform, Service: "YouTube", Status: probe.OK, Country: "US"},
+	})
+	if strings.Join(us.Verdict, ",") != "US" || us.Results[1].Status != probe.OK {
+		t.Fatalf("US summary = %+v", us)
+	}
+}
+
 func TestSelect(t *testing.T) {
 	has := func(cs []probe.Check, name string) bool {
 		for _, c := range cs {
