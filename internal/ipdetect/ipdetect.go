@@ -58,15 +58,13 @@ type Options struct {
 
 func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address {
 	var res Address
-	if o.Source.IsValid() {
-		if o.Source.Is4() == (f == netx.IPv4) && netx.IsPublic(o.Source) {
-			res.Interface = []netip.Addr{o.Source}
-		}
-	} else if addrs, err := netx.InterfaceAddrs(o.Iface); err == nil {
-		for _, a := range addrs {
-			if a.Is4() == (f == netx.IPv4) && netx.IsPublic(a) {
-				res.Interface = append(res.Interface, a)
-			}
+	candidates := []netip.Addr{o.Source}
+	if o.Iface != "" || !o.Source.IsValid() {
+		candidates, _ = netx.InterfaceAddrs(o.Iface)
+	}
+	for _, a := range candidates {
+		if a.IsValid() && a.Is4() == (f == netx.IPv4) && netx.IsPublic(a) {
+			res.Interface = append(res.Interface, a)
 		}
 	}
 	if o.Offline {
