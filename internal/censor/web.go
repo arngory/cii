@@ -101,12 +101,15 @@ func isBlockPage(loc string) bool {
 		}
 	}
 	if ip, err := netip.ParseAddr(host); err == nil {
-		return bogus([]string{ip.String()})
-	}
-	for _, label := range strings.Split(host, ".") {
-		for _, m := range blockPageMarkers {
-			if strings.Contains(label, m) {
-				return true
+		if bogus([]string{ip.String()}) {
+			return true
+		}
+	} else {
+		for _, label := range strings.Split(host, ".") {
+			for _, m := range blockPageMarkers {
+				if strings.Contains(label, m) {
+					return true
+				}
 			}
 		}
 	}

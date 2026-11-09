@@ -250,6 +250,8 @@ func TestClassifyHTTP(t *testing.T) {
 		{outcome{Status: 301, Location: "https://www.example.com/"}, probe.Yes, "redirected"},
 		{outcome{Status: 302, Location: "http://warning.rt.ru/"}, probe.No, "block page"},
 		{outcome{Status: 302, Location: "http://10.1.1.1/blocked"}, probe.No, "block page"},
+		{outcome{Status: 302, Location: "http://93.184.216.34/zapret"}, probe.No, "block page"},
+		{outcome{Status: 302, Location: "http://93.184.216.34/"}, probe.Unknown, "redirected"},
 		{outcome{Status: 302, Location: "https://other.test/"}, probe.Unknown, "redirected"},
 		{outcome{Status: 403}, probe.No, "denied"},
 		{outcome{Status: 451}, probe.No, "legal"},

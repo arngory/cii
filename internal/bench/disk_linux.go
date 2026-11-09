@@ -21,11 +21,3 @@ func openDirect(path string) (*os.File, bool, error) {
 	f, err = os.OpenFile(path, exclusiveFlags, 0o600)
 	return f, false, err
 }
-
-func freeSpace(dir string) (uint64, error) {
-	var st unix.Statfs_t
-	if err := unix.Statfs(dir, &st); err != nil {
-		return 0, err
-	}
-	return st.Bavail * uint64(st.Bsize), nil
-}

@@ -118,7 +118,7 @@ func familyOf(a netip.Addr) string {
 func query(ctx context.Context, c *http.Client, raw string, f Format) (netip.Addr, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
-		return netip.Addr{}, err
+		return netip.Addr{}, netx.Redact(err)
 	}
 	resp, err := c.Do(req)
 	if err != nil {

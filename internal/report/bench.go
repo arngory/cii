@@ -1,6 +1,7 @@
 package report
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"strconv"
@@ -63,7 +64,7 @@ func systemParts(s bench.System) []gcell {
 		add(s.OS)
 	}
 	add(s.Arch)
-	cpu := strconv.Itoa(s.CPUs) + " × " + firstNonEmpty(s.CPUModel, "CPU")
+	cpu := strconv.Itoa(s.CPUs) + " × " + cmp.Or(s.CPUModel, "CPU")
 	if s.AESNI {
 		cpu += ", AES-NI"
 	}
@@ -212,13 +213,6 @@ func writeBenchDetailed(w io.Writer, c paint, b *bench.Report) {
 		}
 		fmt.Fprintln(w)
 	}
-}
-
-func firstNonEmpty(a, b string) string {
-	if a != "" {
-		return a
-	}
-	return b
 }
 
 func fmtBytes(b uint64) string {

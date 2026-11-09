@@ -107,15 +107,12 @@ func byRedirect(blocked *regexp.Regexp, forbiddenIsNo bool) func([]*probe.Respon
 	}
 }
 
-func byRedirectMarker(blocked *regexp.Regexp, okMarker string, country func(*probe.Response) string, blockedCodes ...int) func([]*probe.Response) []probe.Result {
+func byRedirectMarker(blocked *regexp.Regexp, okMarker string, country func(*probe.Response) string) func([]*probe.Response) []probe.Result {
 	return func(rs []*probe.Response) []probe.Result {
 		r := rs[0]
 		loc := r.Header.Get("Location")
 		if loc != "" && blocked.MatchString(loc) {
 			return no("redirected to " + probe.Truncate(loc, 60))
-		}
-		if slices.Contains(blockedCodes, r.Status) {
-			return no("HTTP " + strconv.Itoa(r.Status))
 		}
 		switch {
 		case redirected(r):

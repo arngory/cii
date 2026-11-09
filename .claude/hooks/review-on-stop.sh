@@ -55,6 +55,7 @@ out=$(CII_REVIEW_HOOK=1 claude -p "$prompt
 The diff under review is in $diff_file (base $base, plus untracked files)." \
   --settings '{"disableAllHooks": true}' \
   --allowedTools "Read" "Grep" "Glob" "Bash(go build *)" "Bash(go vet *)" "Bash(go test *)" "Bash(gofmt *)" "Bash(git diff *)" "Bash(git log *)" "Bash(git show *)" \
+  --disallowedTools "Agent" "Task" "Workflow" \
   --output-format text 2>&1) || allow "review hook: reviewer failed to run, review skipped"
 
 verdict=$(printf '%s\n' "$out" | grep -Eo 'VERDICT: (CLEAN|ISSUES)' | tail -1 || true)

@@ -93,7 +93,15 @@ func IperfTest(ctx context.Context, n *netx.Net, s IperfServer, dur time.Duratio
 		run.Error = "no IPv6 endpoint"
 		return run
 	}
-	lo, hi, err := portRange(s.Ports)
+	return tryPorts(ctx, run, time.Second, func(err error) bool {
+		return errors.Is(err, errBusy) || errors.Is(err, errAccessDenied) || netx.IsRefused(err)
+	}, func(port int, reverse bool) (float64, float64, error) {
+		return iperfOnce(ctx, n, s.Host, port, dur, reverse)
+	})
+}
+
+func tryPorts(ctx context.Context, run IperfRun, pause time.Duration, retry func(error) bool, once func(port int, reverse bool) (float64, float64, error)) IperfRun {
+	lo, hi, err := portRange(run.Server.Ports)
 	if err != nil {
 		run.Error = err.Error()
 		return run
@@ -104,17 +112,17 @@ func IperfTest(ctx context.Context, n *netx.Net, s IperfServer, dur time.Duratio
 			run.Error = ctx.Err().Error()
 			return run
 		}
-		send, lat, err := iperfOnce(ctx, n, s.Host, port, dur, false)
+		send, lat, err := once(port, false)
 		if err != nil {
 			lastErr = err
-			if errors.Is(err, errBusy) || errors.Is(err, errAccessDenied) || netx.IsRefused(err) {
+			if retry(err) {
 				continue
 			}
 			break
 		}
 		run.Port, run.SendMbps, run.LatencyMs = port, send, lat
-		time.Sleep(time.Second)
-		recv, _, err := iperfOnce(ctx, n, s.Host, port, dur, true)
+		time.Sleep(pause)
+		recv, _, err := once(port, true)
 		if err != nil {
 			run.Error = "receive: " + err.Error()
 			return run

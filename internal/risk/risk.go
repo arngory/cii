@@ -249,7 +249,8 @@ func evalIPAPIis(rs []*probe.Response) []probe.Result {
 			CountryCode string `json:"country_code"`
 		} `json:"location"`
 	}
-	if r.Status >= 400 || json.Unmarshal(r.Body, &d) != nil || d.Error != "" {
+	err := json.Unmarshal(r.Body, &d)
+	if r.Status >= 400 || err != nil || d.Error != "" {
 		return failure(r, d.Error)
 	}
 	if d.IsDatacenter == nil {

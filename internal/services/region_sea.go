@@ -25,19 +25,7 @@ var eossBGlobalCode = probe.BodyRegex(`"code"\s*:\s*(-?\d+)`)
 func eossBGlobal(service, episode string) probe.Check {
 	return probe.Check{Service: service,
 		Requests: probe.Get("https://api.bilibili.tv/intl/gateway/web/playurl?s_locale=en_US&platform=web&ep_id=" + episode),
-		Eval: func(rs []*probe.Response) []probe.Result {
-			r := rs[0]
-			switch code := eossBGlobalCode(r); code {
-			case "0":
-				return yes("")
-			case "10003003", "10004001":
-				return no("")
-			case "":
-				return unknown(r)
-			default:
-				return []probe.Result{{Status: probe.Unknown, Reason: "code " + probe.Truncate(code, 16)}}
-			}
-		}}
+		Eval:     jkhtCode(eossBGlobalCode, "0", "10003003 10004001")}
 }
 
 var eossMeWatchCode = probe.BodyRegex(`"code"\s*:\s*(\d+)`)

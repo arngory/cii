@@ -295,10 +295,7 @@ func wide(g probe.Group) bool {
 }
 
 func detailOf(r probe.Result) string {
-	switch {
-	case r.Detail != "" && r.Status != probe.Yes:
-		return r.Detail
-	case r.Detail != "" && (r.Group == risk.Reputation || r.Group == risk.Mail || r.Group == risk.Network):
+	if r.Detail != "" && (r.Status != probe.Yes || wide(r.Group)) {
 		return r.Detail
 	}
 	return ""

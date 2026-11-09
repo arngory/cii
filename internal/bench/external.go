@@ -44,38 +44,10 @@ func SystemIperf3(ctx context.Context, env Env, path string, s IperfServer, dur 
 		run.Error = err.Error()
 		return run
 	}
-	lo, hi, err := portRange(s.Ports)
-	if err != nil {
-		run.Error = err.Error()
-		return run
-	}
-	var lastErr error
-	for port := lo; port <= hi; port++ {
-		if ctx.Err() != nil {
-			run.Error = ctx.Err().Error()
-			return run
-		}
-		send, err := iperf3Once(ctx, env, path, s, port, dur, false)
-		if err != nil {
-			lastErr = err
-			if isIperfRetryable(err) {
-				continue
-			}
-			break
-		}
-		run.Port, run.SendMbps = port, send
-		recv, err := iperf3Once(ctx, env, path, s, port, dur, true)
-		if err != nil {
-			run.Error = "receive: " + err.Error()
-			return run
-		}
-		run.RecvMbps = recv
-		return run
-	}
-	if lastErr != nil {
-		run.Error = lastErr.Error()
-	}
-	return run
+	return tryPorts(ctx, run, 0, isIperfRetryable, func(port int, reverse bool) (float64, float64, error) {
+		mbps, err := iperf3Once(ctx, env, path, s, port, dur, reverse)
+		return mbps, 0, err
+	})
 }
 
 func isIperfRetryable(err error) bool {
