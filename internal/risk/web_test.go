@@ -90,7 +90,7 @@ func TestScamalytics(t *testing.T) {
 	res := one(t, evalScamalytics(resp(200, scamPage)))
 	f := res.Facts
 	if res.Status != probe.No || res.Country != "DE" || !strings.Contains(res.Detail, "blacklisted") || !strings.Contains(res.Detail, "lists: Spamhaus") ||
-		*f.Score != 37 || f.Usage != "isp" || !f.Flags[probe.Abuser] || !f.Flags[probe.Hosting] || f.Flags[probe.VPN] || len(f.Flags) != 6 {
+		*f.Score != 37 || *f.Level != 2 || f.Usage != "isp" || !f.Flags[probe.Abuser] || !f.Flags[probe.Hosting] || f.Flags[probe.VPN] || len(f.Flags) != 6 {
 		t.Errorf("scamalytics = %+v facts %+v", res, f)
 	}
 	clean := strings.NewReplacer(`"risk yes">Yes`, `"risk no">No`, `"risk":"medium"`, `"risk":"low"`).Replace(scamPage)

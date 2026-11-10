@@ -160,6 +160,7 @@ func evalScamalytics(rs []*probe.Response) []probe.Result {
 	v.note(risk != "", "risk "+risk)
 	v.note(len(lists) > 0, "lists: "+strings.Join(lists, ", "))
 	v.facts.SetScore(float64(score))
+	v.facts.SetLevelName(risk)
 	if cm := scamConn.FindSubmatch(r.Body); cm != nil {
 		v.facts.SetUsage(string(cm[1]))
 	}

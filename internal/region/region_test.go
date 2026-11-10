@@ -1,6 +1,7 @@
 package region
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 
@@ -142,5 +143,29 @@ func TestRegistryDoesNotVote(t *testing.T) {
 	})
 	if strings.Join(s.Verdict, ",") != "DE" || len(s.Attention) != 0 {
 		t.Fatalf("summary = %+v", s)
+	}
+}
+
+func TestRIPEstatAndFastly(t *testing.T) {
+	reg := `{"data":{"located_resources":[{"resource":"203.0.112.0/20","location":"DE"}]}}`
+	rs := ripestat([]*probe.Response{
+		{Status: 200, Body: []byte(reg)},
+		{Status: 200, Body: []byte(`{"data":{"resource":"203.0.112.0/20","announced":true,"asns":[{"asn":64500,"holder":"EXAMPLE-AS Example Net"},{"asn":64501,"holder":"x"}]}}`)},
+	})
+	if len(rs) != 1 || rs[0].Country != "DE" || rs[0].Detail != "AS64500 EXAMPLE-AS Example Net (+1 origins) · 203.0.112.0/20" {
+		t.Errorf("ripestat = %+v", rs)
+	}
+	quiet := ripestat([]*probe.Response{{Status: 200, Body: []byte(reg)}, {Status: 200, Body: []byte(`{"data":{"announced":false}}`)}})
+	if quiet[0].Detail != "not announced" {
+		t.Errorf("not announced = %+v", quiet)
+	}
+	h := http.Header{}
+	h.Set("X-Served-By", "cache-sjc10083-SJC, cache-fra-eddf8230066-FRA")
+	e := fastlyEdge([]*probe.Response{{Status: 200, Header: h}})
+	if e[0].IATA != "FRA" || e[0].Country != "DE" || e[0].Node != "fra-eddf8230066-FRA" {
+		t.Errorf("fastly = %+v", e)
+	}
+	if e := fastlyEdge([]*probe.Response{{Status: 503, Header: http.Header{}}}); e[0].Status != probe.Failed {
+		t.Errorf("fastly failure = %+v", e)
 	}
 }

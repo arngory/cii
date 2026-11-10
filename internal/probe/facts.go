@@ -22,6 +22,7 @@ type Facts struct {
 	Usage   string        `json:"usage,omitempty"`
 	Company string        `json:"company,omitempty"`
 	Score   *int          `json:"score,omitempty"`
+	Level   *int          `json:"level,omitempty"`
 	Flags   map[Flag]bool `json:"flags,omitempty"`
 }
 
@@ -43,6 +44,30 @@ func (f *Facts) SetScore(v float64) {
 	f.Score = &s
 }
 
+func (f *Facts) SetLevel(level int) {
+	l := min(max(level, 0), MaxLevel)
+	f.Level = &l
+}
+
+const MaxLevel = 4
+
+func LevelByThresholds(score float64, upper ...float64) int {
+	for i, u := range upper {
+		if score < u {
+			return i
+		}
+	}
+	return len(upper)
+}
+
+var levelNames = map[string]int{"very low": 0, "low": 1, "medium": 2, "elevated": 2, "high": 3, "very high": 4}
+
+func (f *Facts) SetLevelName(name string) {
+	if l, ok := levelNames[strings.ToLower(strings.TrimSpace(name))]; ok {
+		f.SetLevel(l)
+	}
+}
+
 func (f *Facts) SetUsage(raw string) {
 	if u := NormalizeUsage(raw); u != "" {
 		f.Usage = u
@@ -56,7 +81,7 @@ func (f *Facts) SetCompany(raw string) {
 }
 
 func (f *Facts) OrNil() *Facts {
-	if f == nil || f.Usage == "" && f.Company == "" && f.Score == nil && len(f.Flags) == 0 {
+	if f == nil || f.Usage == "" && f.Company == "" && f.Score == nil && f.Level == nil && len(f.Flags) == 0 {
 		return nil
 	}
 	return f

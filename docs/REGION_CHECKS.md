@@ -30,6 +30,7 @@
 | ipbase.com | `api.ipbase.com/v2/info?ip=` | — | бесплатный лимит без ключа |
 | ipquery.io | `api.ipquery.io/{ip}` | — | в том же ответе — флаги VPN, Tor, прокси, дата-центр, мобильная сеть и оценка риска (см. [RISK_CHECKS.md](RISK_CHECKS.md#профиль-адреса)) |
 | ipwho.is | `ipwho.is/{ip}` | — | бесплатно для некоммерческого использования |
+| DB-IP | `api.db-ip.com/v2/free/{ip}` | — | бесплатный API DB-IP без ключа, с суточным лимитом |
 | ip-api.com | `http://ip-api.com/json/{ip}?fields=status,countryCode,proxy,hosting,mobile` | — | бесплатно для некоммерческого использования, только HTTP и только по IPv4; для IPv6-адреса запрос идёт по IPv4; в том же ответе — флаги прокси, хостинга и мобильной сети |
 | ipregistry.co | `api.ipregistry.co/{ip}` | `ipregistry_key` — **обязательно** | без вашего ключа не запускается; в том же ответе — тип подключения и компании, флаги безопасности |
 | geoapify.com | `api.geoapify.com/v1/ipinfo?ip=` | `geoapify_key` — **обязательно** | без вашего ключа не запускается |
@@ -39,6 +40,7 @@
 
 | Сервис | Запрос | Ключ | Заметки |
 |---|---|---|---|
+| RIPEstat | `stat.ripe.net/data/rir-stats-country` и `…/prefix-overview` (`?resource={ip}&sourceapp=cii`) | — | публичный Data API RIPE NCC. Страна — по статистике всех пяти RIR; из второго запроса — анонсируемый префикс и ASN, они показываются строкой `Route` в панели «IP quality» (с `--mask` префикс маскируется). Если адрес не анонсируется, так и пишется |
 | RDAP (RIR) | `rdap.db.ripe.net/ip/{ip}` с редиректом к нужному RIR | — | страна регистрации, а не геолокация; для ARIN — из адреса регистранта. Разрешены RIPE, ARIN, APNIC, LACNIC, registro.br, AFRINIC; редирект к другим NIR блокируется политикой |
 
 ### Platforms (по входящему соединению)
@@ -63,6 +65,7 @@
 |---|---|---|
 | Cloudflare | тот же `cdn-cgi/trace` | `colo=` |
 | YouTube | `redirector.googlevideo.com/report_mapping?di=no` | код из имени узла (`yyz10s25` → YYZ) |
+| Fastly | `HEAD www.fastly.com/robots.txt` | последний узел из заголовка `X-Served-By` (`cache-fra-…-FRA` → FRA) |
 
 ## Уровень B — только с `--extended`
 

@@ -160,6 +160,9 @@ func TestIPData(t *testing.T) {
 
 func TestReputationFacts(t *testing.T) {
 	pc := one(t, evalProxyCheck(resp(200, `{"status":"ok","203.0.113.7":{"proxy":"no","type":"Business","risk":12,"isocode":"DE"}}`))).Facts
+	if *pc.Level != 1 {
+		t.Errorf("proxycheck level = %d", *pc.Level)
+	}
 	if pc.Usage != "business" || *pc.Score != 12 || pc.Flags[probe.Hosting] || pc.Flags[probe.VPN] || len(pc.Flags) != 4 {
 		t.Errorf("proxycheck facts = %+v", pc)
 	}
@@ -169,6 +172,9 @@ func TestReputationFacts(t *testing.T) {
 	}
 	ia := one(t, evalIPAPIis(resp(200, `{"is_datacenter":true,"is_vpn":false,"is_proxy":false,"is_tor":false,"is_abuser":true,"is_crawler":false,"is_mobile":false,
 		"company":{"type":"hosting","abuser_score":"0.0123 (Low)"},"asn":{"type":"isp"},"location":{"country_code":"DE"}}`))).Facts
+	if *ia.Level != 1 {
+		t.Errorf("ipapi.is level = %d", *ia.Level)
+	}
 	if ia.Usage != "isp" || ia.Company != "hosting" || *ia.Score != 1 || !ia.Flags[probe.Hosting] || !ia.Flags[probe.Abuser] || len(ia.Flags) != 6 {
 		t.Errorf("ipapi.is facts = %+v", ia)
 	}
@@ -177,6 +183,9 @@ func TestReputationFacts(t *testing.T) {
 		t.Errorf("AbuseIPDB facts = %+v", ab)
 	}
 	qs := one(t, evalIPQS(resp(200, `{"success":true,"fraud_score":80,"country_code":"DE","proxy":true,"vpn":true,"tor":false,"bot_status":true,"connection_type":"Residential","mobile":false}`))).Facts
+	if *qs.Level != 2 || *ab.Level != 2 {
+		t.Errorf("IPQS level = %d, AbuseIPDB level = %d", *qs.Level, *ab.Level)
+	}
 	if qs.Usage != "isp" || *qs.Score != 80 || !qs.Flags[probe.VPN] || qs.Flags[probe.Proxy] || !qs.Flags[probe.Bot] {
 		t.Errorf("IPQS facts = %+v", qs)
 	}

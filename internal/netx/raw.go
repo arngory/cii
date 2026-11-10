@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
+	"strconv"
 	"strings"
 )
 
@@ -81,4 +83,42 @@ func (n *Net) LookupHost(ctx context.Context, module, name string) ([]string, er
 		n.ledger.Error(module, rule.Purpose, ledgerHost(rule, name), "dns")
 	}
 	return addrs, err
+}
+
+func ReverseName(ip netip.Addr) string {
+	ip = ip.Unmap()
+	b := ip.AsSlice()
+	var parts []string
+	if ip.Is4() {
+		for i := len(b) - 1; i >= 0; i-- {
+			parts = append(parts, strconv.Itoa(int(b[i])))
+		}
+		return strings.Join(parts, ".")
+	}
+	const hex = "0123456789abcdef"
+	for i := len(b) - 1; i >= 0; i-- {
+		parts = append(parts, string(hex[b[i]&0xf]), string(hex[b[i]>>4]))
+	}
+	return strings.Join(parts, ".")
+}
+
+func ReverseZone(ip netip.Addr) string {
+	if ip.Unmap().Is4() {
+		return "in-addr.arpa"
+	}
+	return "ip6.arpa"
+}
+
+func (n *Net) LookupAddr(ctx context.Context, module string, ip netip.Addr) ([]string, error) {
+	name := ReverseName(ip) + "." + ReverseZone(ip)
+	rule, err := n.allow(module, name, "dns")
+	if err != nil {
+		return nil, err
+	}
+	names, err := net.DefaultResolver.LookupAddr(ctx, ip.Unmap().String())
+	var dnsErr *net.DNSError
+	if err != nil && !(errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
+		n.ledger.Error(module, rule.Purpose, ledgerHost(rule, name), "dns")
+	}
+	return names, err
 }

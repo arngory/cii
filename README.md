@@ -53,43 +53,46 @@ make build
 cii 0.1.0
 ┌─ IP quality · IPv4 ──────────────────────────────────────┐ ┌─ Region & services ───────────────────────────────────────────────────────────────────┐
 │ Address  203.0.113.7                                     │ │ Region  DE Germany · GeoIP 3/3 · platforms 1/2 · ChatGPT* says NL                     │
-│ ASN      AS3320 Deutsche Telekom AG                      │ │ CDN     Cloudflare FRA DE                                                             │
+│ ASN      AS3320 Deutsche Telekom AG                      │ │ CDN     Cloudflare FRA DE · Fastly FRA DE                                             │
 │ Place    DE Germany, Frankfurt am Main                   │ │                                                                                       │
-│ Registry DE  ✓ geo-consistent                            │ │ Streaming  ✓ Netflix             ✗ Disney+*                                           │
-│                                                          │ │            ✓ Prime Video         ✓ YouTube Premium*                                   │
-│ Type ─────────────────────────────────────────────────── │ │ Web        ✓ Reddit              ⊘ Wikipedia editing                                  │
-│                   usage  company                         │ │ AI         ✓ OpenAI API          ✓ Grok API                                           │
-│ proxycheck.io     BIZ    —                               │ │            ✓ Anthropic API       ? Mistral API                                        │
-│ ipinfo.io*        ISP    ISP                             │ └───────────────────────────────────────────────────────────────────────────────────────┘
-│ ip2location.com*  ISP    —                               │ ┌─ Reputation lists & mail ─────────────────────────────────────────────────────────────┐
-│ IPQualityScore    MOB    —                               │ │ DNSBL  ✓ bl.spamcop.net                                                               │
-│ AbuseIPDB         ISP    —                               │ │        ✓ psbl.surriel.com                                                             │
-│                                                          │ │        ? zen.spamhaus.org refused: public resolver                                    │
-│ Score ────────────────────────────────────────────────── │ │ Mail   ✗ Outbound SMTP (25) port 25 filtered                                          │
-│ ipquery.io         0 ■□□□□ very low                      │ └───────────────────────────────────────────────────────────────────────────────────────┘
-│ proxycheck.io      0 ■□□□□ very low                      │ ┌─ Censorship ──────────────────────────────────────────────────────────────────────────┐
-│ Scamalytics*       4 ■□□□□ very low                      │ │ DNS       ✓ 2                                                                         │
-│ ip2location.com*   0 ■□□□□ very low                      │ │ Telegram  ✗ 1                                                                         │
-│ IPQualityScore    62 ■■■■□ high                          │ │                                                                                       │
-│ AbuseIPDB          0 ■□□□□ very low                      │ │ ✗ Telegram: DC2 reset                                                                 │
+│ Route    AS3320 DTAG Deutsche Telekom AG · 203.0.112.0/… │ │ Streaming  ✓ Netflix             ✗ Disney+*                                           │
+│ PTR      p203007.dip0.example.net                        │ │            ✓ Prime Video         ✓ YouTube Premium*                                   │
+│ Registry DE  ✓ geo-consistent                            │ │ Web        ✓ Reddit              ⊘ Wikipedia editing                                  │
+│                                                          │ │ AI         ✓ OpenAI API          ✓ Grok API                                           │
+│ Type ─────────────────────────────────────────────────── │ │            ✓ Anthropic API       ? Mistral API                                        │
+│                   usage  company                         │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ proxycheck.io    [BIZ ]  —                               │ ┌─ Reputation lists & mail ─────────────────────────────────────────────────────────────┐
+│ ipinfo.io*       [ISP ] [ISP ]                           │ │ DNSBL  ✓ bl.spamcop.net                                                               │
+│ ip2location.com* [ISP ]  —                               │ │        ✓ psbl.surriel.com                                                             │
+│ IPQualityScore   [MOB ]  —                               │ │        ? zen.spamhaus.org refused: public resolver                                    │
+│ AbuseIPDB        [ISP ]  —                               │ │ Mail   ✗ Outbound SMTP (25) port 25 filtered                                          │
 │                                                          │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ Score ────────────────────────────────────────────────── │ ┌─ Censorship ──────────────────────────────────────────────────────────────────────────┐
+│ ipquery.io         0 ■□□□□ very low                      │ │ DNS       ✓ 2                                                                         │
+│ proxycheck.io      0 ■□□□□ very low                      │ │ Telegram  ✗ 1                                                                         │
+│ Scamalytics*       4 ■■□□□ low                           │ │                                                                                       │
+│ ip2location.com*   0 ■□□□□ very low                      │ │ ✗ Telegram: DC2 reset                                                                 │
+│ IPQualityScore    62 ■■□□□ low                           │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ AbuseIPDB          0 ■□□□□ very low                      │
+│                                                          │
 │ Factors ──────────────────────────────────────────────── │
 │                   cc proxy   VPN   Tor  host abuse   bot │
-│ ipquery.io        DE    no    no    no    no     —     — │
-│ ip-api.com        DE    no     —     —    no     —     — │
-│ proxycheck.io     DE    no    no    no    no     —     — │
-│ ipinfo.io*        DE    no    no    no    no     —     — │
-│ Scamalytics*      DE    no    no    no    no    no    no │
-│ ip2location.com*  DE    no    no    no    no    no    no │
-│ IPQualityScore    NL    no   yes    no     —    no    no │
-│ AbuseIPDB         DE     —     —    no     —    no     — │
+│ ipquery.io        DE     ✓     ✓     ✓     ✓     ·     · │
+│ ip-api.com        DE     ✓     ·     ·     ✓     ·     · │
+│ proxycheck.io     DE     ✓     ✓     ✓     ✓     ·     · │
+│ ipinfo.io*        DE     ✓     ✓     ✓     ✓     ·     · │
+│ Scamalytics*      DE     ✓     ✓     ✓     ✓     ✓     ✓ │
+│ ip2location.com*  DE     ✓     ✓     ✓     ✓     ✓     ✓ │
+│ IPQualityScore    NL     ✓     ✗     ✓     ·     ✓     ✓ │
+│ AbuseIPDB         DE     ·     ·     ✓     ·     ✓     · │
+│ ✓ clean, ✗ detected, · not reported                      │
 │                                                          │
 │ ✗ IPQualityScore: VPN; fraud score 62                    │
 └──────────────────────────────────────────────────────────┘
 ✓ yes, ✗ no · 50 hosts contacted · * --extended check
 ```
 
-- **IP quality** (слева, по мотивам разделов 1–4 IPQuality): адрес, ASN и место по локальным базам, страна регистрации с отметкой `✓ geo-consistent` или `⚠ geo-discrepant`. Ниже три секции по каждому источнику. **Type** — цветные метки типа адреса и компании: `ISP` и `MOB` зелёные и бирюзовые (домашние и мобильные сети), `BIZ` жёлтая, `EDU` и `GOV` синие, `HOST` красная, `CDN` фиолетовая. **Score** — тир-лист оценок 0–100: число, полоска из пяти делений и уровень (very low и low — зелёные, medium — жёлтый, high и very high — красные). **Factors** — страна по мнению источника (жёлтая, если расходится с вердиктом) и флаги прокси, VPN, Tor, хостинга, абьюзера, бота (`yes` красным, `no` зелёным, `—` — источник об этом не сообщает). Под таблицей — находки и ошибки источников репутации. Профиль собирается из уже полученных ответов, без лишних запросов. Без цвета (`--no-color`, `NO_COLOR`) метки печатаются в квадратных скобках.
+- **IP quality** (слева, по мотивам разделов 1–4 IPQuality): адрес, ASN и место по локальным базам, `Route` — анонсируемый префикс и ASN по RIPEstat, `PTR` — обратный DNS, страна регистрации с отметкой `✓ geo-consistent` или `⚠ geo-discrepant`. Ниже три секции по каждому источнику. **Type** — цветные метки типа адреса и компании: `ISP` и `MOB` зелёные, `BIZ`, `EDU`, `GOV` жёлтые, `HOST` и `CDN` красные. **Score** — тир-лист оценок 0–100: число, полоска из пяти делений и уровень по шкале самой базы (very low и low — зелёные, medium — жёлтый, high и very high — красные). **Factors** — страна по мнению источника (жёлтая, если расходится с вердиктом) и флаги прокси, VPN, Tor, хостинга, абьюзера, бота: `✓` зелёным — чисто, `✗` красным — обнаружено, `·` — источник об этом не сообщает. Под таблицей — находки и ошибки источников репутации. Профиль собирается из уже полученных ответов, без лишних запросов. Без цвета (`--no-color`, `NO_COLOR`) метки печатаются в квадратных скобках.
 - **Region & services**: вердикт по стране одной строкой (сколько источников согласны и только несогласные), CDN-узлы, сервисы сеткой по секциям. Страна рядом с сервисом показывается, только если она отличается от вердикта. При двух стеках у каждого сервиса две отметки: первая для IPv4, вторая для IPv6.
 - **Reputation lists & mail**: DNSBL, исходящий 25-й порт, диапазоны Tor и облаков. Что для этого спрашивается и у кого — в [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md).
 - **Censorship**: по группе (DNS, Telegram, с `--extended` ещё DPI и геоблокировки) одна строка счётчиков, ниже — только находки, до восьми; полная сетка — в `cii censor`, `--debug` и логе.

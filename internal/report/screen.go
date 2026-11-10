@@ -265,7 +265,7 @@ func serviceLines(c paint, m marks, fams []fam, iw int) []string {
 func checkLines(c paint, m marks, fams []fam, iw int) []string {
 	return bufferLines(func(b *bytes.Buffer) {
 		writeServiceGrid(b, c, m, iw, fams, func(r probe.Result) bool {
-			return isRiskGroup(r.Group) && r.Group != risk.Reputation
+			return isRiskGroup(r.Group) && r.Group != risk.Reputation && r.Service != risk.PTRService
 		})
 	})
 }

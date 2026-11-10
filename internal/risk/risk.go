@@ -227,6 +227,7 @@ func evalProxyCheck(rs []*probe.Response) []probe.Result {
 	if e.Risk != nil {
 		v.note(true, "risk "+e.Risk.String())
 		v.facts.SetScore(float64(*e.Risk))
+		v.facts.SetLevel(probe.LevelByThresholds(float64(*e.Risk), 1, 34, 67))
 	}
 	if u := probe.NormalizeUsage(e.Type); u != "" {
 		v.facts.Usage = u
@@ -307,6 +308,9 @@ func evalIPAPIis(rs []*probe.Response) []probe.Result {
 	if score, err := strconv.ParseFloat(strings.Fields(company.AbuserScore + " x")[0], 64); err == nil {
 		v.facts.SetScore(score * 100)
 	}
+	if _, label, ok := strings.Cut(company.AbuserScore, "("); ok {
+		v.facts.SetLevelName(strings.TrimSuffix(label, ")"))
+	}
 	return v.result()
 }
 
@@ -342,6 +346,7 @@ func evalAbuseIPDB(rs []*probe.Response) []probe.Result {
 	v.note(x.UsageType != "", x.UsageType)
 	v.note(x.IsWhitelisted != nil && *x.IsWhitelisted, "whitelisted")
 	v.facts.SetScore(float64(*x.Score))
+	v.facts.SetLevel(probe.LevelByThresholds(float64(*x.Score), 1, 25, 75, 100))
 	v.facts.SetUsage(x.UsageType)
 	return v.result()
 }
@@ -376,6 +381,7 @@ func evalIPQS(rs []*probe.Response) []probe.Result {
 	v.note(true, "fraud score "+d.FraudScore.String())
 	v.note(d.ConnectionType != "", d.ConnectionType)
 	v.facts.SetScore(float64(*d.FraudScore))
+	v.facts.SetLevel(probe.LevelByThresholds(float64(*d.FraudScore), 25, 75, 85, 90))
 	v.facts.SetUsage(d.ConnectionType)
 	if d.Mobile {
 		v.facts.Usage = "mobile"

@@ -115,11 +115,36 @@ func Rules(opts Options) []netx.Rule {
 	if !opts.NoMail {
 		rules = append(rules, netx.Rule{Module: Module, Pattern: opts.Mail.host(), Purpose: Module + ": outbound SMTP port 25"})
 	}
+	for _, zone := range []string{"in-addr.arpa", "ip6.arpa"} {
+		rules = append(rules, netx.Rule{Module: Module, Pattern: "*." + zone, Purpose: Module + ": reverse DNS (PTR) of the checked address"})
+	}
 	return rules
+}
+
+const PTRService = "Reverse DNS"
+
+func checkPTR(ctx context.Context, r resolver, ip netip.Addr) probe.Result {
+	res := probe.Result{Group: Network, Service: PTRService}
+	names, err := r.LookupAddr(ctx, Module, ip)
+	var dnsErr *net.DNSError
+	switch {
+	case err == nil && len(names) > 0:
+		res.Status, res.Detail = probe.Yes, strings.TrimSuffix(names[0], ".")
+	case err == nil || errors.As(err, &dnsErr) && dnsErr.IsNotFound:
+		res.Status, res.Reason = probe.Unknown, "no PTR record"
+	case netx.AsBlocked(err) != nil:
+		res.Status, res.Reason = probe.Failed, "blocked by policy: *."+netx.ReverseZone(ip)
+	case errors.As(err, &dnsErr):
+		res.Status, res.Reason = probe.Failed, probe.Truncate("resolve: "+dnsErr.Err, 120)
+	default:
+		res.Status, res.Reason = probe.Failed, "lookup failed"
+	}
+	return res
 }
 
 type resolver interface {
 	LookupHost(ctx context.Context, module, name string) ([]string, error)
+	LookupAddr(ctx context.Context, module string, ip netip.Addr) ([]string, error)
 }
 
 type dialer interface {
@@ -150,6 +175,7 @@ func slots(ip netip.Addr, opts Options, status probe.Status, reason string) []pr
 			out = append(out, probe.Result{Group: DNSBL, Service: z.Zone, Status: status, Reason: reason})
 		}
 	}
+	out = append(out, probe.Result{Group: Network, Service: PTRService, Status: status, Reason: reason})
 	if !opts.NoMail {
 		out = append(out, probe.Result{Group: Mail, Service: smtpService, Status: status, Reason: reason})
 	}
@@ -161,6 +187,7 @@ func run(ctx context.Context, r resolver, d dialer, timeout time.Duration, ip ne
 	if !opts.NoDNSBL {
 		out = append(out, checkDNSBL(ctx, r, ip, opts.ResolvConf)...)
 	}
+	out = append(out, checkPTR(ctx, r, ip))
 	if !opts.NoMail {
 		out = append(out, checkSMTP(ctx, d, opts.Mail, timeout))
 	}
@@ -181,30 +208,13 @@ func zonesFor(ip netip.Addr) []Zone {
 	return out
 }
 
-func reverse(ip netip.Addr) string {
-	ip = ip.Unmap()
-	b := ip.AsSlice()
-	var parts []string
-	if ip.Is4() {
-		for i := len(b) - 1; i >= 0; i-- {
-			parts = append(parts, strconv.Itoa(int(b[i])))
-		}
-		return strings.Join(parts, ".")
-	}
-	const hex = "0123456789abcdef"
-	for i := len(b) - 1; i >= 0; i-- {
-		parts = append(parts, string(hex[b[i]&0xf]), string(hex[b[i]>>4]))
-	}
-	return strings.Join(parts, ".")
-}
-
 func checkDNSBL(ctx context.Context, r resolver, ip netip.Addr, resolvConf string) []probe.Result {
 	zones := zonesFor(ip)
 	if len(zones) == 0 {
 		return nil
 	}
 	public := publicResolvers(resolvConf)
-	rev := reverse(ip)
+	rev := netx.ReverseName(ip)
 	out := make([]probe.Result, len(zones))
 	sem := make(chan struct{}, 8)
 	var wg sync.WaitGroup

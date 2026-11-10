@@ -41,15 +41,19 @@ func (f *fakeResolver) LookupHost(_ context.Context, module, name string) ([]str
 	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
 }
 
+func (f *fakeResolver) LookupAddr(ctx context.Context, module string, ip netip.Addr) ([]string, error) {
+	return f.LookupHost(ctx, module, netx.ReverseName(ip)+"."+netx.ReverseZone(ip))
+}
+
 func TestReverse(t *testing.T) {
-	if got := reverse(netip.MustParseAddr("192.0.2.10")); got != "10.2.0.192" {
+	if got := netx.ReverseName(netip.MustParseAddr("192.0.2.10")); got != "10.2.0.192" {
 		t.Errorf("v4 = %s", got)
 	}
-	if got := reverse(netip.MustParseAddr("::ffff:192.0.2.10")); got != "10.2.0.192" {
+	if got := netx.ReverseName(netip.MustParseAddr("::ffff:192.0.2.10")); got != "10.2.0.192" {
 		t.Errorf("mapped = %s", got)
 	}
 	want := "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.8.b.d.0.1.0.0.2"
-	if got := reverse(netip.MustParseAddr("2001:db8::1")); got != want {
+	if got := netx.ReverseName(netip.MustParseAddr("2001:db8::1")); got != want {
 		t.Errorf("v6 = %s", got)
 	}
 }
@@ -86,10 +90,13 @@ func TestDNSBL(t *testing.T) {
 	}
 	rc := writeResolvConf(t, "nameserver 192.168.1.1\n")
 	rs := run(context.Background(), f, nil, time.Second, netip.MustParseAddr("81.2.3.4"), Options{NoMail: true, ResolvConf: rc})
-	if len(rs) != len(Zones) {
+	if len(rs) != len(Zones)+1 {
 		t.Fatalf("got %d results", len(rs))
 	}
 	m := byService(rs)
+	if ptr := m[PTRService]; ptr.Group != Network || ptr.Status != probe.Unknown || ptr.Reason != "no PTR record" {
+		t.Errorf("ptr = %+v", ptr)
+	}
 	cases := map[string]struct {
 		status probe.Status
 		detail string
@@ -150,16 +157,16 @@ func TestLedgerHasNoReversedAddress(t *testing.T) {
 		n := netx.New(netx.Options{Timeout: time.Second, Proxy: proxy}, netx.NewPolicy(Rules(Options{NoMail: true})...), led)
 		results := run(context.Background(), n, n, time.Second, ip, Options{NoMail: true})
 		entries := led.Entries()
-		if len(entries) == 0 || len(results) != len(zonesFor(ip)) {
+		if len(entries) == 0 || len(results) != len(zonesFor(ip))+1 {
 			t.Fatalf("%s: %d ledger entries, %d results", addr, len(entries), len(results))
 		}
 		for _, e := range entries {
-			if strings.Contains(e.Host, reverse(ip)) || !strings.HasPrefix(e.Host, "*.") || e.Skipped != 1 {
+			if strings.Contains(e.Host, netx.ReverseName(ip)) || !strings.HasPrefix(e.Host, "*.") || e.Skipped != 1 {
 				t.Errorf("%s: ledger entry %+v", addr, e)
 			}
 		}
 		for _, r := range results {
-			if strings.Contains(r.Reason+r.Detail, reverse(ip)) {
+			if strings.Contains(r.Reason+r.Detail, netx.ReverseName(ip)) {
 				t.Errorf("%s: result %+v", addr, r)
 			}
 		}
@@ -177,7 +184,10 @@ func TestRules(t *testing.T) {
 	if _, ok := p.Match(Module, "gmail-smtp-in.l.google.com"); ok {
 		t.Error("default mail host allowed despite override")
 	}
-	if n := len(Rules(Options{NoDNSBL: true})); n != 1 {
+	if _, ok := p.Match(Module, "4.3.2.1.in-addr.arpa"); !ok {
+		t.Error("reverse zone not allowed")
+	}
+	if n := len(Rules(Options{NoDNSBL: true})); n != 3 {
 		t.Errorf("mail-only rules = %d", n)
 	}
 }
@@ -229,7 +239,7 @@ func TestSMTP(t *testing.T) {
 	opts := Options{NoDNSBL: true, Mail: MailOptions{Host: host, Port: port}}
 	n := testNet(nil, Rules(opts)...)
 	rs := Run(context.Background(), n, netip.MustParseAddr("81.2.3.4"), opts)
-	if len(rs) != 1 || rs[0].Status != probe.Yes || rs[0].Group != Mail || rs[0].Detail != "220-mx.example.net ESMTP" {
+	if len(rs) != 2 || rs[1].Status != probe.Yes || rs[1].Group != Mail || rs[1].Detail != "220-mx.example.net ESMTP" {
 		t.Fatalf("smtp = %+v", rs)
 	}
 	if q := <-quit; q != "QUIT\r\n" {
@@ -272,7 +282,7 @@ func TestRunWithProxy(t *testing.T) {
 	proxy, _ := url.Parse("http://127.0.0.1:1")
 	n := testNet(proxy, Rules(Options{})...)
 	rs := Run(context.Background(), n, netip.MustParseAddr("81.2.3.4"), Options{})
-	if len(rs) != len(Zones)+1 {
+	if len(rs) != len(Zones)+2 {
 		t.Fatalf("got %d results", len(rs))
 	}
 	for _, r := range rs {
@@ -283,5 +293,20 @@ func TestRunWithProxy(t *testing.T) {
 	d := testNet(proxy, netx.Rule{Module: Module, Pattern: "127.0.0.1"})
 	if r := checkSMTP(context.Background(), d, MailOptions{Host: "127.0.0.1"}, time.Second); r.Status != probe.Unknown || r.Reason != proxyReason {
 		t.Errorf("dial via proxy = %+v", r)
+	}
+}
+
+func TestPTR(t *testing.T) {
+	ip := netip.MustParseAddr("81.2.3.4")
+	f := &fakeResolver{answers: map[string][]string{"4.3.2.81.in-addr.arpa": {"host-81-2-3-4.example.net."}}}
+	if r := checkPTR(context.Background(), f, ip); r.Status != probe.Yes || r.Detail != "host-81-2-3-4.example.net" {
+		t.Errorf("ptr = %+v", r)
+	}
+	f = &fakeResolver{errs: map[string]error{"4.3.2.81.in-addr.arpa": &net.DNSError{Err: "server misbehaving"}}}
+	if r := checkPTR(context.Background(), f, ip); r.Status != probe.Failed || r.Reason != "resolve: server misbehaving" {
+		t.Errorf("ptr error = %+v", r)
+	}
+	if got := Placeholders(ip, Options{NoDNSBL: true, NoMail: true}); len(got) != 1 || got[0].Service != PTRService || got[0].Status != probe.Pending {
+		t.Errorf("placeholders = %+v", got)
 	}
 }

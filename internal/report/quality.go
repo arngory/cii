@@ -8,17 +8,24 @@ import (
 	"unicode/utf8"
 
 	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 )
 
+const (
+	badgeGood    = "30;42"
+	badgeNeutral = "30;43"
+	badgeBad     = "97;41"
+)
+
 var usageBadges = map[string]struct{ label, code string }{
-	"isp":        {"ISP", "30;42"},
-	"mobile":     {"MOB", "30;46"},
-	"business":   {"BIZ", "30;43"},
-	"education":  {"EDU", "97;44"},
-	"government": {"GOV", "97;44"},
-	"hosting":    {"HOST", "97;41"},
-	"cdn":        {"CDN", "97;45"},
+	"isp":        {"ISP", badgeGood},
+	"mobile":     {"MOB", badgeGood},
+	"business":   {"BIZ", badgeNeutral},
+	"education":  {"EDU", badgeNeutral},
+	"government": {"GOV", badgeNeutral},
+	"hosting":    {"HOST", badgeBad},
+	"cdn":        {"CDN", badgeBad},
 }
 
 const badgeWidth = 6
@@ -43,6 +50,13 @@ func scoreLevel(score int) int {
 		}
 	}
 	return len(scoreLevels) - 1
+}
+
+func levelOf(f *probe.Facts) int {
+	if f.Level != nil {
+		return *f.Level
+	}
+	return scoreLevel(*f.Score)
 }
 
 func levelStyle(c paint, level int) func(string) string {
@@ -76,6 +90,19 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	}
 	if place := bestPlace(h.Geo); place != "" {
 		lines = append(lines, field("Place", place))
+	}
+	if h.Region != nil {
+		for _, r := range h.Region.Results {
+			if r.Group == region.Registry && r.Detail != "" {
+				lines = append(lines, field("Route", r.Detail))
+				break
+			}
+		}
+	}
+	for _, r := range h.Services {
+		if r.Service == risk.PTRService && r.Status != probe.Pending {
+			lines = append(lines, field("PTR", cmp.Or(r.Detail, c.dim(r.Reason))))
+		}
 	}
 	p := h.Profile
 	if p != nil && p.Registered != "" {
@@ -111,7 +138,7 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	if h.Region != nil {
 		verdict = h.Region.Verdict
 	}
-	if f := factorLines(c, sources, name, nameW, verdict); len(f) > 0 {
+	if f := factorLines(c, m, sources, name, nameW, verdict); len(f) > 0 {
 		lines = append(append(lines, "", sectionRule(c, m, "Factors", iw)), f...)
 	}
 	return append(lines, reputationNotes(c, m, h)...)
@@ -139,7 +166,7 @@ func scoreLines(c paint, m marks, sources []probe.Result, name func(probe.Result
 			continue
 		}
 		score := *r.Facts.Score
-		level := scoreLevel(score)
+		level := levelOf(r.Facts)
 		style := levelStyle(c, level)
 		bar := style(strings.Repeat(m.barOn, level+1)) + c.dim(strings.Repeat(m.barOff, len(scoreLevels)-level-1))
 		out = append(out, fmt.Sprintf("%s %3d %s %s", name(r), score, bar, style(scoreLevels[level].name)))
@@ -147,7 +174,7 @@ func scoreLines(c paint, m marks, sources []probe.Result, name func(probe.Result
 	return out
 }
 
-func factorLines(c paint, sources []probe.Result, name func(probe.Result) string, nameW int, verdict []string) []string {
+func factorLines(c paint, m marks, sources []probe.Result, name func(probe.Result) string, nameW int, verdict []string) []string {
 	var rows []probe.Result
 	for _, r := range sources {
 		if len(r.Facts.Flags) > 0 {
@@ -176,16 +203,16 @@ func factorLines(c paint, sources []probe.Result, name func(probe.Result) string
 			on, ok := r.Facts.Flags[flag]
 			switch {
 			case !ok:
-				line += cell("—", c.dim)
+				line += cell(m.none, c.dim)
 			case on:
-				line += cell("yes", c.red)
+				line += cell(m.no, c.red)
 			default:
-				line += cell("no", c.green)
+				line += cell(m.yes, c.green)
 			}
 		}
 		out = append(out, line)
 	}
-	return out
+	return append(out, c.dim(m.yes+" clean, "+m.no+" detected, "+m.none+" not reported"))
 }
 
 func reputationNotes(c paint, m marks, h *Host) []string {

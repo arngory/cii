@@ -129,8 +129,6 @@ var flagTitles = map[probe.Flag]string{
 	probe.Proxy: "proxy", probe.VPN: "VPN", probe.Tor: "Tor", probe.Hosting: "hosting", probe.Abuser: "abuser", probe.Bot: "bot",
 }
 
-func scoreStyle(c paint, score int) func(string) string { return levelStyle(c, scoreLevel(score)) }
-
 func writeProfile(w io.Writer, c paint, label string, h *Host) {
 	p := h.Profile
 	title := "IP profile (" + label + ")"
@@ -150,7 +148,7 @@ func writeProfile(w io.Writer, c paint, label string, h *Host) {
 		}
 		row := []gcell{plain("  " + r.Service), plain(cmp.Or(usageTitles[f.Usage], "—")), plain(cmp.Or(usageTitles[f.Company], "—"))}
 		if f.Score != nil {
-			row = append(row, gcell{text: strconv.Itoa(*f.Score), style: scoreStyle(c, *f.Score)})
+			row = append(row, gcell{text: strconv.Itoa(*f.Score), style: levelStyle(c, levelOf(f))})
 		} else {
 			row = append(row, gcell{text: "—", style: c.dim})
 		}

@@ -36,3 +36,23 @@ func TestFacts(t *testing.T) {
 		t.Fatalf("score = %d", *f.Score)
 	}
 }
+
+func TestLevels(t *testing.T) {
+	for _, c := range []struct {
+		score float64
+		want  int
+	}{{0, 0}, {20, 1}, {40, 2}, {70, 3}} {
+		if got := LevelByThresholds(c.score, 1, 34, 67); got != c.want {
+			t.Errorf("LevelByThresholds(%v) = %d, want %d", c.score, got, c.want)
+		}
+	}
+	var f Facts
+	f.SetLevelName(" Very High ")
+	if f.Level == nil || *f.Level != 4 {
+		t.Errorf("level = %v", f.Level)
+	}
+	f.SetLevelName("unknown")
+	if *f.Level != 4 {
+		t.Error("unknown label changed the level")
+	}
+}

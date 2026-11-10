@@ -22,6 +22,11 @@ func maskReasons(rs []probe.Result, mask bool) {
 
 func (h *Host) SetRegion(s region.Summary, mask bool) {
 	maskReasons(s.Results, mask)
+	for i := range s.Results {
+		if mask && s.Results[i].Group == region.Registry {
+			s.Results[i].Detail = MaskText(s.Results[i].Detail)
+		}
+	}
 	maskReasons(s.Attention, mask)
 	h.Region = &s
 	h.refreshProfile()
@@ -40,8 +45,11 @@ func (r *Report) SetCensor(rs []probe.Result, mask bool) {
 func (h *Host) SetServices(rs []probe.Result, mask bool) {
 	maskReasons(rs, mask)
 	for i := range rs {
-		if mask && rs[i].Group == risk.Mail {
+		switch {
+		case mask && rs[i].Group == risk.Mail:
 			rs[i].Detail = MaskText(rs[i].Detail)
+		case mask && rs[i].Service == risk.PTRService && rs[i].Detail != "":
+			rs[i].Detail = "hidden (--mask)"
 		}
 	}
 	h.Services = rs

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 )
 
@@ -140,5 +141,35 @@ func TestScreenCensorAndBenchPanels(t *testing.T) {
 	}
 	if lines := (&Report{Mode: "bench"}).Screen(Style{Width: 100}, "cii · benchmark: disk", nil); len(lines) != 1 {
 		t.Errorf("empty bench screen = %q", lines)
+	}
+}
+
+func TestQualityRouteAndPTR(t *testing.T) {
+	build := func(mask bool) string {
+		h := &Host{Address: "203.0.113.7"}
+		level := 1
+		score := 62
+		h.SetServices([]probe.Result{
+			{Group: risk.Network, Service: risk.PTRService, Status: probe.Yes, Detail: "host-203-0-113-7.example.net"},
+			{Group: risk.Reputation, Service: "IPQualityScore", Status: probe.Yes, Facts: &probe.Facts{Score: &score, Level: &level}},
+		}, mask)
+		h.SetRegion(region.Summarize([]probe.Result{
+			{Group: region.GeoIP, Service: "a", Status: probe.OK, Country: "DE"},
+			{Group: region.Registry, Service: "RIPEstat", Status: probe.OK, Country: "DE", Detail: "AS64500 Example · 203.0.112.0/20"},
+		}), mask)
+		return strings.Join((&Report{IPv4: h}).Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
+	}
+	out := build(false)
+	for _, s := range []string{"Route    AS64500 Example · 203.0.112.0/20", "PTR      host-203-0-113-7.example.net", "62 ■■□□□ low"} {
+		if !strings.Contains(out, s) {
+			t.Errorf("%q missing\n%s", s, out)
+		}
+	}
+	if strings.Count(out, "Reverse DNS") != 0 {
+		t.Errorf("PTR repeated in the lists panel\n%s", out)
+	}
+	masked := build(true)
+	if strings.Contains(masked, "113-7") || strings.Contains(masked, "203.0.112.0") || !strings.Contains(masked, "PTR      hidden (--mask)") {
+		t.Errorf("masked output leaks\n%s", masked)
 	}
 }

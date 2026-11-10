@@ -2,6 +2,7 @@ package region
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -34,6 +35,12 @@ func head(rawURL string) []probe.Request {
 }
 
 var Checks = []probe.Check{
+	{Service: "RIPEstat", Group: Registry, Requests: []probe.Request{
+		{URL: "https://stat.ripe.net/data/rir-stats-country/data.json?resource={ip}&sourceapp=cii"},
+		{URL: "https://stat.ripe.net/data/prefix-overview/data.json?resource={ip}&sourceapp=cii"},
+	}, Eval: ripestat},
+	{Service: "Fastly", Group: CDN, Requests: head("https://www.fastly.com/robots.txt"), Eval: fastlyEdge},
+	geoip("DB-IP", "https://api.db-ip.com/v2/free/{ip}", probe.JSONPath("countryCode")),
 	{Service: "RDAP (RIR)", Group: Registry, Requests: probe.Get("https://rdap.db.ripe.net/ip/{ip}"), ExtraHosts: rdapHosts, Eval: rdap},
 	withAuth(geoip("ipinfo.io", "https://ipinfo.io/{ip}/json", probe.JSONPath("country")), nil, func(req *http.Request, k config.Keys) {
 		if k.IPinfoToken != "" {
@@ -177,6 +184,64 @@ var (
 		regexp.MustCompile(`^[a-z]{2}([a-z]{3})[a-z]-[a-z0-9]+$`),
 	}
 )
+
+func ripestat(rs []*probe.Response) []probe.Result {
+	var reg struct {
+		Data struct {
+			Located []struct {
+				Location string `json:"location"`
+			} `json:"located_resources"`
+		} `json:"data"`
+	}
+	cc := ""
+	if json.Unmarshal(rs[0].Body, &reg) == nil && len(reg.Data.Located) > 0 {
+		cc = reg.Data.Located[0].Location
+	}
+	res := probe.CountryResult(cc, rs[0].Status)
+	var pfx struct {
+		Data struct {
+			Resource  string `json:"resource"`
+			Announced bool   `json:"announced"`
+			ASNs      []struct {
+				ASN    int    `json:"asn"`
+				Holder string `json:"holder"`
+			} `json:"asns"`
+		} `json:"data"`
+	}
+	if rs[1].Status == http.StatusOK && json.Unmarshal(rs[1].Body, &pfx) == nil {
+		d := pfx.Data
+		switch {
+		case !d.Announced:
+			res.Detail = "not announced"
+		case len(d.ASNs) > 0:
+			res.Detail = strings.TrimSpace(fmt.Sprintf("AS%d %s", d.ASNs[0].ASN, d.ASNs[0].Holder))
+			if len(d.ASNs) > 1 {
+				res.Detail += fmt.Sprintf(" (+%d origins)", len(d.ASNs)-1)
+			}
+			if d.Resource != "" {
+				res.Detail += " · " + d.Resource
+			}
+		}
+	}
+	return []probe.Result{res}
+}
+
+func fastlyEdge(rs []*probe.Response) []probe.Result {
+	r := rs[0]
+	nodes := strings.Split(r.Header.Get("X-Served-By"), ",")
+	node := strings.TrimPrefix(strings.TrimSpace(nodes[len(nodes)-1]), "cache-")
+	if node == "" {
+		if f, failed := probe.HTTPFailure(r.Status); failed {
+			return []probe.Result{f}
+		}
+		return []probe.Result{{Status: probe.Unknown}}
+	}
+	iata := ""
+	if i := strings.LastIndexByte(node, '-'); i >= 0 && len(node)-i == 4 {
+		iata = strings.ToUpper(node[i+1:])
+	}
+	return []probe.Result{edge("Fastly", iata, node)}
+}
 
 func youtubeCDN(rs []*probe.Response) []probe.Result {
 	r := rs[0]
