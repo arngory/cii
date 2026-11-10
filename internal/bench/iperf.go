@@ -62,6 +62,13 @@ var stateNames = map[int8]string{
 	stateCreateStreams: "CREATE_STREAMS", stateExchangeResults: "EXCHANGE_RESULTS", stateDisplayResults: "DISPLAY_RESULTS",
 }
 
+func streamID(i int) int {
+	if i == 0 {
+		return 1
+	}
+	return i + 2
+}
+
 const cookieAlphabet = "abcdefghijklmnopqrstuvwxyz234567"
 
 func makeCookie() []byte {
@@ -221,7 +228,7 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 	haveResult := false
 	fail := func(err error) (float64, float64, error) {
 		stage := stateNames[last]
-		if finished.Load() > 0 {
+		if last == stateTestRunning && finished.Load() > 0 {
 			stage = "TEST_END"
 		}
 		return 0, 0, fmt.Errorf("%w (after %s)", err, stage)
@@ -302,7 +309,7 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 				per = received.Load()
 			}
 			for i := range streams {
-				res.Streams = append(res.Streams, iperfStreamResult{ID: i + 1, Bytes: per / int64(len(streams)), Retransmits: -1, EndTime: elapsed.Seconds()})
+				res.Streams = append(res.Streams, iperfStreamResult{ID: streamID(i), Bytes: per / int64(len(streams)), Retransmits: -1, EndTime: elapsed.Seconds()})
 			}
 			if err := writeJSON(ctrl, res); err != nil {
 				return fail(err)

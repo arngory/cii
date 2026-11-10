@@ -144,7 +144,10 @@ func (s *fakeIperf) handle(c net.Conn) {
 		return
 	}
 	var total int64
-	for _, st := range client.Streams {
+	for i, st := range client.Streams {
+		if want := []int{1, 3, 4, 5}[i%4]; st.ID != want {
+			return
+		}
 		total += st.Bytes
 	}
 	if p.Reverse {

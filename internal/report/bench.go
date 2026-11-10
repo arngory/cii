@@ -255,7 +255,10 @@ func fmtIOPS(v float64) string {
 }
 
 func fmtMs(v float64) string {
-	if v >= 100 {
+	switch {
+	case v <= 0:
+		return "—"
+	case v >= 100:
 		return fmt.Sprintf("%.0f ms", v)
 	}
 	return fmt.Sprintf("%.1f ms", v)
