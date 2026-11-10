@@ -296,11 +296,11 @@ func coveredByProfile(h *Host, r probe.Result) bool {
 	return h.Profile != nil && r.Group == risk.Reputation && r.Facts != nil && r.Status == probe.Yes
 }
 
-func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam, keep func(*Host, probe.Result) bool) {
+func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam, keep func(probe.Result) bool) {
 	var cols []column
 	var verdicts [][]string
 	for _, f := range fams {
-		rs := slices.DeleteFunc(slices.Clone(f.host.Services), func(r probe.Result) bool { return !keep(f.host, r) })
+		rs := slices.DeleteFunc(slices.Clone(f.host.Services), func(r probe.Result) bool { return !keep(r) })
 		if len(rs) > 0 {
 			cols = append(cols, newColumn(f.label, rs))
 			var v []string

@@ -69,8 +69,11 @@ func (l *liveScreen) stop() {
 
 func liveFrame(c *common, s *session, started time.Time) string {
 	width, height, err := term.GetSize(int(os.Stdout.Fd()))
-	if err != nil || width <= 0 || height <= 2 {
-		width, height = 100, 40
+	if err != nil || width <= 0 {
+		width = 100
+	}
+	if err != nil || height <= 2 {
+		height = 40
 	}
 	rep := s.report()
 	status := "detecting the public address"
@@ -81,7 +84,14 @@ func liveFrame(c *common, s *session, started time.Time) string {
 	lines := rep.Screen(report.Style{Color: c.color(), Unicode: report.UnicodeTerminal(), Width: width}, header, nil)
 	if len(lines) > height {
 		hidden := len(lines) - height + 1
-		lines = append(lines[:height-1], fmt.Sprintf("… %d more lines, the full view is printed when the run ends", hidden))
+		lines = append(lines[:height-1], clipRunes(fmt.Sprintf("… %d more lines, the full view is printed when the run ends", hidden), width))
 	}
 	return "\x1b[H\x1b[K" + strings.Join(lines, "\r\n\x1b[K") + "\x1b[J"
+}
+
+func clipRunes(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:max(0, n-1)]) + "…"
+	}
+	return s
 }

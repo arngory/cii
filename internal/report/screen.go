@@ -320,7 +320,7 @@ func serviceLines(c paint, m marks, fams []fam, iw int) []string {
 		})...)
 	}
 	grid := bufferLines(func(b *bytes.Buffer) {
-		writeServiceGrid(b, c, m, iw, fams, func(_ *Host, r probe.Result) bool { return !isRiskGroup(r.Group) })
+		writeServiceGrid(b, c, m, iw, fams, func(r probe.Result) bool { return !isRiskGroup(r.Group) })
 	})
 	if len(grid) > 0 {
 		if len(lines) > 0 {
@@ -333,7 +333,7 @@ func serviceLines(c paint, m marks, fams []fam, iw int) []string {
 
 func checkLines(c paint, m marks, fams []fam, iw int) []string {
 	return bufferLines(func(b *bytes.Buffer) {
-		writeServiceGrid(b, c, m, iw, fams, func(_ *Host, r probe.Result) bool {
+		writeServiceGrid(b, c, m, iw, fams, func(r probe.Result) bool {
 			return isRiskGroup(r.Group) && r.Group != risk.Reputation
 		})
 	})

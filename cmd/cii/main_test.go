@@ -22,3 +22,12 @@ func TestParseSize(t *testing.T) {
 		}
 	}
 }
+
+func TestClipRunes(t *testing.T) {
+	if got := clipRunes("… 12 more lines", 6); got != "… 12 …" {
+		t.Errorf("clipRunes = %q", got)
+	}
+	if got := clipRunes("short", 10); got != "short" {
+		t.Errorf("clipRunes = %q", got)
+	}
+}
