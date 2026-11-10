@@ -217,6 +217,8 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 	started := false
 	var finished atomic.Int64
 	last := int8(0)
+	var result float64
+	haveResult := false
 	fail := func(err error) (float64, float64, error) {
 		stage := stateNames[last]
 		if finished.Load() > 0 {
@@ -320,10 +322,13 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 			if total == 0 {
 				return 0, latency, errBusy
 			}
-			return mbit(total, elapsed), latency, nil
+			result, haveResult = mbit(total, elapsed), true
 		case stateDisplayResults:
 			ctrl.Write([]byte{stateIperfDone})
-			return 0, latency, errors.New("server finished before results")
+			if !haveResult {
+				return 0, latency, errors.New("server finished before results")
+			}
+			return result, latency, nil
 		case stateIperfDone:
 			return 0, latency, errors.New("unexpected IPERF_DONE")
 		case stateAccessDenied:

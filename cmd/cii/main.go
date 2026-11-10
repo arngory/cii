@@ -266,6 +266,9 @@ func cmdIP(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	if len(exits) == 1 {
+		c = exits[0].c
+	}
 	if len(exits) > 1 && withBench {
 		return errors.New("--bench measures one path; run it without a list of proxies")
 	}
@@ -438,17 +441,20 @@ func proxyLabel(raw string, mask bool) string {
 }
 
 func (c *common) exits() []target {
-	parts := strings.Split(c.proxy, ",")
-	if len(parts) < 2 {
-		return []target{{family: netx.IPv4, c: *c}}
-	}
+	family := c.families()[0]
 	var out []target
-	for _, p := range parts {
+	for _, p := range strings.Split(c.proxy, ",") {
 		if p = strings.TrimSpace(p); p != "" {
 			cc := *c
 			cc.proxy = p
-			out = append(out, target{family: netx.IPv4, label: fmt.Sprintf("exit %d", len(out)+1), via: proxyLabel(p, c.mask), c: cc})
+			out = append(out, target{family: family, label: fmt.Sprintf("exit %d", len(out)+1), via: proxyLabel(p, c.mask), c: cc})
 		}
+	}
+	switch len(out) {
+	case 0:
+		return []target{{family: family, c: *c}}
+	case 1:
+		out[0].label, out[0].via = "", ""
 	}
 	return out
 }

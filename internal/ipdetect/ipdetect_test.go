@@ -4,7 +4,10 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/arngory/cii/internal/ledger"
 	"github.com/arngory/cii/internal/netx"
@@ -59,5 +62,23 @@ func TestDetectFallsBackAndChecksFamily(t *testing.T) {
 	got := Detect(context.Background(), n, netx.IPv4, Options{Providers: providers})
 	if got.Address.String() != "8.8.8.8" || got.Source != "echo:good" {
 		t.Fatalf("Detect = %+v", got)
+	}
+}
+
+func TestDetectBehindProxyNeverFallsBackToInterface(t *testing.T) {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
+	providers := []Provider{{Name: "echo", URL4: "http://echo.invalid/"}}
+	source := netip.MustParseAddr("8.8.8.8")
+	direct := netx.New(netx.Options{}, netx.NewPolicy(Rules(providers)...), ledger.New())
+	if got := Detect(context.Background(), direct, netx.IPv4, Options{Providers: providers, Source: source, Offline: true}); got.Address != source {
+		t.Fatalf("direct offline = %+v", got)
+	}
+	proxy, _ := url.Parse("http://127.0.0.1:1")
+	proxied := netx.New(netx.Options{Timeout: time.Second, Proxy: proxy}, netx.NewPolicy(Rules(providers)...), ledger.New())
+	got := Detect(context.Background(), proxied, netx.IPv4, Options{Providers: providers, Source: source})
+	if got.Address.IsValid() || len(got.Interface) != 0 || got.Error == "" {
+		t.Errorf("proxied = %+v", got)
 	}
 }

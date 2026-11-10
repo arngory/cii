@@ -160,7 +160,12 @@ func (r *Report) WriteDetailed(w io.Writer, color bool) {
 	for _, h := range r.Results {
 		writeHost(w, c, "IP", h)
 	}
-	writeProbes(w, c, []labeled{{"IPv4", r.IPv4}, {"IPv6", r.IPv6}})
+	hosts := []labeled{{"IPv4", r.IPv4}, {"IPv6", r.IPv6}}
+	for _, h := range r.Exits {
+		writeHost(w, c, h.Query, h)
+		hosts = append(hosts, labeled{h.Query, h})
+	}
+	writeProbes(w, c, hosts)
 	if len(r.Censor) > 0 {
 		cols := []column{newColumn("result", r.Censor)}
 		writeTable(w, c, "Censorship", cols, sectionsOf(cols), nil)

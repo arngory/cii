@@ -24,7 +24,15 @@ func Diff(a, b *Report) []Change {
 			out = append(out, Change{section, item, cmpDash(before), cmpDash(after)})
 		}
 	}
-	for _, fam := range []string{"IPv4", "IPv6"} {
+	families := []string{"IPv4", "IPv6"}
+	for _, r := range []*Report{a, b} {
+		for _, h := range r.Exits {
+			if !slices.Contains(families, h.Query) {
+				families = append(families, h.Query)
+			}
+		}
+	}
+	for _, fam := range families {
 		ha, hb := a.host(fam), b.host(fam)
 		add(fam, "address", ha.Address, hb.Address)
 		add(fam, "verdict", strings.Join(ha.verdict(), "/"), strings.Join(hb.verdict(), "/"))
@@ -59,6 +67,11 @@ func (r *Report) host(fam string) *Host {
 	}
 	if fam == "IPv6" && r.IPv6 != nil {
 		return r.IPv6
+	}
+	for _, h := range r.Exits {
+		if h.Query == fam {
+			return h
+		}
 	}
 	return &Host{}
 }

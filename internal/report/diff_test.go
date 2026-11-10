@@ -53,3 +53,17 @@ func TestDiff(t *testing.T) {
 		t.Errorf("empty diff = %q", b.String())
 	}
 }
+
+func TestDiffAndDetailedExits(t *testing.T) {
+	exit := func(addr string) *Host { return &Host{Query: "exit 1", Via: "http://p.example:1", Address: addr} }
+	a, b := &Report{Exits: []*Host{exit("203.0.113.7")}}, &Report{Exits: []*Host{exit("198.51.100.7")}}
+	ch := Diff(a, b)
+	if len(ch) != 1 || ch[0].Section != "exit 1" || ch[0].After != "198.51.100.7" {
+		t.Errorf("exit diff = %+v", ch)
+	}
+	var out strings.Builder
+	b.WriteDetailed(&out, false)
+	if !strings.Contains(out.String(), "exit 1") || !strings.Contains(out.String(), "198.51.100.7") {
+		t.Errorf("detailed report misses the exit:\n%s", out.String())
+	}
+}

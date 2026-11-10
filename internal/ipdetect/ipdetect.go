@@ -58,9 +58,13 @@ type Options struct {
 
 func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address {
 	var res Address
-	candidates := []netip.Addr{o.Source}
-	if o.Iface != "" || !o.Source.IsValid() {
+	var candidates []netip.Addr
+	switch {
+	case n.Proxied():
+	case o.Iface != "" || !o.Source.IsValid():
 		candidates, _ = netx.InterfaceAddrs(o.Iface)
+	default:
+		candidates = []netip.Addr{o.Source}
 	}
 	for _, a := range candidates {
 		if a.IsValid() && a.Is4() == (f == netx.IPv4) && netx.IsPublic(a) {

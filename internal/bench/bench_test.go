@@ -45,6 +45,7 @@ func testNet(t *testing.T, hosts ...string) (*netx.Net, *ledger.Ledger) {
 
 type fakeIperf struct {
 	dropAfterStreams bool
+	done             int
 	ln               net.Listener
 	busy             bool
 	mu               sync.Mutex
@@ -151,6 +152,12 @@ func (s *fakeIperf) handle(c net.Conn) {
 	}
 	writeJSON(c, iperfResults{Streams: []iperfStreamResult{{ID: 1, Bytes: total}}})
 	c.Write([]byte{stateDisplayResults})
+	var done [1]byte
+	if _, err := io.ReadFull(c, done[:]); err == nil && done[0] == stateIperfDone {
+		s.mu.Lock()
+		s.done++
+		s.mu.Unlock()
+	}
 }
 
 func (s *fakeIperf) stream(c net.Conn) {
@@ -185,10 +192,21 @@ func TestIperfAgainstFakeServer(t *testing.T) {
 	if run.Port != good.port() || run.Client != clientNative || run.SendMbps <= 0 || run.RecvMbps <= 0 || run.LatencyMs <= 0 {
 		t.Errorf("run = %+v", run)
 	}
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		good.mu.Lock()
+		finished := good.done == 2
+		good.mu.Unlock()
+		if finished {
+			break
+		}
+	}
 	good.mu.Lock()
 	defer good.mu.Unlock()
 	if len(good.params) != 2 || good.params[0].Reverse || !good.params[1].Reverse || good.params[0].Parallel != iperfStreams || !good.params[0].TCP {
 		t.Errorf("params = %+v", good.params)
+	}
+	if good.done != 2 {
+		t.Errorf("IPERF_DONE sent %d times, want 2", good.done)
 	}
 }
 

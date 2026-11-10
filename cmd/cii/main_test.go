@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/arngory/cii/internal/netx"
+)
 
 func TestParseSize(t *testing.T) {
 	good := map[string]int64{
@@ -38,8 +42,11 @@ func TestExitsAndProxyLabel(t *testing.T) {
 	if len(ex) != 2 || ex[0].label != "exit 1" || ex[1].c.proxy != "http://proxy.example:3128" || ex[0].via != "socks5://203.0.113.9:1080" {
 		t.Fatalf("exits = %+v", ex)
 	}
-	if one := (&common{proxy: "http://p.example:1"}).exits(); len(one) != 1 || one[0].label != "" {
+	if one := (&common{proxy: " http://p.example:1, "}).exits(); len(one) != 1 || one[0].label != "" || one[0].c.proxy != "http://p.example:1" {
 		t.Errorf("single proxy = %+v", one)
+	}
+	if v6 := (&common{v6: true, proxy: "http://a.example:1,http://b.example:1"}).exits(); v6[0].family != netx.IPv6 || v6[1].family != netx.IPv6 {
+		t.Errorf("-6 exits = %+v", v6)
 	}
 	if got := proxyLabel("socks5://u:p@203.0.113.9:1080", true); got != "socks5://203.0.*.*" {
 		t.Errorf("masked label = %q", got)
