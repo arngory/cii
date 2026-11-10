@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -25,17 +26,17 @@ type Speed struct {
 func CloudflareSpeed(ctx context.Context, n *netx.Net, dur time.Duration) (Speed, error) {
 	client := n.HTTPClient(Module)
 	client.Timeout = 0
-	return cloudflareSpeed(ctx, client, "https://"+cloudflareSpeedHost, dur)
+	return cloudflareSpeed(ctx, client, "https://"+cloudflareSpeedHost, dur, n.Options().Timeout)
 }
 
-func cloudflareSpeed(ctx context.Context, client *http.Client, base string, dur time.Duration) (Speed, error) {
+func cloudflareSpeed(ctx context.Context, client *http.Client, base string, dur, probeTimeout time.Duration) (Speed, error) {
 	if dur <= 0 {
 		dur = 5 * time.Second
 	}
 	s := Speed{Server: cloudflareSpeedHost}
 	start := time.Now()
 
-	lat, colo, err := cfLatency(ctx, client, base+"/cdn-cgi/trace")
+	lat, colo, err := cfLatency(ctx, client, base+"/cdn-cgi/trace", cmp.Or(probeTimeout, 10*time.Second))
 	if err != nil {
 		return s, err
 	}
@@ -56,22 +57,14 @@ func cloudflareSpeed(ctx context.Context, client *http.Client, base string, dur 
 	return s, nil
 }
 
-func cfLatency(ctx context.Context, c *http.Client, traceURL string) (float64, string, error) {
+func cfLatency(ctx context.Context, c *http.Client, traceURL string, timeout time.Duration) (float64, string, error) {
 	best := -1.0
 	colo := ""
 	for i := 0; i < 5; i++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, traceURL, nil)
+		body, ms, err := cfProbe(ctx, c, traceURL, timeout)
 		if err != nil {
 			return 0, "", err
 		}
-		t := time.Now()
-		resp, err := c.Do(req)
-		if err != nil {
-			return 0, "", err
-		}
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		resp.Body.Close()
-		ms := float64(time.Since(t).Microseconds()) / 1000
 		if best < 0 || ms < best {
 			best = ms
 		}
@@ -84,6 +77,23 @@ func cfLatency(ctx context.Context, c *http.Client, traceURL string) (float64, s
 		}
 	}
 	return best, colo, nil
+}
+
+func cfProbe(ctx context.Context, c *http.Client, traceURL string, timeout time.Duration) ([]byte, float64, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, traceURL, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	t := time.Now()
+	resp, err := c.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return body, float64(time.Since(t).Microseconds()) / 1000, err
 }
 
 const (

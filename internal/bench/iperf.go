@@ -335,7 +335,9 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 			return 0, latency, errAccessDenied
 		case stateServerError:
 			var codes [2]int32
-			binary.Read(ctrl, binary.BigEndian, &codes)
+			if err := binary.Read(ctrl, binary.BigEndian, &codes); err != nil {
+				return fail(err)
+			}
 			if codes[0] == 10 || codes[0] == 11 {
 				return 0, latency, errBusy
 			}

@@ -388,7 +388,7 @@ func TestCloudflareAgainstFakeServer(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	s, err := cloudflareSpeed(context.Background(), srv.Client(), srv.URL, 300*time.Millisecond)
+	s, err := cloudflareSpeed(context.Background(), srv.Client(), srv.URL, 300*time.Millisecond, time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,7 +397,7 @@ func TestCloudflareAgainstFakeServer(t *testing.T) {
 	}
 	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusForbidden) }))
 	defer bad.Close()
-	if _, err := cloudflareSpeed(context.Background(), bad.Client(), bad.URL, 200*time.Millisecond); err == nil || !strings.Contains(err.Error(), "HTTP 403") {
+	if _, err := cloudflareSpeed(context.Background(), bad.Client(), bad.URL, 200*time.Millisecond, time.Second); err == nil || !strings.Contains(err.Error(), "HTTP 403") {
 		t.Errorf("403 err = %v", err)
 	}
 }
@@ -621,4 +621,20 @@ func FuzzParseFio(f *testing.F) {
 	f.Add([]byte(`{"fio version":"fio-3.33","jobs":[{"jobname":"x","read":{"bw_bytes":1,"iops":1}}]}`))
 	f.Add([]byte("fio: warning\n{"))
 	f.Fuzz(func(t *testing.T, data []byte) { parseFio(data) })
+}
+
+func TestCloudflareLatencyProbeTimesOut(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+	start := time.Now()
+	_, err := cloudflareSpeed(context.Background(), srv.Client(), srv.URL, 200*time.Millisecond, 100*time.Millisecond)
+	if err == nil || time.Since(start) > 3*time.Second {
+		t.Errorf("stalled trace: err = %v after %s", err, time.Since(start))
+	}
 }
