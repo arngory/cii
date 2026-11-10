@@ -89,7 +89,7 @@
 | `www.cloudflare.com/ips-v4`, `ips-v6` | Cloudflare | публикуется Cloudflare |
 | `www.digitalocean.com/geo/google.csv` | DigitalOcean (geofeed RFC 8805) | публикуется DigitalOcean |
 
-Попадание в Tor → `no`, в облако или CDN → `partial` с подписью (например, `AWS EC2 eu-central-1`), иначе `yes`. Если ни один список не скачан, строка не показывается.
+Попадание в Tor → `no`, в облако или CDN → `partial` с подписью (например, `AWS EC2 eu-central-1`), иначе `yes`. Проверяются только списки, которые есть в `manifest.json` и чьи файлы на месте; в чистом результате они перечислены («not in: tor-exits, aws, …»). Если ни один список не скачан, строка не показывается.
 
 ## Прокси
 

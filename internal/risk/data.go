@@ -356,22 +356,10 @@ func parseGeofeed(provider string) func(io.Reader, func(string, string)) error {
 	}
 }
 
-func Lookup(base string, ip netip.Addr) []Match {
-	ip = ip.Unmap()
-	if !ip.IsValid() {
-		return nil
-	}
-	var out []Match
-	for _, s := range DataSources {
-		out = append(out, lookupFile(filepath.Join(dataDir(base), s.ID+".txt"), s, ip)...)
-	}
-	return out
-}
-
-func lookupFile(path string, s DataSource, ip netip.Addr) []Match {
+func lookupFile(path string, s DataSource, ip netip.Addr) ([]Match, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer f.Close()
 	type hit struct {
@@ -399,18 +387,35 @@ func lookupFile(path string, s DataSource, ip netip.Addr) []Match {
 	for _, h := range hits {
 		out = append(out, Match{Source: s.ID, Kind: s.Kind, Label: h.label, Prefix: h.p.String()})
 	}
-	return out
+	return out, sc.Err()
 }
 
 const Network probe.Group = "network"
 
 func Offline(base string, ip netip.Addr) []probe.Result {
-	matches := Lookup(base, ip)
-	if _, err := os.Stat(filepath.Join(dataDir(base), "manifest.json")); err != nil {
+	ip = ip.Unmap()
+	m, err := DataManifest(base)
+	if err != nil || len(m) == 0 || !ip.IsValid() {
+		return nil
+	}
+	var matches []Match
+	var checked []string
+	for _, s := range DataSources {
+		if _, ok := m[s.ID]; !ok {
+			continue
+		}
+		found, err := lookupFile(filepath.Join(dataDir(base), s.ID+".txt"), s, ip)
+		if err != nil {
+			continue
+		}
+		checked = append(checked, s.ID)
+		matches = append(matches, found...)
+	}
+	if len(checked) == 0 {
 		return nil
 	}
 	if len(matches) == 0 {
-		return []probe.Result{{Group: Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in Tor exit or cloud provider lists"}}
+		return []probe.Result{{Group: Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: " + strings.Join(checked, ", ")}}
 	}
 	var labels []string
 	tor := false
