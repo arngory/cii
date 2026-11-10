@@ -269,6 +269,9 @@ func cmdIP(ctx context.Context, args []string) error {
 	if len(exits) == 1 {
 		c = exits[0].c
 	}
+	if len(exits) > 1 && c.offline {
+		return errors.New("--offline cannot check several proxies: exits are only known online")
+	}
 	if len(exits) > 1 && withBench {
 		return errors.New("--bench measures one path; run it without a list of proxies")
 	}
