@@ -95,3 +95,19 @@ func TestScreenPendingAndProgress(t *testing.T) {
 		t.Errorf("pending output:\n%s", out)
 	}
 }
+
+func TestScreenNarrowAndOffline(t *testing.T) {
+	r := screenReport()
+	r.IPv6 = &Host{Error: "offline: no global IPv6 address on local interfaces"}
+	for _, w := range []int{40, 59} {
+		lines := r.Screen(Style{Unicode: true, Width: w}, "cii test with a long header line", []string{"footer"})
+		for _, l := range lines {
+			if visibleLen(l) > w {
+				t.Errorf("width %d: line too long (%d): %q", w, visibleLen(l), l)
+			}
+		}
+		if out := strings.Join(lines, "\n"); !strings.Contains(out, "not on local interfaces") {
+			t.Errorf("width %d: offline reason missing\n%s", w, out)
+		}
+	}
+}

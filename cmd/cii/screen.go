@@ -83,5 +83,5 @@ func liveFrame(c *common, s *session, started time.Time) string {
 		hidden := len(lines) - height + 1
 		lines = append(lines[:height-1], fmt.Sprintf("… %d more lines, the full view is printed when the run ends", hidden))
 	}
-	return "\x1b[H" + strings.Join(lines, "\x1b[K\r\n") + "\x1b[K\x1b[J"
+	return "\x1b[H\x1b[K" + strings.Join(lines, "\r\n\x1b[K") + "\x1b[J"
 }

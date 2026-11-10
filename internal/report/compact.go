@@ -94,41 +94,9 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 	if st.Width < 40 {
 		st.Width = 80
 	}
-	fams := r.families()
-	for _, f := range fams {
-		writeLine(w, st.Width, m.sep, c.bold(f.label)+"  ", 6, hostLine(c, m, f.host))
-	}
 	for _, h := range r.Results {
 		writeLine(w, st.Width, m.sep, c.bold(h.Query)+"  ", utf8.RuneCountInString(h.Query)+2, hostLine(c, m, h))
 	}
-
-	var withRegion []fam
-	for _, f := range fams {
-		if f.host.Region != nil || f.host.Profile != nil {
-			withRegion = append(withRegion, f)
-		}
-	}
-	if len(withRegion) > 0 {
-		fmt.Fprintln(w)
-	}
-	for _, f := range withRegion {
-		label := "Region"
-		if len(withRegion) > 1 {
-			label += " " + f.label
-		}
-		lw := utf8.RuneCountInString(label)
-		if f.host.Region != nil {
-			writeLine(w, st.Width, m.sep, c.bold(label)+"  ", lw+2, regionParts(c, f.host.Region, f.host.Profile))
-			if edges := cdnParts(c, f.host.Region); len(edges) > 0 {
-				writeLine(w, st.Width, m.sep, c.dim(pad("CDN", lw))+"  ", lw+2, edges)
-			}
-		}
-		for _, row := range profileRows(c, f.host.Profile) {
-			writeLine(w, st.Width, m.sep, c.dim(pad(row.title, lw))+"  ", lw+2, row.parts)
-		}
-	}
-
-	writeServiceGrid(w, c, m, st.Width, fams, func(h *Host, r probe.Result) bool { return !coveredByProfile(h, r) })
 	if len(r.Censor) > 0 {
 		writeGrid2(w, c, m, st.Width, []column{newColumn("", r.Censor)}, [][]string{nil})
 	}
@@ -146,17 +114,20 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 	}
 }
 
+func unavailableReason(h *Host) string {
+	if strings.Contains(h.Error, "offline") {
+		return "not on local interfaces (offline)"
+	}
+	return "unavailable"
+}
+
 func pad(s string, n int) string {
 	return s + strings.Repeat(" ", max(0, n-utf8.RuneCountInString(s)))
 }
 
 func hostLine(c paint, m marks, h *Host) []gcell {
 	if h.Address == "" {
-		reason := "unavailable"
-		if strings.Contains(h.Error, "offline") {
-			reason = "not on local interfaces (offline)"
-		}
-		return []gcell{{text: "—  " + reason, style: c.dim}}
+		return []gcell{{text: "—  " + unavailableReason(h), style: c.dim}}
 	}
 	parts := []gcell{{text: h.Address, style: c.green}}
 	if place := bestPlace(h.Geo); place != "" {
@@ -200,15 +171,8 @@ func bestASN(geo []geodb.Record) string {
 	return ""
 }
 
-func regionParts(c paint, s *region.Summary, p *Profile) []gcell {
+func regionParts(c paint, s *region.Summary) []gcell {
 	parts := []gcell{verdictCell(c, s.Verdict)}
-	if text, discrepant := p.registryText(); text != "" {
-		style := c.dim
-		if discrepant {
-			style = c.yellow
-		}
-		parts = append(parts, gcell{text: text, style: style})
-	}
 	for _, g := range []struct {
 		group probe.Group
 		title string

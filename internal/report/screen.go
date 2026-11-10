@@ -112,7 +112,10 @@ func (r *Report) Screen(st Style, header string, footer []string) []string {
 	if st.Unicode {
 		m, f = unicodeMarks, unicodeFrame
 	}
-	width := max(st.Width, 60)
+	width := st.Width
+	if width <= 0 {
+		width = 80
+	}
 	widths := columnWidths(width)
 	cols := make([][]panel, len(widths))
 	last := len(widths) - 1
@@ -186,7 +189,7 @@ func joinColumns(c paint, f frameChars, cols [][]panel, widths []int) []string {
 
 func qualityLines(c paint, m marks, label string, h *Host, iw int) []string {
 	if h.Address == "" {
-		return []string{c.dim("unavailable")}
+		return []string{c.dim(unavailableReason(h))}
 	}
 	field := func(name, value string, style func(string) string) string {
 		return c.dim(pad(name, 9)) + style(value)
@@ -310,7 +313,7 @@ func serviceLines(c paint, m marks, fams []fam, iw int) []string {
 		}
 		lw := utf8.RuneCountInString(label)
 		lines = append(lines, bufferLines(func(b *bytes.Buffer) {
-			writeLine(b, iw, m.sep, c.bold(label)+"  ", lw+2, regionParts(c, f.host.Region, nil))
+			writeLine(b, iw, m.sep, c.bold(label)+"  ", lw+2, regionParts(c, f.host.Region))
 			if edges := cdnParts(c, f.host.Region); len(edges) > 0 {
 				writeLine(b, iw, m.sep, c.dim(pad("CDN", lw))+"  ", lw+2, edges)
 			}

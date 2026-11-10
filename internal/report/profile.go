@@ -130,44 +130,6 @@ var flagTitles = map[probe.Flag]string{
 	probe.Proxy: "proxy", probe.VPN: "VPN", probe.Tor: "Tor", probe.Hosting: "hosting", probe.Abuser: "abuser", probe.Bot: "bot",
 }
 
-type profileRow struct {
-	title string
-	parts []gcell
-}
-
-func profileRows(c paint, p *Profile) []profileRow {
-	if p == nil {
-		return nil
-	}
-	var rows []profileRow
-	var typ []gcell
-	typ = append(typ, voteCells(c, "", p.Usage)...)
-	typ = append(typ, voteCells(c, "company ", p.Company)...)
-	if len(typ) > 0 {
-		rows = append(rows, profileRow{"Type", typ})
-	}
-	if len(p.Scores) > 0 {
-		var cells []gcell
-		for _, s := range p.Scores {
-			cells = append(cells, gcell{text: s.Source + " " + strconv.Itoa(s.Score), style: scoreStyle(c, s.Score)})
-		}
-		rows = append(rows, profileRow{"Score", cells})
-	}
-	if len(p.Factors) > 0 {
-		var cells []gcell
-		for _, f := range p.Factors {
-			text := fmt.Sprintf("%s %d/%d", flagTitles[f.Flag], len(f.Hits), f.Checked)
-			if len(f.Hits) == 0 {
-				cells = append(cells, gcell{text: text, style: c.dim})
-				continue
-			}
-			cells = append(cells, gcell{text: text + ": " + strings.Join(f.Hits, ", "), style: c.yellow})
-		}
-		rows = append(rows, profileRow{"Flags", cells})
-	}
-	return rows
-}
-
 func voteCells(c paint, prefix string, vs []Vote) []gcell {
 	total := 0
 	for _, v := range vs {

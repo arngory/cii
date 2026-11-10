@@ -66,23 +66,23 @@ func TestProfileSummary(t *testing.T) {
 
 func TestProfileOutput(t *testing.T) {
 	r := &Report{Tool: Tool{Name: "cii"}, IPv4: sampleProfileHost()}
-	var compact strings.Builder
-	r.WriteCompact(&compact, Style{Width: 200, Unicode: true}, nil)
-	out := compact.String()
+	out := strings.Join(r.Screen(Style{Width: 200, Unicode: true}, "", nil), "\n")
 	for _, s := range []string{
-		"registered US, geo-discrepant",
-		"Type    ISP 2/3 · hosting: ip-api.com",
-		"Score   ipquery.io 3 · proxycheck.io 66 · AbuseIPDB 0",
-		"Flags   proxy 1/2: ip-api.com · VPN 1/2: proxycheck.io · hosting 1/2: ip-api.com · abuser 0/1",
+		"US, geo-discrepant",
+		"Type     ISP 2/3 · hosting: ip-api.com",
+		"ipquery.io        3     —    no     —    no     —     —",
+		"proxycheck.io    66    no   yes     —     —     —     —",
+		"AbuseIPDB         0     —     —     —     —    no     —",
 		"bl.spamcop.net",
-		"! ipdata",
+		"! ipdata: key rejected (HTTP 401)",
+		"✗ proxycheck.io: VPN; risk 66",
 	} {
 		if !strings.Contains(out, s) {
-			t.Errorf("%q missing in compact output:\n%s", s, out)
+			t.Errorf("%q missing in screen:\n%s", s, out)
 		}
 	}
-	if !strings.Contains(out, "proxycheck.io VPN; risk 66") || strings.Contains(out, "AbuseIPDB\n") || strings.Contains(out, "✓ AbuseIPDB") {
-		t.Errorf("reputation grid should keep only results the profile does not cover:\n%s", out)
+	if strings.Contains(out, "✓ AbuseIPDB") {
+		t.Errorf("clean reputation answers should stay in the factor table only:\n%s", out)
 	}
 	var detailed strings.Builder
 	r.WriteDetailed(&detailed, false)
