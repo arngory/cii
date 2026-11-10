@@ -2,6 +2,7 @@ package probe
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -125,5 +126,42 @@ func TestSelect(t *testing.T) {
 	sel := Select("m", checks, config.Keys{GeoapifyKey: "x"}, true)
 	if got := names(sel); got != "a,b,k" || sel[0].Module != "m" {
 		t.Errorf("extended+key = %s", got)
+	}
+}
+
+func TestRunBodyFrom(t *testing.T) {
+	var gotBody string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/page":
+			w.Write([]byte("token=abc"))
+		case "/query":
+			b := make([]byte, 64)
+			n, _ := r.Body.Read(b)
+			gotBody = string(b[:n])
+			w.Write([]byte(`{"country":"FI"}`))
+		}
+	}))
+	defer srv.Close()
+	chain := func(fail bool) Check {
+		eval := CountryFrom(JSONPath("country"), 0)
+		return Check{Service: "chain", Group: "g", Eval: func(rs []*Response) []Result { return eval(rs[1:]) }, Requests: []Request{
+			{URL: srv.URL + "/page"},
+			{Method: http.MethodPost, URL: srv.URL + "/query", BodyFrom: func(ip netip.Addr, prev []*Response) (string, error) {
+				if fail {
+					return "", errors.New("no token on the page")
+				}
+				return "ip=" + ip.String() + "&" + string(prev[0].Body), nil
+			}},
+		}}
+	}
+	checks := Select("m", []Check{chain(false), chain(true)}, config.Keys{}, false)
+	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(checks)...), ledger.New())
+	res := Run(context.Background(), Env{Nets: map[netx.Family]*netx.Net{netx.IPv4: n}}, netx.IPv4, netip.MustParseAddr("203.0.113.9"), checks)
+	if len(res) != 2 || res[0].Country != "FI" || gotBody != "ip=203.0.113.9&token=abc" {
+		t.Errorf("chain = %+v body=%q", res, gotBody)
+	}
+	if res[1].Status != Unknown || res[1].Reason != "no token on the page" {
+		t.Errorf("failed chain = %+v", res[1])
 	}
 }

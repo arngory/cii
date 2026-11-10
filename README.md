@@ -27,7 +27,7 @@ make build
 | Команда | Что делает | Сеть |
 |---|---|---|
 | `cii` | определяет публичные адреса, описывает их по локальным базам, проверяет регион и доступность сервисов | только хосты из `--plan` |
-| `cii --extended` | то же плюс проверки уровня B (внутренние API сервисов, см. [docs/REGION_CHECKS.md](docs/REGION_CHECKS.md)) | хосты из `--plan --extended` |
+| `cii --extended` | то же плюс проверки уровня B: внутренние API сервисов ([docs/REGION_CHECKS.md](docs/REGION_CHECKS.md)) и данные риска со страниц ipinfo.io, Scamalytics и ip2location.com без ключей ([docs/RISK_CHECKS.md](docs/RISK_CHECKS.md)) | хосты из `--plan --extended` |
 | `cii --quick` | без проверок региона, сервисов и репутации | только echo-сервисы |
 | `cii --no-risk` | без проверок репутации, DNSBL и почты | — |
 | `cii --plan` | печатает все адреса, куда cii может обратиться, и выходит | нет |

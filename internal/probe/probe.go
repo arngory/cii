@@ -55,6 +55,7 @@ type Request struct {
 	Method     string
 	URL        string
 	Body       string
+	BodyFrom   func(ip netip.Addr, prev []*Response) (string, error)
 	Header     map[string]string
 	NoRedirect bool
 }
@@ -159,6 +160,13 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 	}
 	var responses []*Response
 	for _, r := range c.Requests {
+		if r.BodyFrom != nil {
+			body, err := r.BodyFrom(ip, responses)
+			if err != nil {
+				return []Result{{Status: Unknown, Reason: Truncate(err.Error(), 120)}}
+			}
+			r.Body = body
+		}
 		resp, err := do(ctx, n.HTTPClient(c.Module), env.Keys, ip, c, r)
 		if err != nil {
 			return Fail(reason(err))

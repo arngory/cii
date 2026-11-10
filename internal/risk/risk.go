@@ -34,7 +34,7 @@ func Checks(k config.Keys, extended bool) []probe.Check {
 	if k.IPDataKey != "" {
 		cs = append(cs, ipdata(k.IPDataKey))
 	}
-	return probe.Select(Module, cs, k, extended)
+	return probe.Select(Module, append(cs, webChecks...), k, extended)
 }
 
 func queryKey(name, value string) func(*http.Request, config.Keys) {
