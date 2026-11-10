@@ -205,7 +205,7 @@ func (r *runner) acquire() func() {
 func (r *runner) attempt(fn func() error) error {
 	var err error
 	for i := 0; i <= r.retries; i++ {
-		if err = fn(); err == nil || errors.Is(err, netx.ErrProxyRaw) || isPolicy(err) {
+		if err = fn(); err == nil || errors.Is(err, netx.ErrProxyRaw) || netx.AsBlocked(err) != nil {
 			return err
 		}
 	}
@@ -249,11 +249,6 @@ func Run(ctx context.Context, n *netx.Net, opts Options) []probe.Result {
 	return out
 }
 
-func isPolicy(err error) bool {
-	var be *netx.BlockedError
-	return errors.As(err, &be)
-}
-
 func isX509(err error) bool {
 	var unk x509.UnknownAuthorityError
 	var host x509.HostnameError
@@ -268,10 +263,8 @@ func describe(err error) string {
 		return ""
 	case errors.Is(err, netx.ErrProxyRaw):
 		return "disabled while a proxy is in effect"
-	case isPolicy(err):
-		var be *netx.BlockedError
-		errors.As(err, &be)
-		return "blocked by policy: " + be.Host
+	case netx.AsBlocked(err) != nil:
+		return "blocked by policy: " + netx.AsBlocked(err).Host
 	case netx.IsTimeout(err):
 		return "timeout"
 	case netx.IsRefused(err):
@@ -297,7 +290,7 @@ func errStatus(err error) probe.Status {
 	switch {
 	case errors.Is(err, netx.ErrProxyRaw):
 		return probe.Unknown
-	case isPolicy(err):
+	case netx.AsBlocked(err) != nil:
 		return probe.Failed
 	}
 	return probe.No

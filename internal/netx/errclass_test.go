@@ -48,3 +48,13 @@ func TestErrorClasses(t *testing.T) {
 		}
 	}
 }
+
+func TestAsBlocked(t *testing.T) {
+	be := &BlockedError{Module: "m", Host: "h.example"}
+	if got := AsBlocked(fmt.Errorf("dial: %w", be)); got != be {
+		t.Errorf("wrapped = %v", got)
+	}
+	if AsBlocked(errors.New("other")) != nil || AsBlocked(nil) != nil {
+		t.Error("non-policy error reported as blocked")
+	}
+}

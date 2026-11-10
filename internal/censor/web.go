@@ -193,7 +193,7 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 }
 
 func connectFailed(o outcome) bool {
-	return o.Err != nil && o.Phase == phaseConnect && !isPolicy(o.Err) && !errors.Is(o.Err, netx.ErrProxyRaw)
+	return o.Err != nil && o.Phase == phaseConnect && netx.AsBlocked(o.Err) == nil && !errors.Is(o.Err, netx.ErrProxyRaw)
 }
 
 func classifyHTTP(host string, o outcome) probe.Result {

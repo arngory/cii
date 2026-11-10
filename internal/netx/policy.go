@@ -1,6 +1,7 @@
 package netx
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"slices"
@@ -93,6 +94,14 @@ func normalizeHost(h string) string {
 	}
 	h = strings.TrimSuffix(strings.ToLower(h), ".")
 	return strings.Trim(h, "[]")
+}
+
+func AsBlocked(err error) *BlockedError {
+	var be *BlockedError
+	if errors.As(err, &be) {
+		return be
+	}
+	return nil
 }
 
 type BlockedError struct {

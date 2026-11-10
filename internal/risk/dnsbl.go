@@ -231,11 +231,10 @@ func checkDNSBL(ctx context.Context, r resolver, ip netip.Addr, resolvConf strin
 func interpret(z Zone, addrs []string, err error) (probe.Status, string, string) {
 	if err != nil {
 		var dnsErr *net.DNSError
-		var be *netx.BlockedError
 		switch {
 		case errors.Is(err, netx.ErrProxyRaw):
 			return probe.Unknown, "", proxyReason
-		case errors.As(err, &be):
+		case netx.AsBlocked(err) != nil:
 			return probe.Failed, "", "blocked by policy: *." + z.Zone
 		case errors.As(err, &dnsErr) && dnsErr.IsNotFound:
 			return probe.Yes, "", ""

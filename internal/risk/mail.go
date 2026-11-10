@@ -56,13 +56,13 @@ func checkSMTP(ctx context.Context, d dialer, opts MailOptions, timeout time.Dur
 }
 
 func dialFailure(err error) (probe.Status, string, string) {
-	var be *netx.BlockedError
+	if be := netx.AsBlocked(err); be != nil {
+		return probe.Failed, "", "blocked by policy: " + be.Host
+	}
 	var dnsErr *net.DNSError
 	switch {
 	case errors.Is(err, netx.ErrProxyRaw):
 		return probe.Unknown, "", proxyReason
-	case errors.As(err, &be):
-		return probe.Failed, "", "blocked by policy: " + be.Host
 	case errors.As(err, &dnsErr):
 		return probe.Failed, "", probe.Truncate("resolve: "+dnsErr.Err, 120)
 	case netx.IsTimeout(err):

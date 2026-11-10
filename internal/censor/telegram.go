@@ -114,10 +114,7 @@ func (h *hello) check(reply []byte) error {
 	return nil
 }
 
-type phaseError struct {
-	connected bool
-	err       error
-}
+type phaseError struct{ err error }
 
 func (e *phaseError) Error() string { return e.err.Error() }
 func (e *phaseError) Unwrap() error { return e.err }
@@ -138,14 +135,14 @@ func (r *runner) mtprotoExchange(ctx context.Context, addr string, dc int) error
 		c.SetDeadline(dl)
 	}
 	if _, err := c.Write(h.Wire); err != nil {
-		return &phaseError{true, err}
+		return &phaseError{err}
 	}
 	reply := make([]byte, mtprotoReplyBytes)
 	if _, err := io.ReadFull(c, reply); err != nil {
-		return &phaseError{true, err}
+		return &phaseError{err}
 	}
 	if err := h.check(reply); err != nil {
-		return &phaseError{true, err}
+		return &phaseError{err}
 	}
 	return nil
 }

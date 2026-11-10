@@ -184,7 +184,7 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 	t0 := time.Now()
 	ctrl, err := n.Dial(ctx, Module, "tcp", addr)
 	if err != nil {
-		if errors.Is(err, netx.ErrProxyRaw) || isBlocked(err) {
+		if errors.Is(err, netx.ErrProxyRaw) || netx.AsBlocked(err) != nil {
 			return 0, 0, err
 		}
 		return 0, 0, dialError{err}
@@ -388,9 +388,4 @@ func drain(ctx context.Context, c net.Conn, counter *atomic.Int64) {
 			return
 		}
 	}
-}
-
-func isBlocked(err error) bool {
-	var be *netx.BlockedError
-	return errors.As(err, &be)
 }

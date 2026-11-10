@@ -258,10 +258,10 @@ func CountryResult(raw string, status int) Result {
 }
 
 func reason(err error) string {
-	var be *netx.BlockedError
-	switch {
-	case errors.As(err, &be):
+	if be := netx.AsBlocked(err); be != nil {
 		return "blocked by policy: " + be.Host
+	}
+	switch {
 	case errors.Is(err, context.DeadlineExceeded):
 		return "timeout"
 	}

@@ -358,17 +358,21 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	side.Wait()
 	if withBench {
-		benchNet := shared
-		if benchNet == nil {
-			opts, err := c.options(netx.IPv4)
-			if err != nil {
-				return err
+		benchNet, skipped := shared, ""
+		if benchNet == nil && (benchOpts.Net || benchOpts.Iperf) {
+			if opts, err := c.options(c.families()[0]); err != nil {
+				benchOpts.Net, benchOpts.Iperf = false, false
+				skipped = "network tests skipped: " + err.Error()
+			} else {
+				benchNet = netx.New(opts, policy, led)
 			}
-			benchNet = netx.New(opts, policy, led)
 		}
 		progress := benchProgress(&c, s, screen)
 		b := bench.Run(ctx, bench.Env{Net: benchNet, Ledger: led}, benchOpts, progress)
 		progress("")
+		if skipped != "" {
+			b.Notes = append(b.Notes, skipped)
+		}
 		s.update(func() { s.bench = &b })
 	}
 	screen.stop()
