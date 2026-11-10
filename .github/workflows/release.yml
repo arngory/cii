@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -36,7 +38,25 @@ jobs:
           ./dist/cii-linux-amd64 data update --no-color --data-dir data $sources
           for f in data/*.mmdb; do gzip -9 -c "$f" > "dist/$(basename "$f").gz"; done
           cp data/manifest.json dist/data-manifest.json
-          cd dist && sha256sum cii-* *.mmdb.gz data-manifest.json > SHA256SUMS
+
+      - name: Build deb, rpm and apk packages
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.1
+          PATH="$PATH:$(go env GOPATH)/bin" packaging/build-packages.sh "$TAG"
+
+      - name: Checksums and package manager manifests
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum cii* *.mmdb.gz data-manifest.json > SHA256SUMS)
+          packaging/render-manifests.sh "$TAG"
+
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*"
 
       - name: Publish release
         env:
