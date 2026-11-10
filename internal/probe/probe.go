@@ -36,6 +36,7 @@ const (
 	Unknown Status = "unknown"
 	IPBlock Status = "ipblock"
 	Failed  Status = "error"
+	Pending Status = "pending"
 )
 
 type Result struct {
@@ -111,6 +112,15 @@ func Rules(checks []Check) []netx.Rule {
 type Env struct {
 	Nets map[netx.Family]*netx.Net
 	Keys config.Keys
+	Done func(i int, rs []Result)
+}
+
+func Placeholders(checks []Check) []Result {
+	out := make([]Result, len(checks))
+	for i, c := range checks {
+		out[i] = Result{Group: c.Group, Service: c.Service, Status: Pending, Extended: c.Tier == TierB}
+	}
+	return out
 }
 
 const maxBody = 4 << 20
@@ -126,6 +136,9 @@ func Run(ctx context.Context, env Env, f netx.Family, ip netip.Addr, checks []Ch
 			sem <- struct{}{}
 			defer func() { <-sem }()
 			results[i] = complete(c, runOne(ctx, env, f, ip, c))
+			if env.Done != nil {
+				env.Done(i, results[i])
+			}
 		}()
 	}
 	wg.Wait()

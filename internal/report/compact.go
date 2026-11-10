@@ -23,11 +23,11 @@ type Style struct {
 	Width   int
 }
 
-type marks struct{ yes, no, partial, block, unknown, failed, none, sep, down, up string }
+type marks struct{ yes, no, partial, block, unknown, failed, none, sep, down, up, pending string }
 
 var (
-	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · ", "↓", "↑"}
-	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | ", "down", "up"}
+	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · ", "↓", "↑", "◌"}
+	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | ", "down", "up", "o"}
 )
 
 func UnicodeTerminal() bool {
@@ -128,7 +128,7 @@ func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
 		}
 	}
 
-	writeServiceGrid(w, c, m, st.Width, fams)
+	writeServiceGrid(w, c, m, st.Width, fams, func(h *Host, r probe.Result) bool { return !coveredByProfile(h, r) })
 	if len(r.Censor) > 0 {
 		writeGrid2(w, c, m, st.Width, []column{newColumn("", r.Censor)}, [][]string{nil})
 	}
@@ -328,16 +328,15 @@ func groupTitle(g probe.Group) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam) {
+func coveredByProfile(h *Host, r probe.Result) bool {
+	return h.Profile != nil && r.Group == risk.Reputation && r.Facts != nil && r.Status == probe.Yes
+}
+
+func writeServiceGrid(w io.Writer, c paint, m marks, width int, fams []fam, keep func(*Host, probe.Result) bool) {
 	var cols []column
 	var verdicts [][]string
 	for _, f := range fams {
-		rs := f.host.Services
-		if f.host.Profile != nil {
-			rs = slices.DeleteFunc(slices.Clone(rs), func(r probe.Result) bool {
-				return r.Group == risk.Reputation && r.Facts != nil && r.Status == probe.Yes
-			})
-		}
+		rs := slices.DeleteFunc(slices.Clone(f.host.Services), func(r probe.Result) bool { return !keep(f.host, r) })
 		if len(rs) > 0 {
 			cols = append(cols, newColumn(f.label, rs))
 			var v []string
@@ -466,6 +465,8 @@ func mark(c paint, m marks, r probe.Result, ok bool) (string, func(string) strin
 		return m.block, c.red
 	case probe.Failed:
 		return m.failed, c.dim
+	case probe.Pending:
+		return m.pending, c.dim
 	}
 	return m.unknown, c.dim
 }

@@ -275,67 +275,56 @@ func cmdIP(ctx context.Context, args []string) error {
 	if c.offline {
 		mode = "offline"
 	}
-	rep := report.New(mode, c.mask)
-	rep.SetData(dbs)
+	s := &session{mode: mode, mask: c.mask, dbs: dbs, led: led}
+	screen := startScreen(&c, s)
+	defer screen.stop()
 
-	type found struct {
-		family netx.Family
-		addr   ipdetect.Address
-		geo    []geodb.Record
-	}
-	var hosts []found
 	nets := map[netx.Family]*netx.Net{}
 	for _, f := range c.families() {
-		opts, err := c.options(f)
-		if err != nil {
-			hosts = append(hosts, found{family: f, addr: ipdetect.Address{Error: err.Error()}})
-			continue
-		}
-		n := netx.New(opts, policy, led)
-		addr := ipdetect.Detect(ctx, n, f, ipdetect.Options{Providers: providers, Offline: c.offline, Iface: c.iface, Source: opts.Source})
-		var geo []geodb.Record
-		if addr.Address.IsValid() {
-			geo = dbs.Lookup(addr.Address)
-			nets[f] = n
-		}
-		hosts = append(hosts, found{family: f, addr: addr, geo: geo})
-	}
-	for _, h := range hosts {
-		host := report.NewHost(h.addr, h.geo, c.mask)
-		if h.addr.Address.IsValid() {
-			results := localOpinions(h.geo)
-			var svc []probe.Result
-			if !c.offline {
-				for _, r := range probe.Run(ctx, probe.Env{Nets: nets, Keys: cfg.Keys}, h.family, h.addr.Address, checks) {
-					if region.Owns(r.Group) {
-						results = append(results, r)
-					} else {
-						svc = append(svc, r)
+		h := &hostRun{family: f}
+		if opts, err := c.options(f); err != nil {
+			h.addr = ipdetect.Address{Error: err.Error()}
+		} else {
+			n := netx.New(opts, policy, led)
+			h.addr = ipdetect.Detect(ctx, n, f, ipdetect.Options{Providers: providers, Offline: c.offline, Iface: c.iface, Source: opts.Source})
+			if h.addr.Address.IsValid() {
+				h.geo = dbs.Lookup(h.addr.Address)
+				h.local = localOpinions(h.geo)
+				nets[f] = n
+				if !c.offline {
+					h.checks = slots(probe.Placeholders(checks))
+					if riskOn {
+						h.risk = risk.Placeholders(h.addr.Address, risk.Options{})
 					}
 				}
 			}
-			summary := region.Summarize(results)
-			if !c.offline {
-				regional := services.SelectRegional(c.catalogsFor(catalogs, summary.Verdict), cfg.Keys, c.extended)
-				svc = append(svc, probe.Run(ctx, probe.Env{Nets: nets, Keys: cfg.Keys}, h.family, h.addr.Address, regional)...)
-				if riskOn {
-					svc = append(svc, risk.Run(ctx, nets[h.family], h.addr.Address, risk.Options{})...)
-				}
-			}
+		}
+		s.update(func() { s.hosts = append(s.hosts, h) })
+	}
+	for _, h := range s.hosts {
+		if !h.addr.Address.IsValid() {
+			continue
+		}
+		ip := h.addr.Address
+		if !c.offline {
+			env := probe.Env{Nets: nets, Keys: cfg.Keys, Done: func(i int, rs []probe.Result) { s.update(func() { h.checks[i] = rs }) }}
+			probe.Run(ctx, env, h.family, ip, checks)
+			regional := services.SelectRegional(c.catalogsFor(catalogs, s.verdict(h)), cfg.Keys, c.extended)
+			s.update(func() { h.regional = slots(probe.Placeholders(regional)) })
+			env.Done = func(i int, rs []probe.Result) { s.update(func() { h.regional[i] = rs }) }
+			probe.Run(ctx, env, h.family, ip, regional)
 			if riskOn {
-				svc = append(svc, risk.Offline(c.dir(), h.addr.Address)...)
-			}
-			if len(svc) > 0 {
-				host.SetServices(svc, c.mask)
-			}
-			if len(results) > 0 {
-				host.SetRegion(summary, c.mask)
+				rs := risk.Run(ctx, nets[h.family], ip, risk.Options{})
+				s.update(func() { h.risk = rs })
 			}
 		}
-		setHost(rep, h.family, host)
+		if riskOn {
+			rs := risk.Offline(c.dir(), ip)
+			s.update(func() { h.offline = rs })
+		}
 	}
-	rep.Network = led.Entries()
-	return output(rep, &c)
+	screen.stop()
+	return output(s.report(), &c)
 }
 
 func (c *common) catalogs() ([]string, error) {
@@ -409,15 +398,29 @@ func output(r *report.Report, c *common) error {
 		return nil
 	}
 	unicode := report.UnicodeTerminal()
-	r.WriteCompact(os.Stdout, report.Style{Color: c.color(), Unicode: unicode, Width: terminalWidth()}, footer(r, unicode, logPath, logErr))
+	style := report.Style{Color: c.color(), Unicode: unicode, Width: terminalWidth()}
+	if usesScreen(r) {
+		fmt.Println(strings.Join(r.Screen(style, screenTitle(r), footer(r, unicode, logPath, logErr)), "\n"))
+		return nil
+	}
+	r.WriteCompact(os.Stdout, style, footer(r, unicode, logPath, logErr))
 	return nil
 }
+
+const logScreenWidth = 160
+
+func usesScreen(r *report.Report) bool { return r.Mode == "online" || r.Mode == "offline" }
+
+func screenTitle(r *report.Report) string { return r.Tool.Name + " " + r.Tool.Version }
 
 func writeLog(r *report.Report, c *common) (string, error) {
 	if c.noLog {
 		return "", nil
 	}
 	var text, js bytes.Buffer
+	if usesScreen(r) {
+		text.WriteString(strings.Join(r.Screen(report.Style{Unicode: true, Width: logScreenWidth}, screenTitle(r), nil), "\n") + "\n\n")
+	}
 	r.WriteDetailed(&text, false)
 	if err := r.WriteJSON(&js); err != nil {
 		return "", err

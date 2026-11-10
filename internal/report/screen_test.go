@@ -1,0 +1,97 @@
+package report
+
+import (
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/risk"
+)
+
+func TestColumnWidths(t *testing.T) {
+	for width, want := range map[int][]int{
+		80: {80}, 109: {109}, 110: {60, 49}, 150: {60, 89}, 199: {76, 122}, 200: {66, 74, 58}, 240: {66, 114, 58},
+	} {
+		if got := columnWidths(width); !slices.Equal(got, want) {
+			t.Errorf("columnWidths(%d) = %v, want %v", width, got, want)
+		}
+	}
+}
+
+func TestClipVisible(t *testing.T) {
+	c := paint(true)
+	s := c.green("abcdef") + "gh"
+	if visibleLen(s) != 8 {
+		t.Fatalf("visibleLen = %d", visibleLen(s))
+	}
+	got := clipVisible(s, 4)
+	if visibleLen(got) != 4 || !strings.HasSuffix(got, "…\x1b[0m") {
+		t.Errorf("clipVisible = %q", got)
+	}
+	if clipVisible("abc", 5) != "abc" || padVisible("ab", 4) != "ab  " {
+		t.Error("short strings changed")
+	}
+}
+
+func screenReport() *Report {
+	return &Report{Tool: Tool{Name: "cii", Version: "test"}, IPv4: sampleProfileHost(), IPv6: &Host{Error: "no IPv6"}}
+}
+
+func TestScreenLayouts(t *testing.T) {
+	titles := []string{"IP quality · IPv4", "Region & services", "Reputation lists & mail"}
+	for _, c := range []struct {
+		width   int
+		perLine int
+	}{{80, 1}, {150, 2}, {220, 3}} {
+		lines := screenReport().Screen(Style{Unicode: true, Width: c.width}, "cii test", []string{"footer note"})
+		out := strings.Join(lines, "\n")
+		for _, l := range lines {
+			if visibleLen(l) > c.width {
+				t.Errorf("width %d: line too long (%d): %q", c.width, visibleLen(l), l)
+			}
+		}
+		best := 0
+		for _, l := range lines {
+			n := 0
+			for _, title := range titles {
+				if strings.Contains(l, title) {
+					n++
+				}
+			}
+			best = max(best, n)
+		}
+		if best != c.perLine {
+			t.Errorf("width %d: %d panel titles side by side, want %d\n%s", c.width, best, c.perLine, out)
+		}
+		for _, s := range []string{"cii test", "IP quality · IPv6", "unavailable", "US, geo-discrepant", "proxycheck.io", "abuse", "✗ proxycheck.io: VPN; risk 66", "bl.spamcop.net", "footer note"} {
+			if !strings.Contains(out, s) {
+				t.Errorf("width %d: %q missing\n%s", c.width, s, out)
+			}
+		}
+		if strings.Contains(out, "registered US") {
+			t.Errorf("width %d: registry repeated in the region line\n%s", c.width, out)
+		}
+	}
+	ascii := strings.Join(screenReport().Screen(Style{Width: 80}, "", nil), "\n")
+	if strings.ContainsAny(ascii, "┌│└✓✗") || !strings.Contains(ascii, "+- IP quality") {
+		t.Errorf("ASCII frame:\n%s", ascii)
+	}
+}
+
+func TestScreenPendingAndProgress(t *testing.T) {
+	h := &Host{Address: "203.0.113.7"}
+	h.SetServices([]probe.Result{
+		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.Pending},
+		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.Pending},
+		{Group: risk.DNSBL, Service: "psbl.surriel.com", Status: probe.Yes},
+	}, false)
+	r := &Report{IPv4: h}
+	if done, total := Progress(r); done != 1 || total != 3 {
+		t.Errorf("progress = %d/%d", done, total)
+	}
+	out := strings.Join(r.Screen(Style{Unicode: true, Width: 100}, "", nil), "\n")
+	if !strings.Contains(out, "◌ waiting: proxycheck.io") || !strings.Contains(out, "◌ bl.spamcop.net") {
+		t.Errorf("pending output:\n%s", out)
+	}
+}

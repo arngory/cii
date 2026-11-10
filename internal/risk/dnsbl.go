@@ -136,14 +136,22 @@ func Run(ctx context.Context, n *netx.Net, ip netip.Addr, opts Options) []probe.
 }
 
 func proxied(ip netip.Addr, opts Options) []probe.Result {
+	return slots(ip, opts, probe.Unknown, proxyReason)
+}
+
+func Placeholders(ip netip.Addr, opts Options) []probe.Result {
+	return slots(ip, opts, probe.Pending, "")
+}
+
+func slots(ip netip.Addr, opts Options, status probe.Status, reason string) []probe.Result {
 	var out []probe.Result
 	if !opts.NoDNSBL {
 		for _, z := range zonesFor(ip) {
-			out = append(out, probe.Result{Group: DNSBL, Service: z.Zone, Status: probe.Unknown, Reason: proxyReason})
+			out = append(out, probe.Result{Group: DNSBL, Service: z.Zone, Status: status, Reason: reason})
 		}
 	}
 	if !opts.NoMail {
-		out = append(out, probe.Result{Group: Mail, Service: smtpService, Status: probe.Unknown, Reason: proxyReason})
+		out = append(out, probe.Result{Group: Mail, Service: smtpService, Status: status, Reason: reason})
 	}
 	return out
 }
