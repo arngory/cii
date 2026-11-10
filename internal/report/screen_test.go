@@ -191,7 +191,7 @@ func TestScreenExits(t *testing.T) {
 
 func TestScreenRussian(t *testing.T) {
 	out := strings.Join(screenReport().Screen(Style{Unicode: true, Width: 160, Lang: "ru"}, "", nil), "\n")
-	for _, s := range []string{"Качество IP · IPv4", "Регион и сервисы", "Адрес", "Реестр", "не совпадает с геолокацией", "Факторы", "прокси", "высокая", "чисто, ✗ обнаружено"} {
+	for _, s := range []string{"Качество IP · IPv4", "Регион и сервисы", "Адрес", "Реестр", "не совпадает с геолокацией", "Факторы", "cc proxy", "высокая", "чисто, ✗ обнаружено"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("%q missing\n%s", s, out)
 		}

@@ -193,7 +193,7 @@ func factorLines(c paint, m marks, sources []probe.Result, name func(probe.Resul
 	}
 	head := pad("", nameW) + "  cc"
 	for _, f := range probe.Flags {
-		head += pad("", factorCell-utf8.RuneCountInString(m.tr(factorHeads[f]))) + m.tr(factorHeads[f])
+		head += fmt.Sprintf("%*s", factorCell, factorHeads[f])
 	}
 	out := []string{c.dim(head)}
 	for _, r := range rows {
