@@ -9,7 +9,7 @@ PLATFORMS := \
 	darwin/amd64 darwin/arm64 \
 	windows/amd64 windows/arm64
 
-.PHONY: build test vet fmt-check check cross schema
+.PHONY: build test vet fmt-check check cross schema fuzz
 
 build:
 	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o cii ./cmd/cii
@@ -39,3 +39,11 @@ cross:
 
 schema:
 	go run ./tools/genschema
+
+FUZZTIME ?= 30s
+
+fuzz:
+	go test ./internal/probe/ -run '^$$' -fuzz '^FuzzEvals$$' -fuzztime $(FUZZTIME)
+	go test ./internal/risk/ -run '^$$' -fuzz '^FuzzDataParsers$$' -fuzztime $(FUZZTIME)
+	go test ./internal/bench/ -run '^$$' -fuzz '^FuzzParseFio$$' -fuzztime $(FUZZTIME)
+	go test ./internal/censor/ -run '^$$' -fuzz '^FuzzParseAnswer$$' -fuzztime $(FUZZTIME)

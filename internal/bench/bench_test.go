@@ -598,3 +598,9 @@ func TestIperfErrorNamesTheStep(t *testing.T) {
 		t.Errorf("run = %+v", run)
 	}
 }
+
+func FuzzParseFio(f *testing.F) {
+	f.Add([]byte(`{"fio version":"fio-3.33","jobs":[{"jobname":"x","read":{"bw_bytes":1,"iops":1}}]}`))
+	f.Add([]byte("fio: warning\n{"))
+	f.Fuzz(func(t *testing.T, data []byte) { parseFio(data) })
+}

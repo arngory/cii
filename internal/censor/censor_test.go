@@ -339,3 +339,13 @@ func TestPlaceholders(t *testing.T) {
 		t.Error("all modes expected by default")
 	}
 }
+
+func FuzzParseAnswer(f *testing.F) {
+	q, _ := buildQuery(7, "example.com.", dnsmessage.TypeA)
+	f.Add(q)
+	f.Add([]byte{0, 7, 0x81, 0x80, 0, 1, 0, 1, 0, 0, 0, 0})
+	f.Fuzz(func(t *testing.T, msg []byte) {
+		parseAnswer(msg, 7, dnsmessage.TypeA)
+		parseAnswer(msg, 7, dnsmessage.TypeAAAA)
+	})
+}
