@@ -1,5 +1,7 @@
 # cii
 
+[English version](README.en.md)
+
 **cii — complete information about current IP.** Один статический бинарник на Go, который собирает в одном отчёте то, для чего обычно запускают несколько скриптов: где «находится» ваш IP по мнению разных баз, кому принадлежит сеть, какие сервисы доступны из этой точки, есть ли цензура или DPI, какая скорость.
 
 Главный принцип — **автономность от авторов**. cii ходит только по адресам, которые его модули объявили заранее. Он не отправляет отчёты на чужие серверы, не ведёт счётчиков запусков и телеметрии, не скачивает и не исполняет код, не пользуется чужими прокси, ключами и аккаунтами. Подробнее — в [docs/NETWORK_POLICY.md](docs/NETWORK_POLICY.md).
@@ -75,7 +77,7 @@ cii 0.1.0
 │ Address  203.0.113.7                                     │ │ Region  DE Germany · GeoIP 3/3 · platforms 1/2 · ChatGPT* says NL                     │
 │ ASN      AS3320 Deutsche Telekom AG                      │ │ CDN     Cloudflare FRA DE · Fastly FRA DE                                             │
 │ Place    DE Germany, Frankfurt am Main                   │ │                                                                                       │
-│ Route    AS3320 DTAG Deutsche Telekom AG · 203.0.112.0/… │ │ Streaming  ✓ Netflix             ✗ Disney+*                                           │
+│ Route    203.0.112.0/20 · AS3320 DTAG Deutsche Telekom A… │ │ Streaming  ✓ Netflix             ✗ Disney+*                                           │
 │ PTR      p203007.dip0.example.net                        │ │            ✓ Prime Video         ✓ YouTube Premium*                                   │
 │ Registry DE  ✓ geo-consistent                            │ │ Web        ✓ Reddit              ⊘ Wikipedia editing                                  │
 │                                                          │ │ AI         ✓ OpenAI API          ✓ Grok API                                           │
