@@ -60,7 +60,7 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 	var res Address
 	var candidates []netip.Addr
 	switch {
-	case n.Proxied():
+	case n.Proxied() && !o.Offline:
 	case o.Iface != "" || !o.Source.IsValid():
 		candidates, _ = netx.InterfaceAddrs(o.Iface)
 	default:

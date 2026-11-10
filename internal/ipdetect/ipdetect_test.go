@@ -81,4 +81,7 @@ func TestDetectBehindProxyNeverFallsBackToInterface(t *testing.T) {
 	if got.Address.IsValid() || len(got.Interface) != 0 || got.Error == "" {
 		t.Errorf("proxied = %+v", got)
 	}
+	if got := Detect(context.Background(), proxied, netx.IPv4, Options{Providers: providers, Source: source, Offline: true}); got.Address != source {
+		t.Errorf("proxied offline = %+v", got)
+	}
 }
