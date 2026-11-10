@@ -301,17 +301,20 @@ func cmdIP(ctx context.Context, args []string) error {
 	defer screen.stop()
 
 	nets := map[netx.Family]*netx.Net{}
+	var detect sync.WaitGroup
 	for _, f := range c.families() {
-		h := &hostRun{family: f}
-		if opts, err := c.options(f); err != nil {
-			h.addr = ipdetect.Address{Error: err.Error()}
-		} else {
-			n := netx.New(opts, policy, led)
-			h.addr = ipdetect.Detect(ctx, n, f, ipdetect.Options{Providers: providers, Offline: c.offline, Iface: c.iface, Source: opts.Source})
+		detect.Go(func() {
+			h := &hostRun{family: f}
+			var n *netx.Net
+			if opts, err := c.options(f); err != nil {
+				h.addr = ipdetect.Address{Error: err.Error()}
+			} else {
+				n = netx.New(opts, policy, led)
+				h.addr = ipdetect.Detect(ctx, n, f, ipdetect.Options{Providers: providers, Offline: c.offline, Iface: c.iface, Source: opts.Source})
+			}
 			if h.addr.Address.IsValid() {
 				h.geo = dbs.Lookup(h.addr.Address)
 				h.local = localOpinions(h.geo)
-				nets[f] = n
 				if !c.offline {
 					h.checks = slots(probe.Placeholders(checks))
 					if riskOn {
@@ -319,9 +322,15 @@ func cmdIP(ctx context.Context, args []string) error {
 					}
 				}
 			}
-		}
-		s.update(func() { s.hosts = append(s.hosts, h) })
+			s.update(func() {
+				s.hosts = append(s.hosts, h)
+				if h.addr.Address.IsValid() {
+					nets[f] = n
+				}
+			})
+		})
 	}
+	detect.Wait()
 	shared := nets[netx.IPv4]
 	if shared == nil {
 		shared = nets[netx.IPv6]
@@ -334,28 +343,14 @@ func cmdIP(ctx context.Context, args []string) error {
 			s.update(func() { s.censor = rs })
 		})
 	}
+	plan := stackPlan{c: &c, s: s, nets: nets, keys: cfg.Keys, checks: checks, catalogs: catalogs, risk: riskOn}
+	var stacks sync.WaitGroup
 	for _, h := range s.hosts {
-		if !h.addr.Address.IsValid() {
-			continue
-		}
-		ip := h.addr.Address
-		if !c.offline {
-			env := probe.Env{Nets: nets, Keys: cfg.Keys, Done: func(i int, rs []probe.Result) { s.update(func() { h.checks[i] = rs }) }}
-			probe.Run(ctx, env, h.family, ip, checks)
-			regional := services.SelectRegional(c.catalogsFor(catalogs, s.verdict(h)), cfg.Keys, c.extended)
-			s.update(func() { h.regional = slots(probe.Placeholders(regional)) })
-			env.Done = func(i int, rs []probe.Result) { s.update(func() { h.regional[i] = rs }) }
-			probe.Run(ctx, env, h.family, ip, regional)
-			if riskOn {
-				rs := risk.Run(ctx, nets[h.family], ip, risk.Options{})
-				s.update(func() { h.risk = rs })
-			}
-		}
-		if riskOn {
-			rs := risk.Offline(c.dir(), ip)
-			s.update(func() { h.offline = rs })
+		if h.addr.Address.IsValid() {
+			stacks.Go(func() { plan.checkHost(ctx, h) })
 		}
 	}
+	stacks.Wait()
 	side.Wait()
 	if withBench {
 		benchNet, skipped := shared, ""
@@ -377,6 +372,36 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	screen.stop()
 	return output(s.report(), &c)
+}
+
+type stackPlan struct {
+	c        *common
+	s        *session
+	nets     map[netx.Family]*netx.Net
+	keys     config.Keys
+	checks   []probe.Check
+	catalogs []string
+	risk     bool
+}
+
+func (p stackPlan) checkHost(ctx context.Context, h *hostRun) {
+	ip := h.addr.Address
+	if !p.c.offline {
+		env := probe.Env{Nets: p.nets, Keys: p.keys, Done: func(i int, rs []probe.Result) { p.s.update(func() { h.checks[i] = rs }) }}
+		probe.Run(ctx, env, h.family, ip, p.checks)
+		regional := services.SelectRegional(p.c.catalogsFor(p.catalogs, p.s.verdict(h)), p.keys, p.c.extended)
+		p.s.update(func() { h.regional = slots(probe.Placeholders(regional)) })
+		env.Done = func(i int, rs []probe.Result) { p.s.update(func() { h.regional[i] = rs }) }
+		probe.Run(ctx, env, h.family, ip, regional)
+		if p.risk {
+			rs := risk.Run(ctx, p.nets[h.family], ip, risk.Options{})
+			p.s.update(func() { h.risk = rs })
+		}
+	}
+	if p.risk {
+		rs := risk.Offline(p.c.dir(), ip)
+		p.s.update(func() { h.offline = rs })
+	}
 }
 
 func (c *common) catalogs() ([]string, error) {
