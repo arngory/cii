@@ -22,12 +22,19 @@ var webChecks = []probe.Check{
 		Requests: []probe.Request{
 			{URL: ip2locationPage},
 			{Method: http.MethodPost, URL: "https://api.ip2location.io/query/", BodyFrom: ip2locationQuery,
-				Header: map[string]string{"Content-Type": "application/x-www-form-urlencoded", "Origin": "https://www.ip2location.com", "Referer": ip2locationPage}},
+				Header: map[string]string{"Content-Type": "application/x-www-form-urlencoded"}},
 		},
 		Eval: evalIP2LocationWeb},
 }
 
 const ip2locationPage = "https://www.ip2location.com/"
+
+func pageFailure(r *probe.Response) []probe.Result {
+	if res, failed := probe.HTTPFailure(r.Status); failed {
+		return []probe.Result{res}
+	}
+	return []probe.Result{{Status: probe.Failed, Reason: "unexpected response"}}
+}
 
 func evalIPinfoDemo(rs []*probe.Response) []probe.Result {
 	r := rs[0]
@@ -53,7 +60,7 @@ func evalIPinfoDemo(rs []*probe.Response) []probe.Result {
 	}
 	err := json.Unmarshal(r.Body, &d)
 	if r.Status >= 400 || err != nil || d.Data == nil {
-		return failure(r, "")
+		return pageFailure(r)
 	}
 	p := d.Data.Privacy
 	if p == nil {
@@ -162,6 +169,9 @@ func evalScamalytics(rs []*probe.Response) []probe.Result {
 var ip2locationToken = regexp.MustCompile(`ip:\s*'([^']+)',\s*t:\s*(\d+),\s*token:\s*'([0-9A-Fa-f]+)'`)
 
 func ip2locationQuery(ip netip.Addr, prev []*probe.Response) (string, error) {
+	if res, failed := probe.HTTPFailure(prev[0].Status); failed {
+		return "", errors.New("home page: " + res.Reason)
+	}
 	m := ip2locationToken.FindSubmatch(prev[0].Body)
 	if m == nil {
 		return "", errors.New("lookup token not found on the page")
@@ -188,7 +198,7 @@ func evalIP2LocationWeb(rs []*probe.Response) []probe.Result {
 	}
 	err := json.Unmarshal(r.Body, &d)
 	if r.Status >= 400 || err != nil {
-		return failure(r, "")
+		return pageFailure(r)
 	}
 	known := func(s string) bool { return s != "" && s != "-" }
 	if !known(d.IsProxy) && !known(d.FraudScore) && !known(d.UsageType) {

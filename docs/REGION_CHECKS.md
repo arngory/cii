@@ -86,6 +86,6 @@
 
 | Что | Почему |
 |---|---|
-| демо-токен MaxMind со страницы демо, `ipinfo.io/widget/demo`, `demo.ip-api.com` с поддельным `Origin` | демо-эндпоинты сайтов, а не API (уровень C) |
+| демо-токен MaxMind со страницы демо, `demo.ip-api.com` с поддельным `Origin` | постоянный демо-ключ сайта и подделка заголовка (уровень C). `ipinfo.io/widget/demo` в проверке региона не используется; модуль risk обращается к нему только с `--extended` (см. [RISK_CHECKS.md](RISK_CHECKS.md)) |
 | встроенные ключи ipregistry, geoapify, air-port-codes | чужие ключи (уровень C); ipregistry и geoapify доступны с вашими ключами, справочник аэропортов встроен |
 | `speed.cloudflare.com/meta` | без поддельного `Referer` отвечает 403; та же информация есть в `cdn-cgi/trace` |

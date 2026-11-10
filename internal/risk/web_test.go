@@ -49,6 +49,9 @@ func TestIPinfoDemo(t *testing.T) {
 	if res := one(t, evalIPinfoDemo(resp(429, `{"error":"rate limit"}`))); res.Status != probe.Failed || res.Reason != "rate limited" {
 		t.Errorf("rate limited = %+v", res)
 	}
+	if res := one(t, evalIPinfoDemo(resp(403, `forbidden`))); res.Status != probe.Failed || res.Reason != "HTTP 403" {
+		t.Errorf("forbidden = %+v", res)
+	}
 }
 
 const scamPage = `<title>203.0.113.7 Fraud Risk</title>
@@ -119,8 +122,11 @@ func TestIP2LocationWeb(t *testing.T) {
 	if _, err := ip2locationQuery(netip.MustParseAddr("198.51.100.1"), page); err == nil || strings.Contains(err.Error(), "203.0") {
 		t.Errorf("other address error = %v", err)
 	}
-	if _, err := ip2locationQuery(netip.MustParseAddr("203.0.113.7"), []*probe.Response{{Body: []byte("<html></html>")}}); err == nil {
+	if _, err := ip2locationQuery(netip.MustParseAddr("203.0.113.7"), []*probe.Response{{Status: 200, Body: []byte("<html></html>")}}); err == nil {
 		t.Error("page without token accepted")
+	}
+	if _, err := ip2locationQuery(netip.MustParseAddr("203.0.113.7"), []*probe.Response{{Status: 403, Body: page[0].Body}}); err == nil || err.Error() != "home page: HTTP 403" {
+		t.Errorf("blocked page error = %v", err)
 	}
 
 	answer := func(body string) []*probe.Response { return append(page, resp(200, body)...) }
