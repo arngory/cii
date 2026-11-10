@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -81,11 +82,21 @@ func (p panel) box(c paint, f frameChars, width int) []string {
 	return append(out, f.bl+strings.Repeat(f.h, max(0, width-2))+f.br)
 }
 
-func columnWidths(width int) []int {
+func columnCount(width int) int {
 	switch {
 	case width < twoColumns:
-		return []int{width}
+		return 1
 	case width < threeColumns:
+		return 2
+	}
+	return 3
+}
+
+func columnWidths(width, n int) []int {
+	switch n {
+	case 1:
+		return []int{width}
+	case 2:
 		left := min(max(width*2/5, 60), 76)
 		return []int{left, width - left - 1}
 	}
@@ -116,22 +127,21 @@ func (r *Report) Screen(st Style, header string, footer []string) []string {
 	if width <= 0 {
 		width = 80
 	}
-	widths := columnWidths(width)
-	cols := make([][]panel, len(widths))
-	last := len(widths) - 1
-	place := func(i int, p panel) {
-		if len(p.lines) > 0 {
-			cols[min(i, last)] = append(cols[min(i, last)], p)
+	ps := slices.DeleteFunc(r.panels(c, m), func(p slotPanel) bool { return len(p.lines(width-4)) == 0 })
+	var slots []int
+	for _, p := range ps {
+		if !slices.Contains(slots, p.slot) {
+			slots = append(slots, p.slot)
 		}
 	}
-
-	fams := r.families()
-	for _, fm := range fams {
-		place(0, panel{"IP quality · " + fm.label, qualityLines(c, m, fm.label, fm.host, widths[0]-4)})
+	slices.Sort(slots)
+	n := max(1, min(len(slots), columnCount(width)))
+	widths := columnWidths(width, n)
+	cols := make([][]panel, n)
+	for _, p := range ps {
+		i := min(slices.Index(slots, p.slot), n-1)
+		cols[i] = append(cols[i], panel{p.title, p.lines(widths[i] - 4)})
 	}
-	mid := min(1, last)
-	place(mid, panel{"Region & services", serviceLines(c, m, fams, widths[mid]-4)})
-	place(2, panel{"Reputation lists & mail", checkLines(c, m, fams, widths[min(2, last)]-4)})
 
 	var out []string
 	if header != "" {
@@ -146,6 +156,38 @@ func (r *Report) Screen(st Style, header string, footer []string) []string {
 		out = append(out, bufferLines(func(b *bytes.Buffer) { writeLine(b, width, m.sep, "", 0, parts) })...)
 	}
 	return out
+}
+
+type slotPanel struct {
+	slot  int
+	title string
+	lines func(iw int) []string
+}
+
+func (r *Report) panels(c paint, m marks) []slotPanel {
+	fams := r.families()
+	var ps []slotPanel
+	for _, fm := range fams {
+		ps = append(ps, slotPanel{0, "IP quality · " + fm.label, func(iw int) []string { return qualityLines(c, m, fm.label, fm.host, iw) }})
+	}
+	if r.Bench != nil {
+		ps = append(ps, slotPanel{0, "Benchmark", func(iw int) []string {
+			return bufferLines(func(b *bytes.Buffer) { writeBenchCompact(b, c, m, iw, r.Bench) })
+		}})
+	}
+	ps = append(ps,
+		slotPanel{1, "Region & services", func(iw int) []string { return serviceLines(c, m, fams, iw) }},
+		slotPanel{2, "Reputation lists & mail", func(iw int) []string { return checkLines(c, m, fams, iw) }},
+	)
+	if len(r.Censor) > 0 {
+		ps = append(ps, slotPanel{2, "Censorship", func(iw int) []string {
+			if r.Mode == "censor" {
+				return bufferLines(func(b *bytes.Buffer) { writeGrid2(b, c, m, iw, []column{newColumn("", r.Censor)}, [][]string{nil}) })
+			}
+			return summaryLines(c, m, r.Censor, iw)
+		}})
+	}
+	return ps
 }
 
 func joinColumns(c paint, f frameChars, cols [][]panel, widths []int) []string {
@@ -351,4 +393,60 @@ func Progress(r *Report) (done, total int) {
 		}
 	}
 	return done, total
+}
+
+const maxFindings = 8
+
+func summaryLines(c paint, m marks, rs []probe.Result, iw int) []string {
+	var groups []probe.Group
+	labelW := 0
+	for _, r := range rs {
+		if !slices.Contains(groups, r.Group) {
+			groups = append(groups, r.Group)
+			labelW = max(labelW, utf8.RuneCountInString(groupTitle(r.Group)))
+		}
+	}
+	var lines, findings []string
+	for _, g := range groups {
+		counts := map[probe.Status]int{}
+		var hits []probe.Result
+		for _, r := range rs {
+			if r.Group != g {
+				continue
+			}
+			st := r.Status
+			if st == probe.OK {
+				st = probe.Yes
+			}
+			counts[st]++
+			if st == probe.No || st == probe.Partial || st == probe.IPBlock {
+				hits = append(hits, r)
+			}
+		}
+		var parts []gcell
+		for _, st := range []probe.Status{probe.Yes, probe.No, probe.Partial, probe.IPBlock, probe.Unknown, probe.Failed, probe.Pending} {
+			if n := counts[st]; n > 0 {
+				sym, style := mark(c, m, probe.Result{Status: st}, true)
+				parts = append(parts, gcell{text: sym + " " + strconv.Itoa(n), style: style})
+			}
+		}
+		label := c.bold(pad(groupTitle(g), labelW)) + "  "
+		lines = append(lines, bufferLines(func(b *bytes.Buffer) { writeLine(b, iw, m.sep, label, labelW+2, parts) })...)
+		for _, r := range hits {
+			sym, style := mark(c, m, r, true)
+			text := style(sym) + " " + groupTitle(g) + ": " + serviceName(r)
+			if d := cmp.Or(r.Detail, r.Reason); d != "" {
+				text += " " + c.dim(d)
+			}
+			findings = append(findings, text)
+		}
+	}
+	if len(findings) > maxFindings {
+		more := len(findings) - maxFindings
+		findings = append(findings[:maxFindings], c.dim(fmt.Sprintf("… %d more in --debug and the log", more)))
+	}
+	if len(findings) > 0 {
+		lines = append(append(lines, ""), findings...)
+	}
+	return lines
 }

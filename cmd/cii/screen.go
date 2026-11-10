@@ -76,11 +76,18 @@ func liveFrame(c *common, s *session, started time.Time) string {
 		height = 40
 	}
 	rep := s.report()
-	status := "detecting the public address"
-	if done, total := report.Progress(rep); total > 0 {
-		status = fmt.Sprintf("checking %d/%d", done, total)
+	parts := []string{rep.Tool.Name + " " + rep.Tool.Version}
+	switch done, total := report.Progress(rep); {
+	case total > 0:
+		parts = append(parts, fmt.Sprintf("checking %d/%d", done, total))
+	case rep.Mode == "online" || rep.Mode == "offline":
+		parts = append(parts, "detecting the public address")
 	}
-	header := fmt.Sprintf("%s %s · %s · %ds · Ctrl+C stops and shows what is done", rep.Tool.Name, rep.Tool.Version, status, int(time.Since(started).Seconds()))
+	if step := s.step(); step != "" {
+		parts = append(parts, "benchmark: "+step)
+	}
+	parts = append(parts, fmt.Sprintf("%ds", int(time.Since(started).Seconds())), "Ctrl+C stops and shows what is done")
+	header := strings.Join(parts, " · ")
 	lines := rep.Screen(report.Style{Color: c.color(), Unicode: report.UnicodeTerminal(), Width: width}, header, nil)
 	if len(lines) > height {
 		hidden := len(lines) - height + 1
@@ -94,4 +101,17 @@ func clipRunes(s string, n int) string {
 		return string(r[:max(0, n-1)]) + "…"
 	}
 	return s
+}
+
+func benchProgress(c *common, s *session, live *liveScreen) func(string) {
+	plain := live == nil && !c.json && term.IsTerminal(int(os.Stderr.Fd()))
+	return func(step string) {
+		s.update(func() { s.benchStep = step })
+		if plain {
+			if step != "" {
+				step += "…"
+			}
+			fmt.Fprint(os.Stderr, "\r\033[K"+step)
+		}
+	}
 }

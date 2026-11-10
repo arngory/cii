@@ -4,6 +4,7 @@ import (
 	"slices"
 	"sync"
 
+	"github.com/arngory/cii/internal/bench"
 	"github.com/arngory/cii/internal/geodb"
 	"github.com/arngory/cii/internal/ipdetect"
 	"github.com/arngory/cii/internal/ledger"
@@ -25,12 +26,21 @@ type hostRun struct {
 }
 
 type session struct {
-	mu    sync.Mutex
-	mode  string
-	mask  bool
-	dbs   *geodb.Set
-	led   *ledger.Ledger
-	hosts []*hostRun
+	mu        sync.Mutex
+	mode      string
+	mask      bool
+	dbs       *geodb.Set
+	led       *ledger.Ledger
+	hosts     []*hostRun
+	censor    []probe.Result
+	bench     *bench.Report
+	benchStep string
+}
+
+func (s *session) step() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.benchStep
 }
 
 func (s *session) update(fn func()) {
@@ -76,7 +86,17 @@ func (s *session) report() *report.Report {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rep := report.New(s.mode, s.mask)
-	rep.SetData(s.dbs)
+	if s.dbs != nil {
+		rep.SetData(s.dbs)
+	}
+	if s.censor != nil {
+		rep.SetCensor(slices.Clone(s.censor), s.mask)
+	}
+	if s.bench != nil {
+		b := *s.bench
+		b.Notes, b.Iperf = slices.Clone(b.Notes), slices.Clone(b.Iperf)
+		rep.SetBench(&b, s.mask)
+	}
 	for _, h := range s.hosts {
 		host := report.NewHost(h.addr, slices.Clone(h.geo), s.mask)
 		if h.addr.Address.IsValid() {

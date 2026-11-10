@@ -75,6 +75,19 @@ func selectedModes(opts Options) (map[string]bool, []string) {
 	return set, bad
 }
 
+var modeGroups = map[string]probe.Group{"dns": DNS, "telegram": Telegram, "dpi": DPI, "geoblock": Geoblock}
+
+func Placeholders(opts Options) []probe.Result {
+	modes, _ := selectedModes(opts)
+	var out []probe.Result
+	for _, m := range Modes {
+		if modes[m] {
+			out = append(out, probe.Result{Group: modeGroups[m], Service: "checks", Status: probe.Pending})
+		}
+	}
+	return out
+}
+
 type webList struct {
 	Group   probe.Group
 	Targets []target

@@ -329,3 +329,13 @@ func TestRunWithProxyDisablesRaw(t *testing.T) {
 		}
 	}
 }
+
+func TestPlaceholders(t *testing.T) {
+	rs := Placeholders(Options{Modes: []string{"telegram", "dns"}})
+	if len(rs) != 2 || rs[0].Group != DNS || rs[1].Group != Telegram || rs[0].Status != probe.Pending {
+		t.Errorf("placeholders = %+v", rs)
+	}
+	if len(Placeholders(Options{})) != len(Modes) {
+		t.Error("all modes expected by default")
+	}
+}

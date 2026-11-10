@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -41,14 +42,18 @@ import (
 const usage = `cii — complete information about current IP
 
 Usage:
-  cii [flags]                 detect public IPv4/IPv6 and describe them (default)
+  cii [flags]                 detect public IPv4/IPv6, describe them, check services, reputation and censorship (default)
   cii lookup [flags] IP...    describe given addresses using local data only (no network)
   cii data update [ID...]     download offline databases from their publishers
   cii data status             show local databases
   cii data sources            list supported databases and their licenses
-  cii censor [flags]          DNS resolvers and hijacking, DPI and geoblocks, Telegram (see docs/CENSOR_CHECKS.md)
-  cii bench [flags]           system info, disk, CPU, Cloudflare speed and iperf3 (see docs/BENCH.md)
+  cii censor [flags]          only censorship: all modes, own lists and domains (see docs/CENSOR_CHECKS.md)
+  cii bench [flags]           only the benchmark, with its own options (see docs/BENCH.md)
   cii version
+
+Default command only:
+  --no-censor        skip censorship checks (DNS and Telegram; DPI and geoblock with --extended)
+  --bench            also run the benchmark after the checks: disk, CPU, Cloudflare speed, iperf3
 
 Common flags:
   -4 / -6            IPv4 or IPv6 only (default: both)
@@ -57,8 +62,8 @@ Common flags:
   --proxy URL        http://, https:// or socks5:// proxy for HTTP traffic
   --timeout DUR      per-request timeout (default 10s)
   --offline          never touch the network (local interfaces + databases only)
-  --quick            skip region and service checks
-  --extended         also run tier-B checks that use vendors' internal APIs (see docs/REGION_CHECKS.md)
+  --quick            skip region, service and censorship checks
+  --extended         also run tier-B checks (vendors' internal APIs, public lookup pages) and the DPI and geoblock lists
   --catalog LIST     regional service catalogs: auto (by detected country), all, none, or codes like JP,EU
   --no-risk          skip IP reputation, DNSBL and outbound SMTP checks
   --plan             print every destination that may be contacted, then exit
@@ -215,7 +220,10 @@ func (c *common) parse(fs *flag.FlagSet, args []string) error {
 
 func cmdIP(ctx context.Context, args []string) error {
 	var c common
+	var withBench, noCensor bool
 	fs := flag.NewFlagSet("cii", flag.ContinueOnError)
+	fs.BoolVar(&withBench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
+	fs.BoolVar(&noCensor, "no-censor", false, "skip censorship checks")
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -249,6 +257,13 @@ func cmdIP(ctx context.Context, args []string) error {
 	if riskOn {
 		checks = append(checks, risk.Checks(cfg.Keys, c.extended)...)
 	}
+	censorOn := !c.quick && !noCensor && !c.offline
+	censorOpts := censor.Options{Modes: []string{"dns", "telegram"}, Protocol: "both"}
+	if c.extended {
+		censorOpts.Modes = nil
+	}
+	benchOpts := bench.Defaults()
+	benchOpts.Net, benchOpts.Iperf = !c.offline, !c.offline
 	policy := netx.NewPolicy()
 	if !c.offline {
 		policy.Add(ipdetect.Rules(providers)...)
@@ -256,6 +271,12 @@ func cmdIP(ctx context.Context, args []string) error {
 		policy.Add(probe.Rules(services.SelectRegional(catalogs, cfg.Keys, c.extended))...)
 		if riskOn {
 			policy.Add(risk.Rules(risk.Options{})...)
+		}
+		if censorOn {
+			policy.Add(censor.Rules(censorOpts)...)
+		}
+		if withBench {
+			policy.Add(bench.Rules(benchOpts)...)
 		}
 	}
 	if c.plan {
@@ -301,6 +322,18 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		s.update(func() { s.hosts = append(s.hosts, h) })
 	}
+	shared := nets[netx.IPv4]
+	if shared == nil {
+		shared = nets[netx.IPv6]
+	}
+	var side sync.WaitGroup
+	if censorOn && shared != nil {
+		s.update(func() { s.censor = censor.Placeholders(censorOpts) })
+		side.Go(func() {
+			rs := censor.Run(ctx, shared, censorOpts)
+			s.update(func() { s.censor = rs })
+		})
+	}
 	for _, h := range s.hosts {
 		if !h.addr.Address.IsValid() {
 			continue
@@ -322,6 +355,21 @@ func cmdIP(ctx context.Context, args []string) error {
 			rs := risk.Offline(c.dir(), ip)
 			s.update(func() { h.offline = rs })
 		}
+	}
+	side.Wait()
+	if withBench {
+		benchNet := shared
+		if benchNet == nil {
+			opts, err := c.options(netx.IPv4)
+			if err != nil {
+				return err
+			}
+			benchNet = netx.New(opts, policy, led)
+		}
+		progress := benchProgress(&c, s, screen)
+		b := bench.Run(ctx, bench.Env{Net: benchNet, Ledger: led}, benchOpts, progress)
+		progress("")
+		s.update(func() { s.bench = &b })
 	}
 	screen.stop()
 	return output(s.report(), &c)
@@ -409,7 +457,7 @@ func output(r *report.Report, c *common) error {
 
 const logScreenWidth = 160
 
-func usesScreen(r *report.Report) bool { return r.Mode == "online" || r.Mode == "offline" }
+func usesScreen(r *report.Report) bool { return r.Mode != "lookup" }
 
 func screenTitle(r *report.Report) string { return r.Tool.Name + " " + r.Tool.Version }
 
@@ -704,10 +752,13 @@ func cmdCensor(ctx context.Context, args []string) error {
 	}
 	led := ledger.New()
 	n := netx.New(netOpts, policy, led)
-	rep := report.New("censor", c.mask)
-	rep.SetCensor(censor.Run(ctx, n, opts), c.mask)
-	rep.Network = led.Entries()
-	return output(rep, &c)
+	s := &session{mode: "censor", mask: c.mask, led: led, censor: censor.Placeholders(opts)}
+	screen := startScreen(&c, s)
+	defer screen.stop()
+	rs := censor.Run(ctx, n, opts)
+	s.update(func() { s.censor = rs })
+	screen.stop()
+	return output(s.report(), &c)
 }
 
 func cmdBench(ctx context.Context, args []string) error {
@@ -756,21 +807,15 @@ func cmdBench(ctx context.Context, args []string) error {
 	}
 	led := ledger.New()
 	n := netx.New(netOpts, policy, led)
-	progress := func(string) {}
-	if !c.json && term.IsTerminal(int(os.Stderr.Fd())) {
-		progress = func(step string) {
-			if step != "" {
-				step += "…"
-			}
-			fmt.Fprint(os.Stderr, "\r\033[K"+step)
-		}
-	}
-	rep := report.New("bench", c.mask)
+	s := &session{mode: "bench", mask: c.mask, led: led}
+	screen := startScreen(&c, s)
+	defer screen.stop()
+	progress := benchProgress(&c, s, screen)
 	b := bench.Run(ctx, bench.Env{Net: n, Ledger: led}, opts, progress)
 	progress("")
-	rep.SetBench(&b, c.mask)
-	rep.Network = led.Entries()
-	return output(rep, &c)
+	s.update(func() { s.bench = &b })
+	screen.stop()
+	return output(s.report(), &c)
 }
 
 func parseSize(s string) (int64, error) {

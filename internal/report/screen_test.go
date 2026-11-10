@@ -13,9 +13,12 @@ func TestColumnWidths(t *testing.T) {
 	for width, want := range map[int][]int{
 		80: {80}, 109: {109}, 110: {60, 49}, 150: {60, 89}, 199: {76, 122}, 200: {66, 74, 58}, 240: {66, 114, 58},
 	} {
-		if got := columnWidths(width); !slices.Equal(got, want) {
+		if got := columnWidths(width, columnCount(width)); !slices.Equal(got, want) {
 			t.Errorf("columnWidths(%d) = %v, want %v", width, got, want)
 		}
+	}
+	if got := columnWidths(240, 2); !slices.Equal(got, []int{76, 163}) {
+		t.Errorf("two panels on a wide screen = %v", got)
 	}
 }
 
@@ -109,5 +112,33 @@ func TestScreenNarrowAndOffline(t *testing.T) {
 		if out := strings.Join(lines, "\n"); !strings.Contains(out, "not on local interfaces") {
 			t.Errorf("width %d: offline reason missing\n%s", w, out)
 		}
+	}
+}
+
+func TestScreenCensorAndBenchPanels(t *testing.T) {
+	censorResults := []probe.Result{{Group: "dns", Service: "Cloudflare DoH", Status: probe.Yes}, {Group: "telegram", Service: "DC2", Status: probe.No}}
+	full := screenReport()
+	full.Censor = censorResults
+	full.Bench = sampleBench()
+	out := strings.Join(full.Screen(Style{Unicode: true, Width: 220}, "", nil), "\n")
+	for _, s := range []string{"Censorship", "DNS       ✓ 1", "Telegram  ✗ 1", "✗ Telegram: DC2", "Benchmark", "Cloudflare FRA"} {
+		if !strings.Contains(out, s) {
+			t.Errorf("%q missing in the full screen\n%s", s, out)
+		}
+	}
+	if out := strings.Join((&Report{Mode: "censor", Censor: censorResults}).Screen(Style{Unicode: true, Width: 150}, "", nil), "\n"); !strings.Contains(out, "✓ Cloudflare DoH") {
+		t.Errorf("cii censor should list every check\n%s", out)
+	}
+	for _, r := range []*Report{{Mode: "censor", Censor: censorResults}, {Mode: "bench", Bench: sampleBench()}} {
+		lines := r.Screen(Style{Unicode: true, Width: 150}, "", nil)
+		if len(lines) == 0 || visibleLen(lines[0]) != 150 {
+			t.Errorf("%s: a single panel should take the whole width\n%s", r.Mode, strings.Join(lines, "\n"))
+		}
+	}
+	if strings.Contains(out, "Cloudflare DoH") {
+		t.Errorf("clean censorship results should only be counted\n%s", out)
+	}
+	if lines := (&Report{Mode: "bench"}).Screen(Style{Width: 100}, "cii · benchmark: disk", nil); len(lines) != 1 {
+		t.Errorf("empty bench screen = %q", lines)
 	}
 }
