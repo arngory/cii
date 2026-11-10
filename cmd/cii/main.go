@@ -477,7 +477,7 @@ func (p stackPlan) checkHost(ctx context.Context, h *hostRun) {
 		}
 	}
 	if p.risk {
-		rs := risk.Offline(p.c.dir(), ip)
+		rs := risk.Offline(p.c.dir(), ip, firstASN(h.geo))
 		p.s.update(func() { h.offline = rs })
 	}
 }
@@ -517,6 +517,15 @@ func (c *common) catalogsFor(allowed, verdict []string) []string {
 		}
 	}
 	return out
+}
+
+func firstASN(geo []geodb.Record) uint {
+	for _, g := range geo {
+		if g.ASN != 0 {
+			return g.ASN
+		}
+	}
+	return 0
 }
 
 func localOpinions(geo []geodb.Record) []probe.Result {
@@ -829,7 +838,11 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 	if updateRisk {
 		done, err := risk.Update(ctx, n, c.dir(), riskIDs...)
 		for _, e := range done {
-			fmt.Printf("risk:%-13s ok  %d prefixes, sha256 %s\n", e.ID, e.Prefixes, shortHash(e.SHA256))
+			unit := "prefixes"
+			if s, _ := risk.DataSourceByID(e.ID); s.ByASN {
+				unit = "networks"
+			}
+			fmt.Printf("risk:%-13s ok  %d %s, sha256 %s\n", e.ID, e.Prefixes, unit, shortHash(e.SHA256))
 		}
 		if err != nil {
 			failed++

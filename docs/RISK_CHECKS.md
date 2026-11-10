@@ -82,7 +82,7 @@
 
 ## Известные диапазоны (группа Network, офлайн)
 
-Данные скачиваются только командой `cii data update` (по умолчанию вместе с базами DB-IP) и только у первоисточников; при проверке cii в сеть за ними не ходит. Формат хранения — `data/risk/<id>.txt`: по одной строке `CIDR<TAB>подпись`, плюс `manifest.json` с датой, размером, sha256 и числом префиксов. Идентификаторы для `cii data update`: `risk:tor-exits`, `risk:aws`, `risk:gcp`, `risk:oracle`, `risk:cloudflare`, `risk:digitalocean`.
+Данные скачиваются только командой `cii data update` (по умолчанию вместе с базами DB-IP) и только у первоисточников; при проверке cii в сеть за ними не ходит. Формат хранения — `data/risk/<id>.txt`: по одной строке `CIDR<TAB>подпись`, плюс `manifest.json` с датой, размером, sha256 и числом префиксов. Идентификаторы для `cii data update`: `risk:tor-exits`, `risk:aws`, `risk:gcp`, `risk:oracle`, `risk:cloudflare`, `risk:digitalocean`, `risk:spamhaus-drop`, `risk:peeringdb`. У PeeringDB формат другой: строка `AS<номер><TAB>типы сети`.
 
 | Источник | Что | Лицензия/условия |
 |---|---|---|
@@ -92,8 +92,12 @@
 | `docs.oracle.com/…/public_ip_ranges.json` | Oracle Cloud | публикуется Oracle |
 | `www.cloudflare.com/ips-v4`, `ips-v6` | Cloudflare | публикуется Cloudflare |
 | `www.digitalocean.com/geo/google.csv` | DigitalOcean (geofeed RFC 8805) | публикуется DigitalOcean |
+| `www.spamhaus.org/drop/drop_v4.json`, `drop_v6.json` | Spamhaus DROP: угнанные и отданные под спам или киберпреступность сети | бесплатно по условиям Spamhaus DROP |
+| `www.peeringdb.com/api/net?fields=asn,info_types` | тип сети по ASN (Cable/DSL/ISP, NSP, Content, Enterprise, Educational/Research, Government…) | правила PeeringDB: для своих целей (диагностика, исследование сети), данные нельзя передавать другим оптом — поэтому cii только скачивает их по вашей команде и не встраивает в сборки |
 
-Попадание в Tor → `no`, в облако или CDN → `partial` с подписью (например, `AWS EC2 eu-central-1`), иначе `yes`. Проверяются только списки, которые есть в `manifest.json` и чьи файлы на месте; в чистом результате они перечислены («not in: tor-exits, aws, …»). Если ни один список не скачан, строка не показывается.
+Попадание в Tor или Spamhaus DROP → `no`, в облако или CDN → `partial` с подписью (например, `AWS EC2 eu-central-1`), иначе `yes`. Проверяются только списки, которые есть в `manifest.json` и чьи файлы на месте; в чистом результате они перечислены («not in: tor-exits, aws, …»). Если ни один список не скачан, строка не показывается.
+
+PeeringDB работает иначе: по ASN адреса из локальной базы (DB-IP ASN или IPinfo Lite) находится тип сети, он попадает строкой `PeeringDB` в секцию Type панели «IP quality» (Cable/DSL/ISP и NSP → ISP, Content и Network Services → HOST, Enterprise и Non-Profit → BIZ, Educational/Research → EDU, Government → GOV). Это единственный тип адреса, который cii знает без сети и ключей. FireHOL не подключается: его наборы собраны из списков с разными, местами несовместимыми условиями; самый полезный из них по смыслу, Spamhaus DROP, берётся напрямую у Spamhaus.
 
 ## Прокси
 

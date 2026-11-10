@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -37,7 +38,8 @@ type DataSource struct {
 	Terms    string
 	Homepage string
 	URLs     []string
-	parse    func(r io.Reader, add func(prefix, label string)) error
+	ByASN    bool
+	parse    func(r io.Reader, add func(key, label string)) error
 }
 
 var DataSources = []DataSource{
@@ -53,6 +55,10 @@ var DataSources = []DataSource{
 		Homepage: "https://www.cloudflare.com/ips/", URLs: []string{"https://www.cloudflare.com/ips-v4", "https://www.cloudflare.com/ips-v6"}, parse: parseLines("Cloudflare")},
 	{ID: "digitalocean", Title: "DigitalOcean geofeed", Kind: "cloud", Terms: "RFC 8805 geofeed published by DigitalOcean",
 		Homepage: "https://docs.digitalocean.com/platform/", URLs: []string{"https://www.digitalocean.com/geo/google.csv"}, parse: parseGeofeed("DigitalOcean")},
+	{ID: "spamhaus-drop", Title: "Spamhaus DROP", Kind: "abuse", Terms: "free of charge under the Spamhaus DROP terms",
+		Homepage: "https://www.spamhaus.org/blocklists/do-not-route-or-peer/", URLs: []string{"https://www.spamhaus.org/drop/drop_v4.json", "https://www.spamhaus.org/drop/drop_v6.json"}, parse: parseDROP},
+	{ID: "peeringdb", Title: "PeeringDB network types", Kind: "asn-type", Terms: "PeeringDB acceptable use policy: for your own use, not to be passed on in bulk", ByASN: true,
+		Homepage: "https://www.peeringdb.com/", URLs: []string{"https://www.peeringdb.com/api/net?fields=asn,info_types"}, parse: parsePeeringDB},
 }
 
 func DataSourceByID(id string) (DataSource, bool) {
@@ -169,13 +175,20 @@ func update(ctx context.Context, client *http.Client, base string, ids []string)
 func fetchSource(ctx context.Context, client *http.Client, dir string, s DataSource) (DataEntry, error) {
 	seen := map[string]bool{}
 	var lines []string
-	add := func(prefix, label string) {
-		p, err := parsePrefix(prefix)
-		if err != nil {
-			return
+	add := func(key, label string) {
+		if s.ByASN {
+			if !asnKey.MatchString(key) {
+				return
+			}
+		} else {
+			p, err := parsePrefix(key)
+			if err != nil {
+				return
+			}
+			key = p.String()
 		}
 		label = strings.Join(strings.Fields(label), " ")
-		line := p.String() + "\t" + label
+		line := key + "\t" + label
 		if !seen[line] {
 			seen[line] = true
 			lines = append(lines, line)
@@ -247,6 +260,40 @@ func parsePrefix(s string) (netip.Prefix, error) {
 		return netip.Prefix{}, fmt.Errorf("mapped prefix %s", s)
 	}
 	return p.Masked(), nil
+}
+
+var asnKey = regexp.MustCompile(`^AS[0-9]+$`)
+
+func parseDROP(r io.Reader, add func(string, string)) error {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		var e struct {
+			CIDR  string `json:"cidr"`
+			SBLID string `json:"sblid"`
+		}
+		if json.Unmarshal(sc.Bytes(), &e) == nil && e.CIDR != "" {
+			add(e.CIDR, strings.TrimSpace("Spamhaus DROP "+e.SBLID))
+		}
+	}
+	return sc.Err()
+}
+
+func parsePeeringDB(r io.Reader, add func(string, string)) error {
+	var d struct {
+		Data []struct {
+			ASN   uint32   `json:"asn"`
+			Types []string `json:"info_types"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(r).Decode(&d); err != nil {
+		return err
+	}
+	for _, n := range d.Data {
+		if n.ASN != 0 && len(n.Types) > 0 {
+			add(fmt.Sprintf("AS%d", n.ASN), strings.Join(n.Types, ", "))
+		}
+	}
+	return nil
 }
 
 func parseLines(label string) func(io.Reader, func(string, string)) error {
@@ -392,16 +439,22 @@ func lookupFile(path string, s DataSource, ip netip.Addr) ([]Match, error) {
 
 const Network probe.Group = "network"
 
-func Offline(base string, ip netip.Addr) []probe.Result {
+func Offline(base string, ip netip.Addr, asn uint) []probe.Result {
 	ip = ip.Unmap()
 	m, err := DataManifest(base)
 	if err != nil || len(m) == 0 || !ip.IsValid() {
 		return nil
 	}
+	var out []probe.Result
+	if _, ok := m["peeringdb"]; ok && asn != 0 {
+		if r, found := networkType(filepath.Join(dataDir(base), "peeringdb.txt"), asn); found {
+			out = append(out, r)
+		}
+	}
 	var matches []Match
 	var checked []string
 	for _, s := range DataSources {
-		if _, ok := m[s.ID]; !ok {
+		if _, ok := m[s.ID]; !ok || s.ByASN {
 			continue
 		}
 		found, err := lookupFile(filepath.Join(dataDir(base), s.ID+".txt"), s, ip)
@@ -411,21 +464,51 @@ func Offline(base string, ip netip.Addr) []probe.Result {
 		checked = append(checked, s.ID)
 		matches = append(matches, found...)
 	}
-	if len(checked) == 0 {
-		return nil
-	}
-	if len(matches) == 0 {
-		return []probe.Result{{Group: Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: " + strings.Join(checked, ", ")}}
+	switch {
+	case len(checked) == 0:
+		return out
+	case len(matches) == 0:
+		return append(out, probe.Result{Group: Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: " + strings.Join(checked, ", ")})
 	}
 	var labels []string
-	tor := false
+	bad := false
 	for _, m := range matches {
 		labels = append(labels, m.Label)
-		tor = tor || m.Kind == "tor"
+		bad = bad || m.Kind == "tor" || m.Kind == "abuse"
 	}
 	status := probe.Partial
-	if tor {
+	if bad {
 		status = probe.No
 	}
-	return []probe.Result{{Group: Network, Service: "Known ranges", Status: status, Detail: probe.Truncate(strings.Join(labels, "; "), 160)}}
+	return append(out, probe.Result{Group: Network, Service: "Known ranges", Status: status, Detail: probe.Truncate(strings.Join(labels, "; "), 160)})
+}
+
+var peeringdbUsage = map[string]string{
+	"Cable/DSL/ISP": "isp", "NSP": "isp", "Content": "hosting", "Network Services": "hosting",
+	"Enterprise": "business", "Non-Profit": "business", "Educational/Research": "education", "Government": "government",
+}
+
+func networkType(path string, asn uint) (probe.Result, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return probe.Result{}, false
+	}
+	defer f.Close()
+	want := fmt.Sprintf("AS%d\t", asn)
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := sc.Text()
+		if !strings.HasPrefix(line, want) {
+			continue
+		}
+		types := strings.TrimPrefix(line, want)
+		facts := &probe.Facts{}
+		for _, t := range strings.Split(types, ", ") {
+			if u := peeringdbUsage[t]; u != "" && facts.Usage == "" {
+				facts.Usage = u
+			}
+		}
+		return probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Yes, Detail: fmt.Sprintf("AS%d %s", asn, types), Facts: facts.OrNil()}, true
+	}
+	return probe.Result{}, false
 }
