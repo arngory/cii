@@ -173,3 +173,18 @@ func TestQualityRouteAndPTR(t *testing.T) {
 		t.Errorf("masked output leaks\n%s", masked)
 	}
 }
+
+func TestScreenExits(t *testing.T) {
+	exit := func(label, via, netflix string) *Host {
+		h := &Host{Address: "203.0.113.7", Query: label, Via: via}
+		h.SetServices([]probe.Result{{Group: "streaming", Service: "Netflix", Status: probe.Status(netflix)}}, false)
+		return h
+	}
+	r := &Report{Exits: []*Host{exit("exit 1", "socks5://a.example:1080", "yes"), exit("exit 2", "http://b.example:3128", "no")}}
+	out := strings.Join(r.Screen(Style{Unicode: true, Width: 160}, "", nil), "\n")
+	for _, s := range []string{"IP quality · exit 1", "IP quality · exit 2", "Via      socks5://a.example:1080", "marks: exit 1 exit 2", "✓✗ Netflix"} {
+		if !strings.Contains(out, s) {
+			t.Errorf("%q missing\n%s", s, out)
+		}
+	}
+}

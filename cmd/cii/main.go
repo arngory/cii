@@ -62,7 +62,7 @@ Common flags:
   -4 / -6            IPv4 or IPv6 only (default: both)
   --iface NAME       bind outgoing connections to this interface's address
   --source ADDR      bind outgoing connections to this local address
-  --proxy URL        http://, https:// or socks5:// proxy for HTTP traffic
+  --proxy URL[,URL]  http://, https:// or socks5:// proxy for HTTP traffic; several URLs check each exit side by side
   --timeout DUR      per-request timeout (default 10s)
   --offline          never touch the network (local interfaces + databases only)
   --quick            skip region, service and censorship checks
@@ -239,8 +239,14 @@ func cmdIP(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := c.baseOptions(); err != nil {
-		return err
+	exits := c.exits()
+	for _, e := range exits {
+		if _, err := e.c.baseOptions(); err != nil {
+			return err
+		}
+	}
+	if len(exits) > 1 && withBench {
+		return errors.New("--bench measures one path; run it without a list of proxies")
 	}
 
 	providers := cfg.IPEcho
@@ -262,7 +268,7 @@ func cmdIP(ctx context.Context, args []string) error {
 	if riskOn {
 		checks = append(checks, risk.Checks(cfg.Keys, c.extended)...)
 	}
-	censorOn := !c.quick && !noCensor && !c.offline
+	censorOn := !c.quick && !noCensor && !c.offline && len(exits) == 1
 	censorOpts := censor.Options{Modes: []string{"dns", "telegram"}, Protocol: "both"}
 	if c.extended {
 		censorOpts.Modes = nil
@@ -306,12 +312,24 @@ func cmdIP(ctx context.Context, args []string) error {
 	defer screen.stop()
 
 	nets := map[netx.Family]*netx.Net{}
+	var targets []target
+	if len(exits) > 1 {
+		targets = exits
+	} else {
+		for _, f := range c.families() {
+			targets = append(targets, target{family: f, c: c})
+		}
+	}
 	var detect sync.WaitGroup
-	for _, f := range c.families() {
+	for i, t := range targets {
 		detect.Go(func() {
-			h := &hostRun{family: f}
+			f := t.family
+			h := &hostRun{family: f, label: t.label, via: t.via, order: i, nets: nets}
+			if t.label != "" {
+				h.nets = map[netx.Family]*netx.Net{}
+			}
 			var n *netx.Net
-			if opts, err := c.options(f); err != nil {
+			if opts, err := t.c.options(f); err != nil {
 				h.addr = ipdetect.Address{Error: err.Error()}
 			} else {
 				n = netx.New(opts, policy, led)
@@ -330,7 +348,7 @@ func cmdIP(ctx context.Context, args []string) error {
 			s.update(func() {
 				s.hosts = append(s.hosts, h)
 				if h.addr.Address.IsValid() {
-					nets[f] = n
+					h.nets[f] = n
 				}
 			})
 		})
@@ -348,7 +366,7 @@ func cmdIP(ctx context.Context, args []string) error {
 			s.update(func() { s.censor = rs })
 		})
 	}
-	plan := stackPlan{c: &c, s: s, nets: nets, keys: cfg.Keys, checks: checks, catalogs: catalogs, risk: riskOn}
+	plan := stackPlan{c: &c, s: s, keys: cfg.Keys, checks: checks, catalogs: catalogs, risk: riskOn}
 	var stacks sync.WaitGroup
 	for _, h := range s.hosts {
 		if h.addr.Address.IsValid() {
@@ -379,10 +397,44 @@ func cmdIP(ctx context.Context, args []string) error {
 	return output(s.report(), &c)
 }
 
+type target struct {
+	family netx.Family
+	label  string
+	via    string
+	c      common
+}
+
+func proxyLabel(raw string, mask bool) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "proxy"
+	}
+	u.User = nil
+	if mask {
+		return report.MaskText(u.String())
+	}
+	return u.String()
+}
+
+func (c *common) exits() []target {
+	parts := strings.Split(c.proxy, ",")
+	if len(parts) < 2 {
+		return []target{{family: netx.IPv4, c: *c}}
+	}
+	var out []target
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			cc := *c
+			cc.proxy = p
+			out = append(out, target{family: netx.IPv4, label: fmt.Sprintf("exit %d", len(out)+1), via: proxyLabel(p, c.mask), c: cc})
+		}
+	}
+	return out
+}
+
 type stackPlan struct {
 	c        *common
 	s        *session
-	nets     map[netx.Family]*netx.Net
 	keys     config.Keys
 	checks   []probe.Check
 	catalogs []string
@@ -392,14 +444,14 @@ type stackPlan struct {
 func (p stackPlan) checkHost(ctx context.Context, h *hostRun) {
 	ip := h.addr.Address
 	if !p.c.offline {
-		env := probe.Env{Nets: p.nets, Keys: p.keys, Done: func(i int, rs []probe.Result) { p.s.update(func() { h.checks[i] = rs }) }}
+		env := probe.Env{Nets: h.nets, Keys: p.keys, Done: func(i int, rs []probe.Result) { p.s.update(func() { h.checks[i] = rs }) }}
 		probe.Run(ctx, env, h.family, ip, p.checks)
 		regional := services.SelectRegional(p.c.catalogsFor(p.catalogs, p.s.verdict(h)), p.keys, p.c.extended)
 		p.s.update(func() { h.regional = slots(probe.Placeholders(regional)) })
 		env.Done = func(i int, rs []probe.Result) { p.s.update(func() { h.regional[i] = rs }) }
 		probe.Run(ctx, env, h.family, ip, regional)
 		if p.risk {
-			rs := risk.Run(ctx, p.nets[h.family], ip, risk.Options{})
+			rs := risk.Run(ctx, h.nets[h.family], ip, risk.Options{})
 			p.s.update(func() { h.risk = rs })
 		}
 	}

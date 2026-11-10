@@ -85,6 +85,9 @@ func (r *Report) families() []fam {
 			out = append(out, f)
 		}
 	}
+	for _, h := range r.Exits {
+		out = append(out, fam{h.Query, h})
+	}
 	return out
 }
 

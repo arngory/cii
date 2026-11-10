@@ -16,6 +16,10 @@ import (
 
 type hostRun struct {
 	family   netx.Family
+	label    string
+	via      string
+	order    int
+	nets     map[netx.Family]*netx.Net
 	addr     ipdetect.Address
 	geo      []geodb.Record
 	local    []probe.Result
@@ -97,7 +101,8 @@ func (s *session) report() *report.Report {
 		b.Notes, b.Iperf = slices.Clone(b.Notes), slices.Clone(b.Iperf)
 		rep.SetBench(&b, s.mask)
 	}
-	for _, h := range s.hosts {
+	hosts := slices.SortedFunc(slices.Values(s.hosts), func(a, b *hostRun) int { return a.order - b.order })
+	for _, h := range hosts {
 		host := report.NewHost(h.addr, slices.Clone(h.geo), s.mask)
 		if h.addr.Address.IsValid() {
 			results, svc := h.split()
@@ -107,6 +112,11 @@ func (s *session) report() *report.Report {
 			if len(results) > 0 {
 				host.SetRegion(region.Summarize(results), s.mask)
 			}
+		}
+		if h.label != "" {
+			host.Query, host.Via = h.label, h.via
+			rep.Exits = append(rep.Exits, host)
+			continue
 		}
 		setHost(rep, h.family, host)
 	}

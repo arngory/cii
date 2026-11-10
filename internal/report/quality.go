@@ -86,6 +86,9 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	}
 	field := func(name, value string) string { return c.dim(pad(name, 9)) + value }
 	lines := []string{field("Address", c.green(h.Address))}
+	if h.Via != "" {
+		lines = append(lines, field("Via", h.Via))
+	}
 	if as := bestASN(h.Geo); as != "" {
 		lines = append(lines, field("ASN", as))
 	}

@@ -31,3 +31,17 @@ func TestClipRunes(t *testing.T) {
 		t.Errorf("clipRunes = %q", got)
 	}
 }
+
+func TestExitsAndProxyLabel(t *testing.T) {
+	c := common{proxy: "socks5://user:secret@203.0.113.9:1080, http://proxy.example:3128"}
+	ex := c.exits()
+	if len(ex) != 2 || ex[0].label != "exit 1" || ex[1].c.proxy != "http://proxy.example:3128" || ex[0].via != "socks5://203.0.113.9:1080" {
+		t.Fatalf("exits = %+v", ex)
+	}
+	if one := (&common{proxy: "http://p.example:1"}).exits(); len(one) != 1 || one[0].label != "" {
+		t.Errorf("single proxy = %+v", one)
+	}
+	if got := proxyLabel("socks5://u:p@203.0.113.9:1080", true); got != "socks5://203.0.*.*" {
+		t.Errorf("masked label = %q", got)
+	}
+}

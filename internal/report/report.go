@@ -31,6 +31,7 @@ type Report struct {
 	IPv4        *Host          `json:"ipv4"`
 	IPv6        *Host          `json:"ipv6"`
 	Results     []*Host        `json:"results,omitempty"`
+	Exits       []*Host        `json:"exits,omitempty"`
 	Censor      []probe.Result `json:"censor,omitempty"`
 	Bench       *bench.Report  `json:"bench,omitempty"`
 	Data        []DataInfo     `json:"data"`
@@ -48,6 +49,7 @@ type Host struct {
 	Query     string          `json:"query,omitempty"`
 	Address   string          `json:"address,omitempty"`
 	Source    string          `json:"source,omitempty"`
+	Via       string          `json:"via,omitempty"`
 	Interface []string        `json:"interface,omitempty"`
 	Error     string          `json:"error,omitempty"`
 	Geo       []geodb.Record  `json:"geo,omitempty"`
