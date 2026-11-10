@@ -73,16 +73,20 @@ func (n *Net) Dial(ctx context.Context, module, network, addr string) (net.Conn,
 }
 
 func (n *Net) LookupHost(ctx context.Context, module, name string) ([]string, error) {
+	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupHost(ctx, name) })
+}
+
+func (n *Net) resolve(ctx context.Context, module, name string, do func(context.Context) ([]string, error)) ([]string, error) {
 	rule, err := n.allow(module, name, "dns")
 	if err != nil {
 		return nil, err
 	}
-	addrs, err := net.DefaultResolver.LookupHost(ctx, name)
+	out, err := do(ctx)
 	var dnsErr *net.DNSError
 	if err != nil && !(errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
 		n.ledger.Error(module, rule.Purpose, ledgerHost(rule, name), "dns")
 	}
-	return addrs, err
+	return out, err
 }
 
 func ReverseName(ip netip.Addr) string {
@@ -111,14 +115,7 @@ func ReverseZone(ip netip.Addr) string {
 
 func (n *Net) LookupAddr(ctx context.Context, module string, ip netip.Addr) ([]string, error) {
 	name := ReverseName(ip) + "." + ReverseZone(ip)
-	rule, err := n.allow(module, name, "dns")
-	if err != nil {
-		return nil, err
-	}
-	names, err := net.DefaultResolver.LookupAddr(ctx, ip.Unmap().String())
-	var dnsErr *net.DNSError
-	if err != nil && !(errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
-		n.ledger.Error(module, rule.Purpose, ledgerHost(rule, name), "dns")
-	}
-	return names, err
+	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) {
+		return net.DefaultResolver.LookupAddr(ctx, ip.Unmap().String())
+	})
 }

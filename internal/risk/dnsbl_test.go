@@ -306,6 +306,14 @@ func TestPTR(t *testing.T) {
 	if r := checkPTR(context.Background(), f, ip); r.Status != probe.Failed || r.Reason != "resolve: server misbehaving" {
 		t.Errorf("ptr error = %+v", r)
 	}
+	f = &fakeResolver{errs: map[string]error{"4.3.2.81.in-addr.arpa": netx.ErrProxyRaw}}
+	if r := checkPTR(context.Background(), f, ip); r.Status != probe.Unknown || r.Reason != proxyReason {
+		t.Errorf("ptr via proxy = %+v", r)
+	}
+	f = &fakeResolver{errs: map[string]error{"4.3.2.81.in-addr.arpa": context.DeadlineExceeded}}
+	if r := checkPTR(context.Background(), f, ip); r.Status != probe.Failed || r.Reason != "timeout" {
+		t.Errorf("ptr timeout = %+v", r)
+	}
 	if got := Placeholders(ip, Options{NoDNSBL: true, NoMail: true}); len(got) != 1 || got[0].Service != PTRService || got[0].Status != probe.Pending {
 		t.Errorf("placeholders = %+v", got)
 	}

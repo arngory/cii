@@ -126,18 +126,13 @@ const PTRService = "Reverse DNS"
 func checkPTR(ctx context.Context, r resolver, ip netip.Addr) probe.Result {
 	res := probe.Result{Group: Network, Service: PTRService}
 	names, err := r.LookupAddr(ctx, Module, ip)
-	var dnsErr *net.DNSError
 	switch {
 	case err == nil && len(names) > 0:
 		res.Status, res.Detail = probe.Yes, strings.TrimSuffix(names[0], ".")
-	case err == nil || errors.As(err, &dnsErr) && dnsErr.IsNotFound:
+	case err == nil || notFound(err):
 		res.Status, res.Reason = probe.Unknown, "no PTR record"
-	case netx.AsBlocked(err) != nil:
-		res.Status, res.Reason = probe.Failed, "blocked by policy: *."+netx.ReverseZone(ip)
-	case errors.As(err, &dnsErr):
-		res.Status, res.Reason = probe.Failed, probe.Truncate("resolve: "+dnsErr.Err, 120)
 	default:
-		res.Status, res.Reason = probe.Failed, "lookup failed"
+		res.Status, res.Reason = dnsError(err, netx.ReverseZone(ip))
 	}
 	return res
 }
@@ -238,22 +233,33 @@ func checkDNSBL(ctx context.Context, r resolver, ip netip.Addr, resolvConf strin
 	return out
 }
 
+func notFound(err error) bool {
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr) && dnsErr.IsNotFound
+}
+
+func dnsError(err error, zone string) (probe.Status, string) {
+	var dnsErr *net.DNSError
+	switch {
+	case errors.Is(err, netx.ErrProxyRaw):
+		return probe.Unknown, proxyReason
+	case netx.AsBlocked(err) != nil:
+		return probe.Failed, "blocked by policy: *." + zone
+	case errors.As(err, &dnsErr) && dnsErr.IsTimeout, errors.Is(err, context.DeadlineExceeded):
+		return probe.Failed, "timeout"
+	case errors.As(err, &dnsErr):
+		return probe.Failed, probe.Truncate("resolve: "+dnsErr.Err, 120)
+	}
+	return probe.Failed, probe.Truncate(err.Error(), 120)
+}
+
 func interpret(z Zone, addrs []string, err error) (probe.Status, string, string) {
-	if err != nil {
-		var dnsErr *net.DNSError
-		switch {
-		case errors.Is(err, netx.ErrProxyRaw):
-			return probe.Unknown, "", proxyReason
-		case netx.AsBlocked(err) != nil:
-			return probe.Failed, "", "blocked by policy: *." + z.Zone
-		case errors.As(err, &dnsErr) && dnsErr.IsNotFound:
-			return probe.Yes, "", ""
-		case errors.As(err, &dnsErr) && dnsErr.IsTimeout, errors.Is(err, context.DeadlineExceeded):
-			return probe.Failed, "", "timeout"
-		case errors.As(err, &dnsErr):
-			return probe.Failed, "", probe.Truncate("resolve: "+dnsErr.Err, 120)
-		}
-		return probe.Failed, "", probe.Truncate(err.Error(), 120)
+	switch {
+	case notFound(err):
+		return probe.Yes, "", ""
+	case err != nil:
+		st, reason := dnsError(err, z.Zone)
+		return st, "", reason
 	}
 	var listed, other []string
 	for _, a := range addrs {
