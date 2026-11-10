@@ -161,10 +161,7 @@ func (v *verdict) result() []probe.Result {
 }
 
 func failure(r *probe.Response, msg string) []probe.Result {
-	res, failed := probe.HTTPFailure(r.Status)
-	if !failed {
-		res = probe.Result{Status: probe.Failed, Reason: "unexpected response"}
-	}
+	res := pageFailure(r)[0]
 	if r.Status == http.StatusUnauthorized || r.Status == http.StatusForbidden {
 		res.Reason = fmt.Sprintf("key rejected (HTTP %d)", r.Status)
 	}
