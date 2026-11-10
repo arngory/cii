@@ -88,35 +88,6 @@ func (r *Report) families() []fam {
 	return out
 }
 
-func (r *Report) WriteCompact(w io.Writer, st Style, footer []string) {
-	c := paint(st.Color)
-	m := asciiMarks
-	if st.Unicode {
-		m = unicodeMarks
-	}
-	if st.Width < 40 {
-		st.Width = 80
-	}
-	for _, h := range r.Results {
-		writeLine(w, st.Width, m.sep, c.bold(h.Query)+"  ", utf8.RuneCountInString(h.Query)+2, hostLine(c, m, h))
-	}
-	if len(r.Censor) > 0 {
-		writeGrid2(w, c, m, st.Width, []column{newColumn("", r.Censor)}, [][]string{nil})
-	}
-	if r.Bench != nil {
-		writeBenchCompact(w, c, m, st.Width, r.Bench)
-	}
-
-	if len(footer) > 0 {
-		fmt.Fprintln(w)
-		parts := make([]gcell, len(footer))
-		for i, f := range footer {
-			parts[i] = gcell{text: f, style: c.dim}
-		}
-		writeLine(w, st.Width, m.sep, "", 0, parts)
-	}
-}
-
 func unavailableReason(h *Host) string {
 	if strings.Contains(h.Error, "offline") {
 		return "not on local interfaces (offline)"
@@ -126,20 +97,6 @@ func unavailableReason(h *Host) string {
 
 func pad(s string, n int) string {
 	return s + strings.Repeat(" ", max(0, n-utf8.RuneCountInString(s)))
-}
-
-func hostLine(c paint, m marks, h *Host) []gcell {
-	if h.Address == "" {
-		return []gcell{{text: "—  " + unavailableReason(h), style: c.dim}}
-	}
-	parts := []gcell{{text: h.Address, style: c.green}}
-	if place := bestPlace(h.Geo); place != "" {
-		parts = append(parts, plain(place))
-	}
-	if as := bestASN(h.Geo); as != "" {
-		parts = append(parts, plain(as))
-	}
-	return parts
 }
 
 func bestPlace(geo []geodb.Record) string {

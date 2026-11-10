@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 )
@@ -242,4 +243,35 @@ func reputationNotes(c paint, m marks, h *Host) []string {
 		out = append(out, c.dim(m.pending+" waiting: "+strings.Join(pending, ", ")))
 	}
 	return out
+}
+
+func lookupLines(c paint, h *Host) []string {
+	if h.Address == "" {
+		return []string{c.dim(cmp.Or(h.Error, "unavailable"))}
+	}
+	lines := []string{c.dim(pad("Address", 9)) + c.green(h.Address)}
+	if len(h.Geo) == 0 {
+		return append(lines, c.dim("no local data for this address; run `cii data update`"))
+	}
+	srcW := 0
+	for _, g := range h.Geo {
+		srcW = max(srcW, utf8.RuneCountInString(g.Source))
+	}
+	for _, g := range h.Geo {
+		var parts []string
+		if g.Country != "" {
+			parts = append(parts, strings.TrimSpace(g.Country+" "+cmp.Or(g.CountryName, refdata.CountryName(g.Country))))
+		}
+		if g.City != "" {
+			parts = append(parts, g.City)
+		}
+		if g.ASN != 0 {
+			parts = append(parts, strings.TrimSpace(fmt.Sprintf("AS%d %s", g.ASN, g.ASOrg)))
+		}
+		if g.Network.IsValid() {
+			parts = append(parts, g.Network.String())
+		}
+		lines = append(lines, c.dim(pad(g.Source, srcW))+"  "+strings.Join(parts, " · "))
+	}
+	return lines
 }

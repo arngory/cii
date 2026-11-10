@@ -476,17 +476,11 @@ func output(r *report.Report, c *common) error {
 	}
 	unicode := report.UnicodeTerminal()
 	style := report.Style{Color: c.color(), Unicode: unicode, Width: terminalWidth()}
-	if usesScreen(r) {
-		fmt.Println(strings.Join(r.Screen(style, screenTitle(r), footer(r, unicode, logPath, logErr)), "\n"))
-		return nil
-	}
-	r.WriteCompact(os.Stdout, style, footer(r, unicode, logPath, logErr))
+	fmt.Println(strings.Join(r.Screen(style, screenTitle(r), footer(r, unicode, logPath, logErr)), "\n"))
 	return nil
 }
 
 const logScreenWidth = 160
-
-func usesScreen(r *report.Report) bool { return r.Mode != "lookup" }
 
 func screenTitle(r *report.Report) string { return r.Tool.Name + " " + r.Tool.Version }
 
@@ -495,9 +489,7 @@ func writeLog(r *report.Report, c *common) (string, error) {
 		return "", nil
 	}
 	var text, js bytes.Buffer
-	if usesScreen(r) {
-		text.WriteString(strings.Join(r.Screen(report.Style{Unicode: true, Width: logScreenWidth}, screenTitle(r), nil), "\n") + "\n\n")
-	}
+	text.WriteString(strings.Join(r.Screen(report.Style{Unicode: true, Width: logScreenWidth}, screenTitle(r), nil), "\n") + "\n\n")
 	r.WriteDetailed(&text, false)
 	if err := r.WriteJSON(&js); err != nil {
 		return "", err

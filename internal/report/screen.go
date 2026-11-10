@@ -170,6 +170,9 @@ func (r *Report) panels(c paint, m marks) []slotPanel {
 	for _, fm := range fams {
 		ps = append(ps, slotPanel{0, "IP quality · " + fm.label, func(iw int) []string { return qualityLines(c, m, fm.host, iw) }})
 	}
+	for i, h := range r.Results {
+		ps = append(ps, slotPanel{i % 3, "Lookup · " + h.Query, func(int) []string { return lookupLines(c, h) }})
+	}
 	if r.Bench != nil {
 		ps = append(ps, slotPanel{0, "Benchmark", func(iw int) []string {
 			return bufferLines(func(b *bytes.Buffer) { writeBenchCompact(b, c, m, iw, r.Bench) })

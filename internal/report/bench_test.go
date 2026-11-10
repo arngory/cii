@@ -1,6 +1,7 @@
 package report
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -31,9 +32,11 @@ func sampleBench() *bench.Report {
 func TestBenchCompact(t *testing.T) {
 	r := &Report{Bench: sampleBench()}
 	for _, st := range []Style{{Unicode: true, Width: 100}, {Width: 60}} {
-		var b strings.Builder
-		r.WriteCompact(&b, st, nil)
-		out := b.String()
+		m := asciiMarks
+		if st.Unicode {
+			m = unicodeMarks
+		}
+		out := strings.Join(bufferLines(func(b *bytes.Buffer) { writeBenchCompact(b, paint(false), m, st.Width, r.Bench) }), "\n")
 		want := []string{
 			"System", "Test Linux 1", "linux 6.1.0", "4 × Test CPU, AES-NI", "8.0 GiB RAM, 6.0 GiB free", "swap 1.0 GiB", "virt kvm", "up 1d 1h", "load 0.50",
 			"Disk", "/tmp, direct I/O, 1.0 GiB", "seq 1.50 GB/s R / 900 MB/s W", "4k 40 MB/s / 38 MB/s (10k / 9.7k IOPS)",
