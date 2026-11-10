@@ -9,7 +9,7 @@ PLATFORMS := \
 	darwin/amd64 darwin/arm64 \
 	windows/amd64 windows/arm64
 
-.PHONY: build test vet fmt-check check cross
+.PHONY: build test vet fmt-check check cross schema
 
 build:
 	go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o cii ./cmd/cii
@@ -36,3 +36,6 @@ cross:
 		GOOS=$$os GOARCH=$$arch GOARM=$$goarm GOMIPS=$$gomips go build $(GOFLAGS) -ldflags '$(LDFLAGS)' -o dist/$$name ./cmd/cii; \
 	done
 	@cd dist && sha256sum cii-* > SHA256SUMS
+
+schema:
+	go run ./tools/genschema

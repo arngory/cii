@@ -1,0 +1,971 @@
+{
+  "$defs": {
+    "BenchCPUReport": {
+      "properties": {
+        "duration_ms": {
+          "type": "integer"
+        },
+        "multi": {
+          "$ref": "#/$defs/BenchCPUScore"
+        },
+        "single": {
+          "$ref": "#/$defs/BenchCPUScore"
+        },
+        "threads": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "single",
+        "multi",
+        "threads",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "BenchCPUScore": {
+      "properties": {
+        "aes_gcm_mbps": {
+          "type": "number"
+        },
+        "deflate_mbps": {
+          "type": "number"
+        },
+        "score": {
+          "type": "number"
+        },
+        "sha256_mbps": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "sha256_mbps",
+        "aes_gcm_mbps",
+        "deflate_mbps",
+        "score"
+      ],
+      "type": "object"
+    },
+    "BenchDiskReport": {
+      "properties": {
+        "direct_io": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "random": {
+          "items": {
+            "$ref": "#/$defs/BenchDiskResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "sequential": {
+          "$ref": "#/$defs/BenchDiskResult"
+        },
+        "size_bytes": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "size_bytes",
+        "direct_io",
+        "sequential",
+        "random"
+      ],
+      "type": "object"
+    },
+    "BenchDiskResult": {
+      "properties": {
+        "block": {
+          "type": "string"
+        },
+        "direct_io": {
+          "type": "boolean"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "read_iops": {
+          "type": "number"
+        },
+        "read_mbps": {
+          "type": "number"
+        },
+        "write_iops": {
+          "type": "number"
+        },
+        "write_mbps": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "block",
+        "read_mbps",
+        "write_mbps",
+        "read_iops",
+        "write_iops",
+        "direct_io",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "BenchFioReport": {
+      "properties": {
+        "jobs": {
+          "items": {
+            "$ref": "#/$defs/BenchFioResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "version",
+        "jobs"
+      ],
+      "type": "object"
+    },
+    "BenchFioResult": {
+      "properties": {
+        "job": {
+          "type": "string"
+        },
+        "read_iops": {
+          "type": "number"
+        },
+        "read_mbps": {
+          "type": "number"
+        },
+        "write_iops": {
+          "type": "number"
+        },
+        "write_mbps": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "job",
+        "read_mbps",
+        "write_mbps",
+        "read_iops",
+        "write_iops"
+      ],
+      "type": "object"
+    },
+    "BenchIperfRun": {
+      "properties": {
+        "client": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "latency_ms": {
+          "type": "number"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "recv_mbps": {
+          "type": "number"
+        },
+        "send_mbps": {
+          "type": "number"
+        },
+        "server": {
+          "$ref": "#/$defs/BenchIperfServer"
+        },
+        "streams": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "server",
+        "client",
+        "streams"
+      ],
+      "type": "object"
+    },
+    "BenchIperfServer": {
+      "properties": {
+        "host": {
+          "type": "string"
+        },
+        "ipv6": {
+          "type": "boolean"
+        },
+        "location": {
+          "type": "string"
+        },
+        "ports": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host",
+        "ports",
+        "provider",
+        "location",
+        "ipv6"
+      ],
+      "type": "object"
+    },
+    "BenchReport": {
+      "properties": {
+        "cpu": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BenchCPUReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disk": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BenchDiskReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "fio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BenchFioReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iperf": {
+          "items": {
+            "$ref": "#/$defs/BenchIperfRun"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "notes": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "speed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BenchSpeed"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "system": {
+          "$ref": "#/$defs/BenchSystem"
+        }
+      },
+      "required": [
+        "system",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "BenchSpeed": {
+      "properties": {
+        "colo": {
+          "type": "string"
+        },
+        "download_bytes": {
+          "type": "integer"
+        },
+        "download_mbps": {
+          "type": "number"
+        },
+        "duration_seconds": {
+          "type": "number"
+        },
+        "latency_ms": {
+          "type": "number"
+        },
+        "server": {
+          "type": "string"
+        },
+        "upload_bytes": {
+          "type": "integer"
+        },
+        "upload_mbps": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "server",
+        "latency_ms",
+        "download_mbps",
+        "upload_mbps",
+        "download_bytes",
+        "upload_bytes",
+        "duration_seconds"
+      ],
+      "type": "object"
+    },
+    "BenchSystem": {
+      "properties": {
+        "aes_ni": {
+          "type": "boolean"
+        },
+        "arch": {
+          "type": "string"
+        },
+        "cpu_model": {
+          "type": "string"
+        },
+        "cpus": {
+          "type": "integer"
+        },
+        "distro": {
+          "type": "string"
+        },
+        "kernel": {
+          "type": "string"
+        },
+        "load1": {
+          "type": "number"
+        },
+        "load15": {
+          "type": "number"
+        },
+        "load5": {
+          "type": "number"
+        },
+        "mem_available_bytes": {
+          "type": "integer"
+        },
+        "mem_total_bytes": {
+          "type": "integer"
+        },
+        "os": {
+          "type": "string"
+        },
+        "swap_free_bytes": {
+          "type": "integer"
+        },
+        "swap_total_bytes": {
+          "type": "integer"
+        },
+        "uptime_seconds": {
+          "type": "number"
+        },
+        "virtualization": {
+          "type": "string"
+        },
+        "vmx": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "os",
+        "arch",
+        "cpus",
+        "aes_ni",
+        "vmx"
+      ],
+      "type": "object"
+    },
+    "DataInfo": {
+      "properties": {
+        "built": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "built"
+      ],
+      "type": "object"
+    },
+    "Factor": {
+      "properties": {
+        "checked": {
+          "type": "integer"
+        },
+        "flag": {
+          "type": "string"
+        },
+        "hits": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "flag",
+        "hits",
+        "checked"
+      ],
+      "type": "object"
+    },
+    "GeodbRecord": {
+      "properties": {
+        "as_domain": {
+          "type": "string"
+        },
+        "as_org": {
+          "type": "string"
+        },
+        "asn": {
+          "type": "integer"
+        },
+        "city": {
+          "type": "string"
+        },
+        "continent": {
+          "type": "string"
+        },
+        "country": {
+          "type": "string"
+        },
+        "country_name": {
+          "type": "string"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "network": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "registered_country": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "network"
+      ],
+      "type": "object"
+    },
+    "Host": {
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "geo": {
+          "items": {
+            "$ref": "#/$defs/GeodbRecord"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "interface": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Profile"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query": {
+          "type": "string"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegionSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "services": {
+          "items": {
+            "$ref": "#/$defs/ProbeResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "via": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "LedgerEntry": {
+      "properties": {
+        "blocked": {
+          "type": "integer"
+        },
+        "errors": {
+          "type": "integer"
+        },
+        "host": {
+          "type": "string"
+        },
+        "module": {
+          "type": "string"
+        },
+        "proto": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "requests": {
+          "type": "integer"
+        },
+        "skipped": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "module",
+        "purpose",
+        "host",
+        "proto",
+        "requests"
+      ],
+      "type": "object"
+    },
+    "ProbeFacts": {
+      "properties": {
+        "company": {
+          "type": "string"
+        },
+        "flags": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "type": "object"
+        },
+        "level": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usage": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "ProbeResult": {
+      "properties": {
+        "country": {
+          "type": "string"
+        },
+        "detail": {
+          "type": "string"
+        },
+        "extended": {
+          "type": "boolean"
+        },
+        "facts": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProbeFacts"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "group": {
+          "type": "string"
+        },
+        "iata": {
+          "type": "string"
+        },
+        "node": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "group",
+        "service",
+        "status"
+      ],
+      "type": "object"
+    },
+    "Profile": {
+      "properties": {
+        "company": {
+          "items": {
+            "$ref": "#/$defs/Vote"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "factors": {
+          "items": {
+            "$ref": "#/$defs/Factor"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "geo_consistent": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "registered": {
+          "type": "string"
+        },
+        "scores": {
+          "items": {
+            "$ref": "#/$defs/Score"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "usage": {
+          "items": {
+            "$ref": "#/$defs/Vote"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "RegionSummary": {
+      "properties": {
+        "attention": {
+          "items": {
+            "$ref": "#/$defs/ProbeResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "results": {
+          "items": {
+            "$ref": "#/$defs/ProbeResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "verdict": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "verdict",
+        "results"
+      ],
+      "type": "object"
+    },
+    "Report": {
+      "properties": {
+        "attribution": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "bench": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BenchReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "censor": {
+          "items": {
+            "$ref": "#/$defs/ProbeResult"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "data": {
+          "items": {
+            "$ref": "#/$defs/DataInfo"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "exits": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Host"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "generated_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "ipv4": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Host"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ipv6": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Host"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "masked": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "network": {
+          "items": {
+            "$ref": "#/$defs/LedgerEntry"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "results": {
+          "items": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Host"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "schema": {
+          "type": "string"
+        },
+        "tool": {
+          "$ref": "#/$defs/Tool"
+        }
+      },
+      "required": [
+        "schema",
+        "tool",
+        "generated_at",
+        "mode",
+        "ipv4",
+        "ipv6",
+        "data",
+        "network",
+        "masked"
+      ],
+      "type": "object"
+    },
+    "Score": {
+      "properties": {
+        "score": {
+          "type": "integer"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "score"
+      ],
+      "type": "object"
+    },
+    "Tool": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Vote": {
+      "properties": {
+        "sources": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "sources"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://github.com/arngory/cii/schema/report.schema.json",
+  "$ref": "#/$defs/Report",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Output of cii --json (schema cii.report/v1)",
+  "title": "cii report"
+}
