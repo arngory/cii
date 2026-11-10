@@ -65,7 +65,7 @@ func sectionRule(c paint, m marks, title string, iw int) string {
 	return c.bold(title) + " " + c.dim(strings.Repeat(m.rule, max(0, iw-utf8.RuneCountInString(title)-1)))
 }
 
-func qualityLines(c paint, m marks, label string, h *Host, iw int) []string {
+func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	if h.Address == "" {
 		return []string{c.dim(unavailableReason(h))}
 	}

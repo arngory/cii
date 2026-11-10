@@ -44,17 +44,17 @@ func (h *Host) factResults() []probe.Result {
 	return append(rs, h.Services...)
 }
 
-func (p *Profile) registryText() (string, bool) {
+func (p *Profile) registryText() string {
 	if p == nil || p.Registered == "" {
-		return "", false
+		return ""
 	}
 	switch {
 	case p.GeoConsistent == nil:
-		return "registered " + p.Registered, false
+		return "registered " + p.Registered
 	case *p.GeoConsistent:
-		return "registered " + p.Registered + ", geo-consistent", false
+		return "registered " + p.Registered + ", geo-consistent"
 	}
-	return "registered " + p.Registered + ", geo-discrepant", true
+	return "registered " + p.Registered + ", geo-discrepant"
 }
 
 func (h *Host) refreshProfile() {
@@ -134,7 +134,7 @@ func scoreStyle(c paint, score int) func(string) string { return levelStyle(c, s
 func writeProfile(w io.Writer, c paint, label string, h *Host) {
 	p := h.Profile
 	title := "IP profile (" + label + ")"
-	if text, _ := p.registryText(); text != "" {
+	if text := p.registryText(); text != "" {
 		title += " · " + text
 	}
 	fmt.Fprintln(w, c.bold(title))

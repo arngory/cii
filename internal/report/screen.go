@@ -168,7 +168,7 @@ func (r *Report) panels(c paint, m marks) []slotPanel {
 	fams := r.families()
 	var ps []slotPanel
 	for _, fm := range fams {
-		ps = append(ps, slotPanel{0, "IP quality · " + fm.label, func(iw int) []string { return qualityLines(c, m, fm.label, fm.host, iw) }})
+		ps = append(ps, slotPanel{0, "IP quality · " + fm.label, func(iw int) []string { return qualityLines(c, m, fm.host, iw) }})
 	}
 	if r.Bench != nil {
 		ps = append(ps, slotPanel{0, "Benchmark", func(iw int) []string {
