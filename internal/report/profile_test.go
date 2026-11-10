@@ -68,11 +68,15 @@ func TestProfileOutput(t *testing.T) {
 	r := &Report{Tool: Tool{Name: "cii"}, IPv4: sampleProfileHost()}
 	out := strings.Join(r.Screen(Style{Width: 200, Unicode: true}, "", nil), "\n")
 	for _, s := range []string{
-		"US, geo-discrepant",
-		"Type     ISP 2/3 · hosting: ip-api.com",
-		"ipquery.io        3     —    no     —    no     —     —",
-		"proxycheck.io    66    no   yes     —     —     —     —",
-		"AbuseIPDB         0     —     —     —     —    no     —",
+		"Registry US  ⚠ geo-discrepant",
+		"ipquery.io    [ISP ]  —",
+		"ip-api.com    [HOST]  —",
+		"ipquery.io      3 ■□□□□ very low",
+		"proxycheck.io  66 ■■■■□ high",
+		"cc proxy   VPN   Tor  host abuse   bot",
+		"ipquery.io     DE     —    no     —    no     —     —",
+		"proxycheck.io  —     no   yes     —     —     —     —",
+		"AbuseIPDB      —      —     —     —     —    no     —",
 		"bl.spamcop.net",
 		"! ipdata: key rejected (HTTP 401)",
 		"✗ proxycheck.io: VPN; risk 66",

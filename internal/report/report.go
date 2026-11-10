@@ -301,3 +301,10 @@ func (p paint) dim(s string) string    { return p.wrap("2", s) }
 func (p paint) green(s string) string  { return p.wrap("32", s) }
 func (p paint) yellow(s string) string { return p.wrap("33", s) }
 func (p paint) red(s string) string    { return p.wrap("31", s) }
+
+func (p paint) badge(code, s string) string {
+	if !p {
+		return "[" + s + "]"
+	}
+	return "\x1b[" + code + "m " + s + " \x1b[0m"
+}

@@ -6,7 +6,6 @@ import (
 	"io"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
@@ -130,32 +129,7 @@ var flagTitles = map[probe.Flag]string{
 	probe.Proxy: "proxy", probe.VPN: "VPN", probe.Tor: "Tor", probe.Hosting: "hosting", probe.Abuser: "abuser", probe.Bot: "bot",
 }
 
-func voteCells(c paint, prefix string, vs []Vote) []gcell {
-	total := 0
-	for _, v := range vs {
-		total += len(v.Sources)
-	}
-	var cells []gcell
-	for i, v := range vs {
-		title := cmp.Or(usageTitles[v.Value], v.Value)
-		if i == 0 {
-			cells = append(cells, plain(fmt.Sprintf("%s%s %d/%d", prefix, title, len(v.Sources), total)))
-			continue
-		}
-		cells = append(cells, gcell{text: prefix + title + ": " + strings.Join(v.Sources, ", "), style: c.yellow})
-	}
-	return cells
-}
-
-func scoreStyle(c paint, score int) func(string) string {
-	switch {
-	case score >= 75:
-		return c.red
-	case score >= 25:
-		return c.yellow
-	}
-	return c.dim
-}
+func scoreStyle(c paint, score int) func(string) string { return levelStyle(c, scoreLevel(score)) }
 
 func writeProfile(w io.Writer, c paint, label string, h *Host) {
 	p := h.Profile

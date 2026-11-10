@@ -23,11 +23,14 @@ type Style struct {
 	Width   int
 }
 
-type marks struct{ yes, no, partial, block, unknown, failed, none, sep, down, up, pending string }
+type marks struct {
+	yes, no, partial, block, unknown, failed, none, sep, down, up, pending string
+	rule, barOn, barOff, warn                                              string
+}
 
 var (
-	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · ", "↓", "↑", "◌"}
-	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | ", "down", "up", "o"}
+	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · ", "↓", "↑", "◌", "─", "■", "□", "⚠"}
+	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | ", "down", "up", "o", "-", "#", ".", "!"}
 )
 
 func UnicodeTerminal() bool {

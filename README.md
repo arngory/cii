@@ -51,27 +51,45 @@ make build
 
 ```
 cii 0.1.0
-┌─ IP quality · IPv4 ──────────────────────────────────────┐ ┌─ Region & services ─────────────────────────────────────────────────┐
-│ Address  203.0.113.7                                     │ │ Region  DE Germany · GeoIP 3/3 · platforms 1/2 · ChatGPT* says NL   │
-│ Place    DE Germany, Frankfurt am Main                   │ │ CDN     Cloudflare FRA DE                                           │
-│ ASN      AS3320 Deutsche Telekom AG                      │ │                                                                     │
-│ Reg.     DE, geo-consistent                              │ │ Streaming  ✓ Netflix             ✓ Disney+*                         │
-│ Type     business 1/2 · ISP: ipinfo.io                   │ │            ✓ Prime Video         ✓ YouTube Premium*                 │
-│                                                          │ │ Web        ✓ Reddit              ✓ Wikipedia editing                │
-│               score proxy   VPN   Tor  host abuse   bot  │ │ AI         ✓ OpenAI API          ✓ Grok API                         │
-│ ipquery.io        0    no    no    no    no     —     —  │ │            ✓ Anthropic API       ✓ Mistral API                      │
-│ ip-api.com        —    no     —     —    no     —     —  │ └─────────────────────────────────────────────────────────────────────┘
-│ proxycheck.io     0    no    no    no    no     —     —  │ ┌─ Reputation lists & mail ───────────────────────────────────────────┐
-│ ipinfo.io*        —    no    no    no    no     —     —  │ │ DNSBL  ✓ bl.spamcop.net     ✓ zen.spamhaus.org                      │
-│ Scamalytics*      2    no    no    no    no    no    no  │ │        ✓ psbl.surriel.com                                           │
-└──────────────────────────────────────────────────────────┘ │ Mail   ✗ Outbound SMTP (25) connection timed out, port 25 likely f… │
-┌─ IP quality · IPv6 ──────────────────────────────────────┐ └─────────────────────────────────────────────────────────────────────┘
-│ unavailable                                              │
+┌─ IP quality · IPv4 ──────────────────────────────────────┐ ┌─ Region & services ───────────────────────────────────────────────────────────────────┐
+│ Address  203.0.113.7                                     │ │ Region  DE Germany · GeoIP 3/3 · platforms 1/2 · ChatGPT* says NL                     │
+│ ASN      AS3320 Deutsche Telekom AG                      │ │ CDN     Cloudflare FRA DE                                                             │
+│ Place    DE Germany, Frankfurt am Main                   │ │                                                                                       │
+│ Registry DE  ✓ geo-consistent                            │ │ Streaming  ✓ Netflix             ✗ Disney+*                                           │
+│                                                          │ │            ✓ Prime Video         ✓ YouTube Premium*                                   │
+│ Type ─────────────────────────────────────────────────── │ │ Web        ✓ Reddit              ⊘ Wikipedia editing                                  │
+│                   usage  company                         │ │ AI         ✓ OpenAI API          ✓ Grok API                                           │
+│ proxycheck.io     BIZ    —                               │ │            ✓ Anthropic API       ? Mistral API                                        │
+│ ipinfo.io*        ISP    ISP                             │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ ip2location.com*  ISP    —                               │ ┌─ Reputation lists & mail ─────────────────────────────────────────────────────────────┐
+│ IPQualityScore    MOB    —                               │ │ DNSBL  ✓ bl.spamcop.net                                                               │
+│ AbuseIPDB         ISP    —                               │ │        ✓ psbl.surriel.com                                                             │
+│                                                          │ │        ? zen.spamhaus.org refused: public resolver                                    │
+│ Score ────────────────────────────────────────────────── │ │ Mail   ✗ Outbound SMTP (25) port 25 filtered                                          │
+│ ipquery.io         0 ■□□□□ very low                      │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ proxycheck.io      0 ■□□□□ very low                      │ ┌─ Censorship ──────────────────────────────────────────────────────────────────────────┐
+│ Scamalytics*       4 ■□□□□ very low                      │ │ DNS       ✓ 2                                                                         │
+│ ip2location.com*   0 ■□□□□ very low                      │ │ Telegram  ✗ 1                                                                         │
+│ IPQualityScore    62 ■■■■□ high                          │ │                                                                                       │
+│ AbuseIPDB          0 ■□□□□ very low                      │ │ ✗ Telegram: DC2 reset                                                                 │
+│                                                          │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ Factors ──────────────────────────────────────────────── │
+│                   cc proxy   VPN   Tor  host abuse   bot │
+│ ipquery.io        DE    no    no    no    no     —     — │
+│ ip-api.com        DE    no     —     —    no     —     — │
+│ proxycheck.io     DE    no    no    no    no     —     — │
+│ ipinfo.io*        DE    no    no    no    no     —     — │
+│ Scamalytics*      DE    no    no    no    no    no    no │
+│ ip2location.com*  DE    no    no    no    no    no    no │
+│ IPQualityScore    NL    no   yes    no     —    no    no │
+│ AbuseIPDB         DE     —     —    no     —    no     — │
+│                                                          │
+│ ✗ IPQualityScore: VPN; fraud score 62                    │
 └──────────────────────────────────────────────────────────┘
-✓ yes, ✗ no · 50 hosts contacted · * --extended check · details: --debug or ~/.local/state/cii/logs/20260101-120000.log
+✓ yes, ✗ no · 50 hosts contacted · * --extended check
 ```
 
-- **IP quality** (слева, по образцу разделов 1–4 IPQuality): адрес, место и ASN по локальным базам, страна регистрации с пометкой `geo-consistent`/`geo-discrepant`, тип адреса по источникам (ISP, mobile, hosting и т.д.) и таблица факторов: оценка риска 0–100 и флаги прокси, VPN, Tor, хостинга, абьюзера, бота от каждого источника (`yes`, `no`, `—` — источник об этом не сообщает). Ниже — находки и ошибки источников репутации, которые не укладываются в таблицу. Профиль собирается из уже полученных ответов, без лишних запросов.
+- **IP quality** (слева, по мотивам разделов 1–4 IPQuality): адрес, ASN и место по локальным базам, страна регистрации с отметкой `✓ geo-consistent` или `⚠ geo-discrepant`. Ниже три секции по каждому источнику. **Type** — цветные метки типа адреса и компании: `ISP` и `MOB` зелёные и бирюзовые (домашние и мобильные сети), `BIZ` жёлтая, `EDU` и `GOV` синие, `HOST` красная, `CDN` фиолетовая. **Score** — тир-лист оценок 0–100: число, полоска из пяти делений и уровень (very low и low — зелёные, medium — жёлтый, high и very high — красные). **Factors** — страна по мнению источника (жёлтая, если расходится с вердиктом) и флаги прокси, VPN, Tor, хостинга, абьюзера, бота (`yes` красным, `no` зелёным, `—` — источник об этом не сообщает). Под таблицей — находки и ошибки источников репутации. Профиль собирается из уже полученных ответов, без лишних запросов. Без цвета (`--no-color`, `NO_COLOR`) метки печатаются в квадратных скобках.
 - **Region & services**: вердикт по стране одной строкой (сколько источников согласны и только несогласные), CDN-узлы, сервисы сеткой по секциям. Страна рядом с сервисом показывается, только если она отличается от вердикта. При двух стеках у каждого сервиса две отметки: первая для IPv4, вторая для IPv6.
 - **Reputation lists & mail**: DNSBL, исходящий 25-й порт, диапазоны Tor и облаков. Что для этого спрашивается и у кого — в [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md).
 - **Censorship**: по группе (DNS, Telegram, с `--extended` ещё DPI и геоблокировки) одна строка счётчиков, ниже — только находки, до восьми; полная сетка — в `cii censor`, `--debug` и логе.

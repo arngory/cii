@@ -67,7 +67,7 @@ func TestScreenLayouts(t *testing.T) {
 		if best != c.perLine {
 			t.Errorf("width %d: %d panel titles side by side, want %d\n%s", c.width, best, c.perLine, out)
 		}
-		for _, s := range []string{"cii test", "IP quality · IPv6", "unavailable", "US, geo-discrepant", "proxycheck.io", "abuse", "✗ proxycheck.io: VPN; risk 66", "bl.spamcop.net", "footer note"} {
+		for _, s := range []string{"cii test", "IP quality · IPv6", "unavailable", "⚠ geo-discrepant", "Type ─", "Score ─", "Factors ─", "■■■■□ high", "abuse", "✗ proxycheck.io: VPN; risk 66", "bl.spamcop.net", "footer note"} {
 			if !strings.Contains(out, s) {
 				t.Errorf("width %d: %q missing\n%s", c.width, s, out)
 			}
