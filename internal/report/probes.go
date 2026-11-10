@@ -149,7 +149,7 @@ func writeProbes(w io.Writer, c paint, hosts []labeled) {
 		fmt.Fprintln(w)
 	}
 	if extended {
-		fmt.Fprintln(w, c.dim("* extended check (--extended): uses a vendor's internal API, see docs/REGION_CHECKS.md"))
+		fmt.Fprintln(w, c.dim("* extended check (--extended): a vendor's internal API or public lookup page, see docs/REGION_CHECKS.md and docs/RISK_CHECKS.md"))
 		fmt.Fprintln(w)
 	}
 }

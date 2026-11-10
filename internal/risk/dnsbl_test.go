@@ -98,7 +98,7 @@ func TestDNSBL(t *testing.T) {
 		"bl.spamcop.net":         {probe.No, "127.0.0.2"},
 		"dnsbl.dronebl.org":      {probe.No, "127.0.0.255 uncategorized"},
 		"bl.mailspike.net":       {probe.Yes, "127.0.0.18 reputation code"},
-		"psbl.surriel.com":       {probe.Unknown, "127.255.255.254"},
+		"psbl.surriel.com":       {probe.Unknown, "127.255.255.254 refused: query via public/open resolver"},
 		"dnsbl-1.uceprotect.net": {probe.Unknown, "203.0.113.9"},
 		"all.s5h.net":            {probe.Failed, ""},
 	}

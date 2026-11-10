@@ -249,7 +249,7 @@ func interpret(z Zone, addrs []string, err error) (probe.Status, string, string)
 			if meaning == "" {
 				meaning = "refused by list operator"
 			}
-			return probe.Unknown, a, meaning
+			return probe.Unknown, a + " " + meaning, meaning
 		case strings.HasPrefix(a, "127.0.0.") && ip.As4()[3] >= 2:
 			last := ip.As4()[3]
 			isListed, meaning := true, ""
