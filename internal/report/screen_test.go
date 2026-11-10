@@ -155,12 +155,12 @@ func TestQualityRouteAndPTR(t *testing.T) {
 		}, mask)
 		h.SetRegion(region.Summarize([]probe.Result{
 			{Group: region.GeoIP, Service: "a", Status: probe.OK, Country: "DE"},
-			{Group: region.Registry, Service: "RIPEstat", Status: probe.OK, Country: "DE", Detail: "AS64500 Example · 203.0.112.0/20"},
+			{Group: region.Registry, Service: "RIPEstat", Status: probe.OK, Country: "DE", Detail: "203.0.112.0/20 · AS64500 Example"},
 		}), mask)
 		return strings.Join((&Report{IPv4: h}).Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
 	}
 	out := build(false)
-	for _, s := range []string{"Route    AS64500 Example · 203.0.112.0/20", "PTR      host-203-0-113-7.example.net", "62 ■■□□□ low"} {
+	for _, s := range []string{"Route    203.0.112.0/20 · AS64500 Example", "PTR      host-203-0-113-7.example.net", "62 ■■□□□ low"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("%q missing\n%s", s, out)
 		}

@@ -44,11 +44,12 @@ func testNet(t *testing.T, hosts ...string) (*netx.Net, *ledger.Ledger) {
 }
 
 type fakeIperf struct {
-	ln      net.Listener
-	busy    bool
-	mu      sync.Mutex
-	params  []iperfParams
-	cookies map[string]int
+	dropAfterStreams bool
+	ln               net.Listener
+	busy             bool
+	mu               sync.Mutex
+	params           []iperfParams
+	cookies          map[string]int
 }
 
 func adjacentListeners(t *testing.T, count int) []net.Listener {
@@ -126,6 +127,12 @@ func (s *fakeIperf) handle(c net.Conn) {
 	s.params = append(s.params, p)
 	s.mu.Unlock()
 	c.Write([]byte{stateCreateStreams})
+	s.mu.Lock()
+	drop := s.dropAfterStreams
+	s.mu.Unlock()
+	if drop {
+		return
+	}
 	time.Sleep(200 * time.Millisecond)
 	c.Write([]byte{stateTestStart, stateTestRunning})
 	var b [1]byte
@@ -575,5 +582,19 @@ func TestParseExternalOutputs(t *testing.T) {
 	}
 	if _, err := parseFio([]byte(`{"jobs":[]}`)); err == nil {
 		t.Error("empty jobs accepted")
+	}
+}
+
+func TestIperfErrorNamesTheStep(t *testing.T) {
+	noEnvProxy(t)
+	ln := adjacentListeners(t, 1)[0]
+	srv := newFakeIperf(t, ln, false)
+	srv.mu.Lock()
+	srv.dropAfterStreams = true
+	srv.mu.Unlock()
+	n := netx.New(netx.Options{Timeout: time.Second}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "127.0.0.1"}), ledger.New())
+	run := IperfTest(context.Background(), n, IperfServer{Host: "127.0.0.1", Ports: strconv.Itoa(srv.port())}, time.Second)
+	if !strings.Contains(run.Error, "after CREATE_STREAMS") {
+		t.Errorf("run = %+v", run)
 	}
 }

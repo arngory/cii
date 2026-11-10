@@ -214,13 +214,15 @@ func ripestat(rs []*probe.Response) []probe.Result {
 		case !d.Announced:
 			res.Detail = "not announced"
 		case len(d.ASNs) > 0:
-			res.Detail = strings.TrimSpace(fmt.Sprintf("AS%d %s", d.ASNs[0].ASN, d.ASNs[0].Holder))
+			res.Detail = strings.TrimSpace(fmt.Sprintf("AS%d", d.ASNs[0].ASN))
 			if len(d.ASNs) > 1 {
 				res.Detail += fmt.Sprintf(" (+%d origins)", len(d.ASNs)-1)
 			}
+			res.Detail += " " + d.ASNs[0].Holder
 			if d.Resource != "" {
-				res.Detail += " · " + d.Resource
+				res.Detail = d.Resource + " · " + res.Detail
 			}
+			res.Detail = strings.TrimSpace(res.Detail)
 		}
 	}
 	return []probe.Result{res}

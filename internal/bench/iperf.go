@@ -57,6 +57,11 @@ const (
 	clientVersion  = "3.17"
 )
 
+var stateNames = map[int8]string{
+	0: "the greeting", stateTestStart: "TEST_START", stateTestRunning: "TEST_RUNNING", stateParamExchange: "PARAM_EXCHANGE",
+	stateCreateStreams: "CREATE_STREAMS", stateExchangeResults: "EXCHANGE_RESULTS", stateDisplayResults: "DISPLAY_RESULTS",
+}
+
 const cookieAlphabet = "abcdefghijklmnopqrstuvwxyz234567"
 
 func makeCookie() []byte {
@@ -211,6 +216,14 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 	defer stopRun()
 	started := false
 	var finished atomic.Int64
+	last := int8(0)
+	fail := func(err error) (float64, float64, error) {
+		stage := stateNames[last]
+		if finished.Load() > 0 {
+			stage = "TEST_END"
+		}
+		return 0, 0, fmt.Errorf("%w (after %s)", err, stage)
+	}
 
 	for {
 		state, err := readState(ctrl)
@@ -218,8 +231,9 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 			if !greeted {
 				return 0, 0, dialError{err}
 			}
-			return 0, 0, err
+			return fail(err)
 		}
+		last = state
 		if !greeted {
 			greeted = true
 			ctrl.SetDeadline(deadline)
@@ -228,18 +242,18 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 		case stateParamExchange:
 			p := iperfParams{TCP: true, Time: max(int(dur.Seconds()), 1), Parallel: iperfStreams, Reverse: reverse, Len: iperfBlock, ClientVersion: clientVersion}
 			if err := writeJSON(ctrl, p); err != nil {
-				return 0, 0, err
+				return fail(err)
 			}
 		case stateCreateStreams:
 			for i := 0; i < iperfStreams; i++ {
 				c, err := n.Dial(ctx, Module, "tcp", addr)
 				if err != nil {
-					return 0, 0, err
+					return fail(err)
 				}
 				c.SetDeadline(deadline)
 				if _, err := c.Write(cookie); err != nil {
 					c.Close()
-					return 0, 0, err
+					return fail(err)
 				}
 				streams = append(streams, c)
 			}
@@ -289,11 +303,11 @@ func iperfOnce(ctx context.Context, n *netx.Net, host string, port int, dur time
 				res.Streams = append(res.Streams, iperfStreamResult{ID: i + 1, Bytes: per / int64(len(streams)), Retransmits: -1, EndTime: elapsed.Seconds()})
 			}
 			if err := writeJSON(ctrl, res); err != nil {
-				return 0, 0, err
+				return fail(err)
 			}
 			var remote iperfResults
 			if err := readJSON(ctrl, &remote); err != nil {
-				return 0, 0, err
+				return fail(err)
 			}
 			var remoteBytes int64
 			for _, s := range remote.Streams {

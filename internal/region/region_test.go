@@ -152,7 +152,7 @@ func TestRIPEstatAndFastly(t *testing.T) {
 		{Status: 200, Body: []byte(reg)},
 		{Status: 200, Body: []byte(`{"data":{"resource":"203.0.112.0/20","announced":true,"asns":[{"asn":64500,"holder":"EXAMPLE-AS Example Net"},{"asn":64501,"holder":"x"}]}}`)},
 	})
-	if len(rs) != 1 || rs[0].Country != "DE" || rs[0].Detail != "AS64500 EXAMPLE-AS Example Net (+1 origins) · 203.0.112.0/20" {
+	if len(rs) != 1 || rs[0].Country != "DE" || rs[0].Detail != "203.0.112.0/20 · AS64500 (+1 origins) EXAMPLE-AS Example Net" {
 		t.Errorf("ripestat = %+v", rs)
 	}
 	quiet := ripestat([]*probe.Response{{Status: 200, Body: []byte(reg)}, {Status: 200, Body: []byte(`{"data":{"announced":false}}`)}})
