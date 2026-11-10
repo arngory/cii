@@ -225,6 +225,10 @@ var groupTitles = map[probe.Group]string{
 	risk.DNSBL:         "DNSBL",
 	risk.Mail:          "Mail",
 	risk.Network:       "Network",
+	region.GeoIP:       "GeoIP",
+	region.Registry:    "Registry",
+	region.Platform:    "Platforms",
+	region.CDN:         "CDN",
 }
 
 func wide(g probe.Group) bool {

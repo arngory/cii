@@ -49,3 +49,22 @@ func TestWriteAndPrune(t *testing.T) {
 		t.Fatalf("content = %q", b)
 	}
 }
+
+func TestListAndReportJSON(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"20260102-000000-00.log", "20260101-000000-00.log", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	logs, err := List(dir)
+	if err != nil || len(logs) != 2 || filepath.Base(logs[0]) != "20260101-000000-00.log" {
+		t.Fatalf("List = %v, %v", logs, err)
+	}
+	if got := string(ReportJSON([]byte("frame\nreport" + JSONMarker + `{"a":1}`))); got != `{"a":1}` {
+		t.Errorf("from log = %q", got)
+	}
+	if got := string(ReportJSON([]byte(`{"a":1}`))); got != `{"a":1}` {
+		t.Errorf("plain JSON = %q", got)
+	}
+}

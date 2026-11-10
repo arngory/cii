@@ -1,6 +1,7 @@
 package runlog
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -48,22 +49,39 @@ func Write(dir string, now time.Time, sections ...[]byte) (string, error) {
 	return path, nil
 }
 
+const JSONMarker = "\n--- JSON ---\n"
+
 var logName = regexp.MustCompile(`^\d{8}-\d{6}-\d{2}\.log$`)
 
-func prune(dir string) {
+func List(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return
+		return nil, err
 	}
 	var logs []string
 	for _, e := range entries {
 		if !e.IsDir() && logName.MatchString(e.Name()) {
-			logs = append(logs, e.Name())
+			logs = append(logs, filepath.Join(dir, e.Name()))
 		}
 	}
 	sort.Strings(logs)
+	return logs, nil
+}
+
+func prune(dir string) {
+	logs, err := List(dir)
+	if err != nil {
+		return
+	}
 	for len(logs) > Keep {
-		os.Remove(filepath.Join(dir, logs[0]))
+		os.Remove(logs[0])
 		logs = logs[1:]
 	}
+}
+
+func ReportJSON(data []byte) []byte {
+	if _, after, ok := bytes.Cut(data, []byte(JSONMarker)); ok {
+		return after
+	}
+	return data
 }

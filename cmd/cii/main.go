@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -49,6 +51,7 @@ Usage:
   cii data sources            list supported databases and their licenses
   cii censor [flags]          only censorship: all modes, own lists and domains (see docs/CENSOR_CHECKS.md)
   cii bench [flags]           only the benchmark, with its own options (see docs/BENCH.md)
+  cii diff [OLD NEW]          what changed between two runs (default: the last two local logs)
   cii version
 
 Default command only:
@@ -108,6 +111,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdCensor(ctx, args)
 	case "bench":
 		return cmdBench(ctx, args)
+	case "diff":
+		return cmdDiff(args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -494,7 +499,7 @@ func writeLog(r *report.Report, c *common) (string, error) {
 	if err := r.WriteJSON(&js); err != nil {
 		return "", err
 	}
-	return runlog.Write(paths.LogDir(), time.Now(), text.Bytes(), []byte("\n--- JSON ---\n"), js.Bytes())
+	return runlog.Write(paths.LogDir(), time.Now(), text.Bytes(), []byte(runlog.JSONMarker), js.Bytes())
 }
 
 func footer(r *report.Report, unicode bool, logPath string, logErr error) []string {
@@ -572,6 +577,50 @@ func cmdLookup(args []string) error {
 		rep.Results = append(rep.Results, h)
 	}
 	return output(rep, &c)
+}
+
+func cmdDiff(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii diff", flag.ContinueOnError)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	files := fs.Args()
+	switch len(files) {
+	case 0:
+		logs, err := runlog.List(paths.LogDir())
+		if err != nil || len(logs) < 2 {
+			return errors.New("need two local logs to compare; run cii twice or pass two files")
+		}
+		files = logs[len(logs)-2:]
+	case 2:
+	default:
+		return errors.New("usage: cii diff [OLD NEW]")
+	}
+	var reps [2]*report.Report
+	for i, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		var r report.Report
+		if err := json.Unmarshal(runlog.ReportJSON(data), &r); err != nil {
+			return fmt.Errorf("%s: not a cii log or JSON report: %w", f, err)
+		}
+		reps[i] = &r
+	}
+	changes := report.Diff(reps[0], reps[1])
+	if c.json {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(struct {
+			Old     string          `json:"old"`
+			New     string          `json:"new"`
+			Changes []report.Change `json:"changes"`
+		}{files[0], files[1], changes})
+	}
+	report.WriteDiff(os.Stdout, c.color(), filepath.Base(files[0]), filepath.Base(files[1]), changes)
+	return nil
 }
 
 func cmdData(ctx context.Context, args []string) error {
