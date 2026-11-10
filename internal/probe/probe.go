@@ -161,6 +161,11 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 	var responses []*Response
 	for _, r := range c.Requests {
 		if r.BodyFrom != nil {
+			if len(responses) > 0 {
+				if res, failed := HTTPFailure(responses[len(responses)-1].Status); failed {
+					return []Result{res}
+				}
+			}
 			body, err := r.BodyFrom(ip, responses)
 			if err != nil {
 				return []Result{{Status: Unknown, Reason: Truncate(err.Error(), 120)}}

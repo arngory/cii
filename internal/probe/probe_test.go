@@ -135,6 +135,8 @@ func TestRunBodyFrom(t *testing.T) {
 		switch r.URL.Path {
 		case "/page":
 			w.Write([]byte("token=abc"))
+		case "/gone":
+			w.WriteHeader(http.StatusTooManyRequests)
 		case "/query":
 			b := make([]byte, 64)
 			n, _ := r.Body.Read(b)
@@ -155,13 +157,18 @@ func TestRunBodyFrom(t *testing.T) {
 			}},
 		}}
 	}
-	checks := Select("m", []Check{chain(false), chain(true)}, config.Keys{}, false)
+	gone := chain(false)
+	gone.Requests = []Request{{URL: srv.URL + "/gone"}, gone.Requests[1]}
+	checks := Select("m", []Check{chain(false), chain(true), gone}, config.Keys{}, false)
 	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(checks)...), ledger.New())
 	res := Run(context.Background(), Env{Nets: map[netx.Family]*netx.Net{netx.IPv4: n}}, netx.IPv4, netip.MustParseAddr("203.0.113.9"), checks)
-	if len(res) != 2 || res[0].Country != "FI" || gotBody != "ip=203.0.113.9&token=abc" {
+	if len(res) != 3 || res[0].Country != "FI" || gotBody != "ip=203.0.113.9&token=abc" {
 		t.Errorf("chain = %+v body=%q", res, gotBody)
 	}
 	if res[1].Status != Unknown || res[1].Reason != "no token on the page" {
 		t.Errorf("failed chain = %+v", res[1])
+	}
+	if res[2].Status != Failed || res[2].Reason != "rate limited" {
+		t.Errorf("failed prerequisite = %+v", res[2])
 	}
 }

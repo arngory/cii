@@ -125,9 +125,6 @@ func TestIP2LocationWeb(t *testing.T) {
 	if _, err := ip2locationQuery(netip.MustParseAddr("203.0.113.7"), []*probe.Response{{Status: 200, Body: []byte("<html></html>")}}); err == nil {
 		t.Error("page without token accepted")
 	}
-	if _, err := ip2locationQuery(netip.MustParseAddr("203.0.113.7"), []*probe.Response{{Status: 403, Body: page[0].Body}}); err == nil || err.Error() != "home page: HTTP 403" {
-		t.Errorf("blocked page error = %v", err)
-	}
 
 	answer := func(body string) []*probe.Response { return append(page, resp(200, body)...) }
 	res := one(t, evalIP2LocationWeb(answer(`{"countryCode":"DE","usageType":"Fixed Line ISP","fraudScore":"40","isProxy":"Yes","proxyType":"VPN","threat":"-","asUsageType":"Fixed Line ISP"}`)))
@@ -138,6 +135,10 @@ func TestIP2LocationWeb(t *testing.T) {
 	res = one(t, evalIP2LocationWeb(answer(`{"countryCode":"DE","usageType":"Data Center/Web Hosting/Transit","fraudScore":"3","isProxy":"Yes","proxyType":"DCH","threat":"-"}`)))
 	if res.Status != probe.Yes || !res.Facts.Flags[probe.Hosting] || res.Facts.Flags[probe.Proxy] || res.Facts.Usage != "hosting" {
 		t.Errorf("ip2location data center = %+v facts %+v", res, res.Facts)
+	}
+	res = one(t, evalIP2LocationWeb(answer(`{"countryCode":"DE","usageType":"Data Center/Web Hosting/Transit","fraudScore":"1","isProxy":"No","proxyType":"-","threat":"-"}`)))
+	if res.Status != probe.Yes || !res.Facts.Flags[probe.Hosting] || res.Facts.Flags[probe.Proxy] {
+		t.Errorf("ip2location hosting without proxy = %+v facts %+v", res, res.Facts)
 	}
 	res = one(t, evalIP2LocationWeb(answer(`{"countryCode":"DE","fraudScore":"0","isProxy":"No","proxyType":"-","threat":"SPAM"}`)))
 	if res.Status != probe.No || !res.Facts.Flags[probe.Abuser] || !strings.Contains(res.Detail, "threat SPAM") {

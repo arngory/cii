@@ -169,9 +169,6 @@ func evalScamalytics(rs []*probe.Response) []probe.Result {
 var ip2locationToken = regexp.MustCompile(`ip:\s*'([^']+)',\s*t:\s*(\d+),\s*token:\s*'([0-9A-Fa-f]+)'`)
 
 func ip2locationQuery(ip netip.Addr, prev []*probe.Response) (string, error) {
-	if res, failed := probe.HTTPFailure(prev[0].Status); failed {
-		return "", errors.New("home page: " + res.Reason)
-	}
 	m := ip2locationToken.FindSubmatch(prev[0].Body)
 	if m == nil {
 		return "", errors.New("lookup token not found on the page")
@@ -208,6 +205,15 @@ func evalIP2LocationWeb(rs []*probe.Response) []probe.Result {
 	if known(d.CountryCode) {
 		v.country = d.CountryCode
 	}
+	usage := d.UsageType
+	if !known(usage) {
+		usage = d.ASUsageType
+	}
+	if known(usage) {
+		v.facts.SetUsage(usage)
+		v.note(true, usage)
+	}
+	dc := probe.NormalizeUsage(usage) == "hosting"
 	if known(d.IsProxy) {
 		isProxy := strings.EqualFold(d.IsProxy, "yes")
 		typ := strings.ToUpper(strings.TrimSpace(d.ProxyType))
@@ -216,9 +222,12 @@ func evalIP2LocationWeb(rs []*probe.Response) []probe.Result {
 		v.mark(probe.Tor, isProxy && typed == probe.Tor, "Tor")
 		v.mark(probe.Bot, isProxy && typed == probe.Bot, "search engine spider")
 		v.mark(probe.Proxy, isProxy && !isTyped, "proxy")
-		v.facts.Set(probe.Hosting, isProxy && typed == probe.Hosting)
+		dc = dc || isProxy && typed == probe.Hosting
 		v.note(isProxy && typed == probe.Hosting, "data center range")
 		v.note(isProxy && known(d.ProxyType), "proxy type "+d.ProxyType)
+	}
+	if known(d.IsProxy) || known(usage) {
+		v.facts.Set(probe.Hosting, dc)
 	}
 	if known(d.Threat) || known(d.IsProxy) {
 		v.mark(probe.Abuser, known(d.Threat), "threat "+d.Threat)
@@ -227,14 +236,6 @@ func evalIP2LocationWeb(rs []*probe.Response) []probe.Result {
 		v.flag(score >= 75, "high fraud score")
 		v.note(true, "fraud score "+strconv.Itoa(score))
 		v.facts.SetScore(float64(score))
-	}
-	usage := d.UsageType
-	if !known(usage) {
-		usage = d.ASUsageType
-	}
-	if known(usage) {
-		v.facts.SetUsage(usage)
-		v.note(true, usage)
 	}
 	return v.result()
 }
