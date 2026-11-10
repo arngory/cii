@@ -21,16 +21,18 @@ type Style struct {
 	Color   bool
 	Unicode bool
 	Width   int
+	Lang    string
 }
 
 type marks struct {
 	yes, no, partial, block, unknown, failed, none, sep, down, up, pending string
 	rule, barOn, barOff, warn                                              string
+	lang                                                                   string
 }
 
 var (
-	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · ", "↓", "↑", "◌", "─", "■", "□", "⚠"}
-	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | ", "down", "up", "o", "-", "#", ".", "!"}
+	unicodeMarks = marks{"✓", "✗", "◐", "⊘", "?", "!", "·", " · ", "↓", "↑", "◌", "─", "■", "□", "⚠", ""}
+	asciiMarks   = marks{"+", "-", "~", "x", "?", "!", ".", " | ", "down", "up", "o", "-", "#", ".", "!", ""}
 )
 
 func UnicodeTerminal() bool {
@@ -134,12 +136,12 @@ func bestASN(geo []geodb.Record) string {
 	return ""
 }
 
-func regionParts(c paint, s *region.Summary) []gcell {
+func regionParts(c paint, m marks, s *region.Summary) []gcell {
 	parts := []gcell{verdictCell(c, s.Verdict)}
 	for _, g := range []struct {
 		group probe.Group
 		title string
-	}{{region.GeoIP, "GeoIP"}, {region.Platform, "platforms"}} {
+	}{{region.GeoIP, "GeoIP"}, {region.Platform, m.tr("platforms")}} {
 		agree, total := 0, 0
 		for _, r := range s.Results {
 			if r.Group == g.group && r.Status == probe.OK {
@@ -158,7 +160,7 @@ func regionParts(c paint, s *region.Summary) []gcell {
 		}
 	}
 	for _, r := range s.Attention {
-		parts = append(parts, gcell{text: serviceName(r) + " says " + r.Country, style: c.yellow})
+		parts = append(parts, gcell{text: serviceName(r) + " " + m.tr("says") + " " + r.Country, style: c.yellow})
 	}
 	for _, r := range s.Results {
 		if r.Group != region.CDN && r.Status == probe.Unknown && strings.HasPrefix(r.Reason, "service default") {
@@ -300,7 +302,7 @@ func writeGrid2(w io.Writer, c paint, m marks, width int, cols []column, verdict
 		for i, col := range cols {
 			labels[i] = col.label
 		}
-		fmt.Fprintln(w, c.dim(pad("", labelWidth)+"  marks: "+strings.Join(labels, " ")))
+		fmt.Fprintln(w, c.dim(pad("", labelWidth)+"  "+m.tr("marks")+": "+strings.Join(labels, " ")))
 	}
 	sections := make([][]item, len(groups))
 	widths := make([]int, len(groups))
@@ -349,11 +351,12 @@ func writeGrid2(w io.Writer, c paint, m marks, width int, cols []column, verdict
 	}
 }
 
-func Legend(r *Report, unicode bool) string {
+func Legend(r *Report, unicode bool, lang string) string {
 	m := asciiMarks
 	if unicode {
 		m = unicodeMarks
 	}
+	m.lang = lang
 	used := map[probe.Status]bool{}
 	for _, f := range r.families() {
 		for _, res := range f.host.Services {
@@ -370,13 +373,13 @@ func Legend(r *Report, unicode bool) string {
 		text string
 	}{{probe.No, m.no, "no"}, {probe.Partial, m.partial, "partial"}, {probe.IPBlock, m.block, "blocked"}, {probe.Unknown, m.unknown, "unknown"}, {probe.Failed, m.failed, "error"}} {
 		if used[e.st] {
-			parts = append(parts, e.sym+" "+e.text)
+			parts = append(parts, e.sym+" "+m.tr(e.text))
 		}
 	}
 	if len(parts) == 0 {
 		return ""
 	}
-	return m.yes + " yes, " + strings.Join(parts, ", ")
+	return m.yes + " " + m.tr("yes") + ", " + strings.Join(parts, ", ")
 }
 
 type item struct{ plain, styled string }

@@ -123,6 +123,7 @@ func (r *Report) Screen(st Style, header string, footer []string) []string {
 	if st.Unicode {
 		m, f = unicodeMarks, unicodeFrame
 	}
+	m.lang = st.Lang
 	width := st.Width
 	if width <= 0 {
 		width = 80
@@ -168,22 +169,22 @@ func (r *Report) panels(c paint, m marks) []slotPanel {
 	fams := r.families()
 	var ps []slotPanel
 	for _, fm := range fams {
-		ps = append(ps, slotPanel{0, "IP quality · " + fm.label, func(iw int) []string { return qualityLines(c, m, fm.host, iw) }})
+		ps = append(ps, slotPanel{0, m.tr("IP quality") + " · " + fm.label, func(iw int) []string { return qualityLines(c, m, fm.host, iw) }})
 	}
 	for i, h := range r.Results {
-		ps = append(ps, slotPanel{i % 3, "Lookup · " + h.Query, func(int) []string { return lookupLines(c, h) }})
+		ps = append(ps, slotPanel{i % 3, m.tr("Lookup") + " · " + h.Query, func(int) []string { return lookupLines(c, m, h) }})
 	}
 	if r.Bench != nil {
-		ps = append(ps, slotPanel{0, "Benchmark", func(iw int) []string {
+		ps = append(ps, slotPanel{0, m.tr("Benchmark"), func(iw int) []string {
 			return bufferLines(func(b *bytes.Buffer) { writeBenchCompact(b, c, m, iw, r.Bench) })
 		}})
 	}
 	ps = append(ps,
-		slotPanel{1, "Region & services", func(iw int) []string { return serviceLines(c, m, fams, iw) }},
-		slotPanel{2, "Reputation lists & mail", func(iw int) []string { return checkLines(c, m, fams, iw) }},
+		slotPanel{1, m.tr("Region & services"), func(iw int) []string { return serviceLines(c, m, fams, iw) }},
+		slotPanel{2, m.tr("Reputation lists & mail"), func(iw int) []string { return checkLines(c, m, fams, iw) }},
 	)
 	if len(r.Censor) > 0 {
-		ps = append(ps, slotPanel{2, "Censorship", func(iw int) []string {
+		ps = append(ps, slotPanel{2, m.tr("Censorship"), func(iw int) []string {
 			if r.Mode == "censor" {
 				return bufferLines(func(b *bytes.Buffer) { writeGrid2(b, c, m, iw, []column{newColumn("", r.Censor)}, [][]string{nil}) })
 			}
@@ -241,13 +242,13 @@ func serviceLines(c paint, m marks, fams []fam, iw int) []string {
 		}
 	}
 	for _, f := range regions {
-		label := "Region"
+		label := m.tr("Region")
 		if len(regions) > 1 {
 			label += " " + f.label
 		}
 		lw := utf8.RuneCountInString(label)
 		lines = append(lines, bufferLines(func(b *bytes.Buffer) {
-			writeLine(b, iw, m.sep, c.bold(label)+"  ", lw+2, regionParts(c, f.host.Region))
+			writeLine(b, iw, m.sep, c.bold(label)+"  ", lw+2, regionParts(c, m, f.host.Region))
 			if edges := cdnParts(c, f.host.Region); len(edges) > 0 {
 				writeLine(b, iw, m.sep, c.dim(pad("CDN", lw))+"  ", lw+2, edges)
 			}
@@ -335,7 +336,7 @@ func summaryLines(c paint, m marks, rs []probe.Result, iw int) []string {
 	}
 	if len(findings) > maxFindings {
 		more := len(findings) - maxFindings
-		findings = append(findings[:maxFindings], c.dim(fmt.Sprintf("… %d more in --debug and the log", more)))
+		findings = append(findings[:maxFindings], c.dim(fmt.Sprintf("… %d %s", more, m.tr("more in --debug and the log"))))
 	}
 	if len(findings) > 0 {
 		lines = append(append(lines, ""), findings...)

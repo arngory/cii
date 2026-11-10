@@ -75,6 +75,7 @@ Common flags:
   --no-log           do not write the local log (default: %s)
   --mask             mask addresses (for screenshots)
   --no-color         disable colours
+  --lang LANG        interface language: auto (from LANG/LC_ALL), en or ru; the --debug report and JSON stay in English
   --config FILE      config file (default: %s)
   --data-dir DIR     database directory (default: %s)
 `
@@ -126,7 +127,7 @@ func run(ctx context.Context, args []string) error {
 
 type common struct {
 	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk bool
-	iface, source, proxy, cfgPath, dataDir, catalog                                   string
+	iface, source, proxy, cfgPath, dataDir, catalog, lang                             string
 	timeout                                                                           time.Duration
 }
 
@@ -136,6 +137,7 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.iface, "iface", "", "interface")
 	fs.StringVar(&c.source, "source", "", "source address")
 	fs.StringVar(&c.proxy, "proxy", "", "proxy URL")
+	fs.StringVar(&c.lang, "lang", "auto", "interface language: auto, en or ru")
 	fs.DurationVar(&c.timeout, "timeout", 10*time.Second, "per-request timeout")
 	fs.BoolVar(&c.offline, "offline", false, "no network")
 	fs.BoolVar(&c.quick, "quick", false, "skip region and service checks")
@@ -154,6 +156,14 @@ func (c *common) register(fs *flag.FlagSet) {
 }
 
 func (c *common) color() bool { return !c.noColor && !c.json && report.ColorEnabled() }
+
+func (c *common) language() string {
+	switch c.lang {
+	case "en", "ru":
+		return c.lang
+	}
+	return report.DetectLang()
+}
 
 func (c *common) dir() string {
 	if c.dataDir != "" {
@@ -220,7 +230,18 @@ func (c *common) baseOptions() (netx.Options, error) {
 
 func (c *common) parse(fs *flag.FlagSet, args []string) error {
 	c.register(fs)
-	return fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	return c.check()
+}
+
+func (c *common) check() error {
+	switch c.lang {
+	case "auto", "en", "ru":
+		return nil
+	}
+	return fmt.Errorf("unknown --lang %q (known: auto, en, ru)", c.lang)
 }
 
 func cmdIP(ctx context.Context, args []string) error {
@@ -532,8 +553,8 @@ func output(r *report.Report, c *common) error {
 		return nil
 	}
 	unicode := report.UnicodeTerminal()
-	style := report.Style{Color: c.color(), Unicode: unicode, Width: terminalWidth()}
-	fmt.Println(strings.Join(r.Screen(style, screenTitle(r), footer(r, unicode, logPath, logErr)), "\n"))
+	style := report.Style{Color: c.color(), Unicode: unicode, Width: terminalWidth(), Lang: c.language()}
+	fmt.Println(strings.Join(r.Screen(style, screenTitle(r), footer(r, unicode, c.language(), logPath, logErr)), "\n"))
 	return nil
 }
 
@@ -546,7 +567,7 @@ func writeLog(r *report.Report, c *common) (string, error) {
 		return "", nil
 	}
 	var text, js bytes.Buffer
-	text.WriteString(strings.Join(r.Screen(report.Style{Unicode: true, Width: logScreenWidth}, screenTitle(r), nil), "\n") + "\n\n")
+	text.WriteString(strings.Join(r.Screen(report.Style{Unicode: true, Width: logScreenWidth, Lang: c.language()}, screenTitle(r), nil), "\n") + "\n\n")
 	r.WriteDetailed(&text, false)
 	if err := r.WriteJSON(&js); err != nil {
 		return "", err
@@ -554,9 +575,10 @@ func writeLog(r *report.Report, c *common) (string, error) {
 	return runlog.Write(paths.LogDir(), time.Now(), text.Bytes(), []byte(runlog.JSONMarker), js.Bytes())
 }
 
-func footer(r *report.Report, unicode bool, logPath string, logErr error) []string {
+func footer(r *report.Report, unicode bool, lang, logPath string, logErr error) []string {
+	t := func(s string) string { return report.Translate(lang, s) }
 	var parts []string
-	if legend := report.Legend(r, unicode); legend != "" {
+	if legend := report.Legend(r, unicode, lang); legend != "" {
 		parts = append(parts, legend)
 	}
 	hosts := map[string]bool{}
@@ -567,26 +589,26 @@ func footer(r *report.Report, unicode bool, logPath string, logErr error) []stri
 	}
 	switch {
 	case len(hosts) == 1:
-		parts = append(parts, "1 host contacted")
+		parts = append(parts, "1 "+t("host contacted"))
 	case len(hosts) > 1:
-		parts = append(parts, fmt.Sprintf("%d hosts contacted", len(hosts)))
+		parts = append(parts, fmt.Sprintf("%d %s", len(hosts), t("hosts contacted")))
 	default:
-		parts = append(parts, "no network contacts")
+		parts = append(parts, t("no network contacts"))
 	}
 	if n := r.FailedChecks(); n > 0 {
-		parts = append(parts, fmt.Sprintf("%d checks failed", n))
+		parts = append(parts, fmt.Sprintf("%d %s", n, t("checks failed")))
 	}
 	if r.Extended() {
-		parts = append(parts, "* --extended check")
+		parts = append(parts, "* "+t("--extended check"))
 	}
 	parts = append(parts, r.Attribution...)
 	switch {
 	case logErr != nil:
-		parts = append(parts, "log not written: "+logErr.Error())
+		parts = append(parts, t("log not written")+": "+logErr.Error())
 	case logPath != "":
-		parts = append(parts, "details: --debug or "+logPath)
+		parts = append(parts, t("details")+": --debug, "+logPath)
 	default:
-		parts = append(parts, "details: --debug")
+		parts = append(parts, t("details")+": --debug")
 	}
 	return parts
 }
@@ -844,6 +866,9 @@ func cmdCensor(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if err := c.check(); err != nil {
+		return err
+	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
 	}
@@ -900,6 +925,9 @@ func cmdBench(ctx context.Context, args []string) error {
 	fs.DurationVar(&opts.Duration, "duration", opts.Duration, "duration of each network transfer")
 	fs.BoolVar(&opts.SystemTools, "system", false, "also run installed iperf3 and fio")
 	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := c.check(); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {

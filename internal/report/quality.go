@@ -82,9 +82,9 @@ func sectionRule(c paint, m marks, title string, iw int) string {
 
 func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	if h.Address == "" {
-		return []string{c.dim(unavailableReason(h))}
+		return []string{c.dim(m.tr(unavailableReason(h)))}
 	}
-	field := func(name, value string) string { return c.dim(pad(name, 9)) + value }
+	field := func(name, value string) string { return c.dim(pad(m.tr(name), 9)) + value }
 	lines := []string{field("Address", c.green(h.Address))}
 	if h.Via != "" {
 		lines = append(lines, field("Via", h.Via))
@@ -114,9 +114,9 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 		switch {
 		case p.GeoConsistent == nil:
 		case *p.GeoConsistent:
-			reg += "  " + c.green(m.yes+" geo-consistent")
+			reg += "  " + c.green(m.yes+" "+m.tr("geo-consistent"))
 		default:
-			reg += "  " + c.yellow(m.warn+" geo-discrepant")
+			reg += "  " + c.yellow(m.warn+" "+m.tr("geo-discrepant"))
 		}
 		lines = append(lines, field("Registry", reg))
 	}
@@ -132,23 +132,23 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	nameW = min(nameW, max(8, iw-4-factorCell*len(probe.Flags)))
 	name := func(r probe.Result) string { return padVisible(serviceName(r), nameW) }
 
-	if t := typeLines(c, sources, name, nameW); len(t) > 0 {
-		lines = append(append(lines, "", sectionRule(c, m, "Type", iw)), t...)
+	if t := typeLines(c, m, sources, name, nameW); len(t) > 0 {
+		lines = append(append(lines, "", sectionRule(c, m, m.tr("Type"), iw)), t...)
 	}
 	if s := scoreLines(c, m, sources, name); len(s) > 0 {
-		lines = append(append(lines, "", sectionRule(c, m, "Score", iw)), s...)
+		lines = append(append(lines, "", sectionRule(c, m, m.tr("Score"), iw)), s...)
 	}
 	var verdict []string
 	if h.Region != nil {
 		verdict = h.Region.Verdict
 	}
 	if f := factorLines(c, m, sources, name, nameW, verdict); len(f) > 0 {
-		lines = append(append(lines, "", sectionRule(c, m, "Factors", iw)), f...)
+		lines = append(append(lines, "", sectionRule(c, m, m.tr("Factors"), iw)), f...)
 	}
 	return append(lines, reputationNotes(c, m, h)...)
 }
 
-func typeLines(c paint, sources []probe.Result, name func(probe.Result) string, nameW int) []string {
+func typeLines(c paint, m marks, sources []probe.Result, name func(probe.Result) string, nameW int) []string {
 	var out []string
 	for _, r := range sources {
 		f := r.Facts
@@ -156,7 +156,7 @@ func typeLines(c paint, sources []probe.Result, name func(probe.Result) string, 
 			continue
 		}
 		if len(out) == 0 {
-			out = append(out, c.dim(pad("", nameW)+"  "+pad("usage", badgeWidth)+" company"))
+			out = append(out, c.dim(pad("", nameW)+"  "+pad(m.tr("usage"), badgeWidth)+" "+m.tr("company")))
 		}
 		out = append(out, name(r)+" "+usageBadge(c, f.Usage)+" "+usageBadge(c, f.Company))
 	}
@@ -173,7 +173,7 @@ func scoreLines(c paint, m marks, sources []probe.Result, name func(probe.Result
 		level := levelOf(r.Facts)
 		style := levelStyle(c, level)
 		bar := style(strings.Repeat(m.barOn, level+1)) + c.dim(strings.Repeat(m.barOff, len(scoreLevels)-level-1))
-		out = append(out, fmt.Sprintf("%s %3d %s %s", name(r), score, bar, style(scoreLevels[level].name)))
+		out = append(out, fmt.Sprintf("%s %3d %s %s", name(r), score, bar, style(m.tr(scoreLevels[level].name))))
 	}
 	return out
 }
@@ -193,7 +193,7 @@ func factorLines(c paint, m marks, sources []probe.Result, name func(probe.Resul
 	}
 	head := pad("", nameW) + "  cc"
 	for _, f := range probe.Flags {
-		head += fmt.Sprintf("%*s", factorCell, factorHeads[f])
+		head += pad("", factorCell-utf8.RuneCountInString(m.tr(factorHeads[f]))) + m.tr(factorHeads[f])
 	}
 	out := []string{c.dim(head)}
 	for _, r := range rows {
@@ -216,7 +216,7 @@ func factorLines(c paint, m marks, sources []probe.Result, name func(probe.Resul
 		}
 		out = append(out, line)
 	}
-	return append(out, c.dim(m.yes+" clean, "+m.no+" detected, "+m.none+" not reported"))
+	return append(out, c.dim(m.yes+" "+m.tr("clean")+", "+m.no+" "+m.tr("detected")+", "+m.none+" "+m.tr("not reported")))
 }
 
 func reputationNotes(c paint, m marks, h *Host) []string {
@@ -243,18 +243,18 @@ func reputationNotes(c paint, m marks, h *Host) []string {
 		out = append(append(out, ""), notes...)
 	}
 	if len(pending) > 0 {
-		out = append(out, c.dim(m.pending+" waiting: "+strings.Join(pending, ", ")))
+		out = append(out, c.dim(m.pending+" "+m.tr("waiting")+": "+strings.Join(pending, ", ")))
 	}
 	return out
 }
 
-func lookupLines(c paint, h *Host) []string {
+func lookupLines(c paint, m marks, h *Host) []string {
 	if h.Address == "" {
-		return []string{c.dim(cmp.Or(h.Error, "unavailable"))}
+		return []string{c.dim(cmp.Or(h.Error, m.tr("unavailable")))}
 	}
-	lines := []string{c.dim(pad("Address", 9)) + c.green(h.Address)}
+	lines := []string{c.dim(pad(m.tr("Address"), 9)) + c.green(h.Address)}
 	if len(h.Geo) == 0 {
-		return append(lines, c.dim("no local data for this address; run `cii data update`"))
+		return append(lines, c.dim(m.tr("no local data for this address; run `cii data update`")))
 	}
 	srcW := 0
 	for _, g := range h.Geo {

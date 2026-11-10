@@ -76,22 +76,24 @@ func liveFrame(c *common, s *session, started time.Time) string {
 		height = 40
 	}
 	rep := s.report()
+	lang := c.language()
+	t := func(s string) string { return report.Translate(lang, s) }
 	parts := []string{rep.Tool.Name + " " + rep.Tool.Version}
 	switch done, total := report.Progress(rep); {
 	case total > 0:
-		parts = append(parts, fmt.Sprintf("checking %d/%d", done, total))
+		parts = append(parts, fmt.Sprintf("%s %d/%d", t("checking"), done, total))
 	case rep.Mode == "online" || rep.Mode == "offline":
-		parts = append(parts, "detecting the public address")
+		parts = append(parts, t("detecting the public address"))
 	}
 	if step := s.step(); step != "" {
-		parts = append(parts, "benchmark: "+step)
+		parts = append(parts, t("benchmark")+": "+step)
 	}
-	parts = append(parts, fmt.Sprintf("%ds", int(time.Since(started).Seconds())), "Ctrl+C stops and shows what is done")
+	parts = append(parts, fmt.Sprintf("%ds", int(time.Since(started).Seconds())), t("Ctrl+C stops and shows what is done"))
 	header := strings.Join(parts, " · ")
-	lines := rep.Screen(report.Style{Color: c.color(), Unicode: report.UnicodeTerminal(), Width: width}, header, nil)
+	lines := rep.Screen(report.Style{Color: c.color(), Unicode: report.UnicodeTerminal(), Width: width, Lang: lang}, header, nil)
 	if len(lines) > height {
 		hidden := len(lines) - height + 1
-		lines = append(lines[:height-1], clipRunes(fmt.Sprintf("… %d more lines, the full view is printed when the run ends", hidden), width))
+		lines = append(lines[:height-1], clipRunes(fmt.Sprintf("… %d %s", hidden, t("more lines, the full view is printed when the run ends")), width))
 	}
 	return "\x1b[H\x1b[K" + strings.Join(lines, "\r\n\x1b[K") + "\x1b[J"
 }

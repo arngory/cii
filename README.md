@@ -43,7 +43,9 @@ make build
 | `cii censor` | только цензура, все режимы, полная сетка: резолверы и подмена DNS, DPI и геоблокировки, Telegram, свои списки доменов (см. [docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md)) | резолверы, проверяемые домены, DC Telegram |
 | `cii bench` | только бенчмарк, со своими настройками: сведения о системе, диск, CPU, скорость через Cloudflare, iperf3 своим клиентом (см. [docs/BENCH.md](docs/BENCH.md)) | `speed.cloudflare.com`, выбранные iperf3-серверы |
 
-Общие флаги: `-4`, `-6`, `--iface`, `--source`, `--proxy`, `--timeout`, `--quick`, `--extended`, `--catalog`, `--no-risk`, `--json`, `--debug`, `--no-log`, `--mask`, `--no-color`, `--config`, `--data-dir`.
+Общие флаги: `-4`, `-6`, `--iface`, `--source`, `--proxy`, `--timeout`, `--quick`, `--extended`, `--catalog`, `--no-risk`, `--json`, `--debug`, `--no-log`, `--mask`, `--no-color`, `--lang`, `--config`, `--data-dir`.
+
+Язык экрана — `--lang auto|en|ru`; по умолчанию берётся из `LC_ALL`/`LC_MESSAGES`/`LANG` (русская локаль → русский интерфейс). Переводятся заголовки, подписи, уровни, легенда, строка прогресса и подвал; подробный отчёт `--debug`, JSON и названия сервисов остаются на английском, чтобы логи и скрипты не зависели от языка.
 
 ## Вывод
 
