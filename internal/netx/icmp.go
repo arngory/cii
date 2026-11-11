@@ -33,10 +33,7 @@ func (n *Net) ListenICMP4(module string) (*ICMPConn, error) {
 }
 
 func (c *ICMPConn) Allow(host string, ip netip.Addr) error {
-	if err := c.n.addrOf(c.module, host, ip); err != nil {
-		return err
-	}
-	if _, err := c.n.allow(c.module, host, "icmp"); err != nil {
+	if _, err := c.n.allowAddr(c.module, host, ip, "icmp"); err != nil {
 		return err
 	}
 	c.mu.Lock()

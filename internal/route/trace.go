@@ -241,7 +241,7 @@ func timeTCP(ctx context.Context, n *netx.Net, paths []*Path) {
 				c, err := n.DialAddr(ctx, Module, "tcp", p.Target.Host, p.addr, "443")
 				if err != nil {
 					lastErr = err
-					if errors.Is(err, netx.ErrProxyRaw) || netx.AsBlocked(err) != nil {
+					if errors.Is(err, netx.ErrProxyRaw) || errors.Is(err, netx.ErrAddrNotOfHost) || netx.AsBlocked(err) != nil {
 						break
 					}
 					continue

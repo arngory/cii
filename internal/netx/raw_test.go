@@ -169,12 +169,17 @@ func TestDialAddrChecksHostDialsAddress(t *testing.T) {
 	if _, err := n.DialAddr(context.Background(), "route", "tcp", "127.0.0.1", netip.MustParseAddr("192.0.2.1"), port); !errors.Is(err, ErrAddrNotOfHost) {
 		t.Errorf("literal host with another address dialled: %v", err)
 	}
-	if _, err := n.DialAddr(context.Background(), "route", "tcp", "other.example", netip.MustParseAddr("127.0.0.1"), port); !errors.Is(err, ErrAddrNotOfHost) && AsBlocked(err) == nil {
+	if _, err := n.DialAddr(context.Background(), "route", "tcp", "other.example", netip.MustParseAddr("127.0.0.1"), port); AsBlocked(err) == nil {
 		t.Errorf("undeclared host dialled: %v", err)
 	}
+	blocked := map[string]int{}
 	for _, e := range led.Entries() {
-		if e.Host == "localhost" && e.Proto == "tcp" && e.Requests != 1 {
+		blocked[e.Host] += e.Blocked
+		if e.Host == "localhost" && e.Proto == "tcp" && e.Blocked == 0 && e.Requests != 1 {
 			t.Errorf("ledger = %+v", e)
 		}
+	}
+	if blocked["localhost"] != 2 || blocked["127.0.0.1"] != 1 || blocked["other.example"] != 1 {
+		t.Errorf("blocked attempts in the ledger = %v", blocked)
 	}
 }
