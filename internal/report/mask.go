@@ -23,6 +23,7 @@ var (
 	addrType   = reflect.TypeFor[netip.Addr]()
 	prefixType = reflect.TypeFor[netip.Prefix]()
 	orgFields  = []string{"ASOrg", "ASDomain"}
+	freeText   = []string{"Detail", "Reason", "Error", "Notes"}
 	genericOrg = map[string]bool{
 		"limited": true, "company": true, "corporation": true, "online": true, "internet": true,
 		"network": true, "networks": true, "telecom": true, "telecommunications": true,
@@ -70,7 +71,7 @@ func trimEdge(s string) string {
 }
 
 func (r *Report) Scrubbed() *Report {
-	out := newScrubber(orgNames(r)).copy(reflect.ValueOf(r)).Interface().(*Report)
+	out := newScrubber(orgNames(r)).copy(reflect.ValueOf(r), false).Interface().(*Report)
 	out.Masked = true
 	for _, h := range out.hosts() {
 		if h.Region != nil {
@@ -149,7 +150,10 @@ func newScrubber(names []string) scrubber {
 	return scrubber{names: regexp.MustCompile(`(?i)(^|[^\pL\pN])(?:` + strings.Join(quoted, "|") + `)($|[^\pL\pN])`)}
 }
 
-func (s scrubber) text(v string) string {
+func (s scrubber) text(v string, answer bool) string {
+	if !answer {
+		return MaskText(v)
+	}
 	v = namedNotes.ReplaceAllString(MaskText(v), "$1$2")
 	if s.names == nil {
 		return v
@@ -163,7 +167,7 @@ func (s scrubber) text(v string) string {
 	}
 }
 
-func (s scrubber) copy(v reflect.Value) reflect.Value {
+func (s scrubber) copy(v reflect.Value, answer bool) reflect.Value {
 	switch {
 	case v.Type() == addrType || v.Type() == prefixType:
 		return reflect.Zero(v.Type())
@@ -171,14 +175,14 @@ func (s scrubber) copy(v reflect.Value) reflect.Value {
 	switch v.Kind() {
 	case reflect.String:
 		out := reflect.New(v.Type()).Elem()
-		out.SetString(s.text(v.String()))
+		out.SetString(s.text(v.String(), answer))
 		return out
 	case reflect.Pointer:
 		if v.IsNil() {
 			return v
 		}
 		out := reflect.New(v.Type().Elem())
-		out.Elem().Set(s.copy(v.Elem()))
+		out.Elem().Set(s.copy(v.Elem(), answer))
 		return out
 	case reflect.Slice:
 		if v.IsNil() {
@@ -186,7 +190,7 @@ func (s scrubber) copy(v reflect.Value) reflect.Value {
 		}
 		out := reflect.MakeSlice(v.Type(), v.Len(), v.Len())
 		for i := range v.Len() {
-			out.Index(i).Set(s.copy(v.Index(i)))
+			out.Index(i).Set(s.copy(v.Index(i), answer))
 		}
 		return out
 	case reflect.Map:
@@ -195,7 +199,7 @@ func (s scrubber) copy(v reflect.Value) reflect.Value {
 		}
 		out := reflect.MakeMapWithSize(v.Type(), v.Len())
 		for it := v.MapRange(); it.Next(); {
-			out.SetMapIndex(s.copy(it.Key()), s.copy(it.Value()))
+			out.SetMapIndex(s.copy(it.Key(), answer), s.copy(it.Value(), answer))
 		}
 		return out
 	case reflect.Struct:
@@ -212,7 +216,7 @@ func (s scrubber) copy(v reflect.Value) reflect.Value {
 			case slices.Contains(orgFields, f.Name) && f.Type.Kind() == reflect.String:
 				out.Field(i).SetString("")
 			default:
-				out.Field(i).Set(s.copy(v.Field(i)))
+				out.Field(i).Set(s.copy(v.Field(i), slices.Contains(freeText, f.Name)))
 			}
 		}
 		return out

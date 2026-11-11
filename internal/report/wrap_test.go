@@ -34,6 +34,11 @@ func TestWrapVisible(t *testing.T) {
 	if !strings.HasPrefix(got[1], "       \x1b[2m") {
 		t.Errorf("continuation does not reopen the dim style: %q", got[1])
 	}
+	for _, l := range wrapVisible(c.dim(strings.Repeat("a", 39))+" bbbb cccc", 40) {
+		if esc := ansiSeq.FindAllString(l, -1); len(esc) > 0 && esc[len(esc)-1] != "\x1b[0m" {
+			t.Errorf("style left open at a break on the closing space: %q", l)
+		}
+	}
 	if w := wrapVisible("short", 40); len(w) != 1 || w[0] != "short" {
 		t.Errorf("short line = %q", w)
 	}

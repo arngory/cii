@@ -147,6 +147,7 @@ func wrapVisible(s string, width int) []string {
 		}
 		for next < len(cs) && plain[next] == ' ' {
 			apply(cs[next].esc)
+			b.WriteString(cs[next].esc)
 			next++
 		}
 		if next >= len(cs) {

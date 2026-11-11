@@ -38,7 +38,10 @@ func maskedSample() *Report {
 	r.IPv4 = h
 	r.IPv6 = NewHost(ipdetect.Address{Address: netip.MustParseAddr("2001:db8:1234::7"), Source: "echo:test"}, nil)
 	r.SetCensor([]probe.Result{{Group: "dpi", Service: "instagram.com", Status: probe.IPBlock, Detail: "31.13.66.174"}})
-	r.Network = []ledger.Entry{{Module: "risk", Host: "7.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.3.2.1.8.b.d.0.1.0.0.2.ip6.arpa", Proto: "dns"}}
+	r.Network = []ledger.Entry{
+		{Module: "risk", Host: "7.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.3.2.1.8.b.d.0.1.0.0.2.ip6.arpa", Proto: "dns"},
+		{Module: "region", Host: "www.telekom.de", Proto: "https", Purpose: "Telekom check"},
+	}
 	return r
 }
 
@@ -54,7 +57,7 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 	screen := strings.Join(m.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
 	for name, out := range map[string]string{"json": js.String(), "detailed": det.String(), "screen": screen} {
 		for _, leak := range []string{"203.0.113", "203-0-113", "2001:db8", "1.2.3.4.8.b.d", "3320", "Telekom", "telekom", "Deutsche", "DTAG", "t-ipconnect", "ExampleVPN", "31.13.66", "127.255"} {
-			if strings.Contains(out, leak) {
+			if strings.Contains(strings.ReplaceAll(strings.ReplaceAll(out, "www.telekom.de", ""), "Telekom check", ""), leak) {
 				t.Errorf("%s leaks %q", name, leak)
 			}
 		}
@@ -63,6 +66,9 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 				t.Errorf("%s lost %q", name, keep)
 			}
 		}
+	}
+	if e := m.Network[1]; e.Host != "www.telekom.de" || e.Purpose != "Telekom check" {
+		t.Errorf("ledger entry rewritten: %+v", e)
 	}
 	if !m.Masked || orig.Masked {
 		t.Errorf("Masked flag: scrubbed %v, original %v", m.Masked, orig.Masked)
