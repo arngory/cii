@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -109,5 +110,35 @@ func TestDetectMajorityVote(t *testing.T) {
 	got := Detect(context.Background(), n, netx.IPv4, Options{Providers: providers})
 	if got.Address.String() != "203.0.113.7" || got.Source != "echo:a+b" || len(got.Disagree) != 1 || got.Disagree[0] != "odd: 192.0.2.9" {
 		t.Fatalf("Detect = %+v", got)
+	}
+}
+
+func TestDetectTieFollowsConfigOrder(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/slow" {
+			time.Sleep(60 * time.Millisecond)
+			w.Write([]byte("203.0.113.7"))
+			return
+		}
+		w.Write([]byte("198.51.100.9"))
+	}))
+	defer srv.Close()
+	providers := []Provider{{Name: "first", URL4: srv.URL + "/slow"}, {Name: "second", URL4: srv.URL + "/fast"}}
+	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(providers)...), ledger.New())
+	got := Detect(context.Background(), n, netx.IPv4, Options{Providers: providers})
+	if got.Address.String() != "203.0.113.7" || got.Source != "echo:first" || len(got.Disagree) != 1 || got.Disagree[0] != "second: 198.51.100.9" {
+		t.Fatalf("tie = %+v", got)
+	}
+}
+
+func TestDetectExplainsMissingRecords(t *testing.T) {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
+	providers := []Provider{{Name: "a", URL6: "https://a.cii-test.invalid/"}, {Name: "b", URL6: "https://b.cii-test.invalid/"}}
+	n := netx.New(netx.Options{Timeout: 5 * time.Second}, netx.NewPolicy(Rules(providers)...), ledger.New())
+	got := Detect(context.Background(), n, netx.IPv6, Options{Providers: providers, Source: netip.MustParseAddr("2001:db8::1")})
+	if !strings.Contains(got.Error, "no AAAA records") || !strings.Contains(got.Error, "IPv6 is off or filtered") {
+		t.Skipf("resolver did not answer NXDOMAIN for .invalid here: %s", got.Error)
 	}
 }

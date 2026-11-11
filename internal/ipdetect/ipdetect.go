@@ -3,8 +3,10 @@ package ipdetect
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -81,7 +83,7 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		}
 		return res
 	}
-	votes, errs := vote(ctx, n.HTTPClient(Module), f, o.Providers)
+	votes, errs, noRecords := vote(ctx, n.HTTPClient(Module), f, o.Providers)
 	if len(votes) > 0 {
 		res.Address, res.Source = votes[0].addr, "echo:"+strings.Join(votes[0].names, "+")
 		for _, v := range votes[1:] {
@@ -93,9 +95,16 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		res.Address, res.Source = res.Interface[0], "interface"
 		return res
 	}
-	if len(errs) == 0 {
+	switch {
+	case len(errs) == 0:
 		res.Error = "no providers configured for " + f.String()
-	} else {
+	case noRecords:
+		rr := "A"
+		if f == netx.IPv6 {
+			rr = "AAAA"
+		}
+		res.Error = fmt.Sprintf("the resolver returns no %s records for any echo service: %s is off or filtered on this network", rr, familyName(f))
+	default:
 		res.Error = strings.Join(errs, "; ")
 	}
 	return res
@@ -104,19 +113,28 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 type tally struct {
 	addr  netip.Addr
 	names []string
+	first int
 }
 
-func vote(ctx context.Context, client *http.Client, f netx.Family, providers []Provider) ([]tally, []string) {
+func familyName(f netx.Family) string {
+	if f == netx.IPv6 {
+		return "IPv6"
+	}
+	return "IPv4"
+}
+
+func vote(ctx context.Context, client *http.Client, f netx.Family, providers []Provider) ([]tally, []string, bool) {
 	type answer struct {
-		name string
-		addr netip.Addr
-		err  error
+		name  string
+		order int
+		addr  netip.Addr
+		err   error
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	ch := make(chan answer, len(providers))
 	asked := 0
-	for _, p := range providers {
+	for order, p := range providers {
 		raw := p.URL4
 		if f == netx.IPv6 {
 			raw = p.URL6
@@ -130,24 +148,30 @@ func vote(ctx context.Context, client *http.Client, f netx.Family, providers []P
 			if err == nil && a.Is4() != (f == netx.IPv4) {
 				err = fmt.Errorf("returned an %s address", familyOf(a))
 			}
-			ch <- answer{p.Name, a, err}
+			ch <- answer{p.Name, order, a, err}
 		}()
 	}
 	need := min(2, asked)
 	var tallies []tally
 	var errs []string
+	notFound := 0
 	for range asked {
 		a := <-ch
 		if a.err != nil {
 			errs = append(errs, a.name+": "+a.err.Error())
+			var dnsErr *net.DNSError
+			if errors.As(a.err, &dnsErr) && dnsErr.IsNotFound {
+				notFound++
+			}
 			continue
 		}
 		i := slices.IndexFunc(tallies, func(t tally) bool { return t.addr == a.addr })
 		if i < 0 {
-			tallies = append(tallies, tally{addr: a.addr})
+			tallies = append(tallies, tally{addr: a.addr, first: a.order})
 			i = len(tallies) - 1
 		}
 		tallies[i].names = append(tallies[i].names, a.name)
+		tallies[i].first = min(tallies[i].first, a.order)
 		if len(tallies[i].names) >= need {
 			break
 		}
@@ -155,9 +179,14 @@ func vote(ctx context.Context, client *http.Client, f netx.Family, providers []P
 	for i := range tallies {
 		slices.Sort(tallies[i].names)
 	}
-	slices.SortStableFunc(tallies, func(a, b tally) int { return len(b.names) - len(a.names) })
+	slices.SortFunc(tallies, func(a, b tally) int {
+		if d := len(b.names) - len(a.names); d != 0 {
+			return d
+		}
+		return a.first - b.first
+	})
 	slices.Sort(errs)
-	return tallies, errs
+	return tallies, errs, asked > 0 && notFound == asked
 }
 
 func familyOf(a netip.Addr) string {
