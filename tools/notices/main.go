@@ -46,15 +46,19 @@ func goOut(env []string, args ...string) (string, error) {
 func modules() ([]module, error) {
 	seen := map[string]module{}
 	for _, goos := range []string{"linux", "darwin", "windows"} {
-		out, err := goOut([]string{"GOOS=" + goos, "CGO_ENABLED=0"}, "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}} {{.Version}} {{.Dir}}{{end}}{{end}}", "./cmd/cii")
+		out, err := goOut([]string{"GOOS=" + goos, "CGO_ENABLED=0"}, "list", "-deps", "-f", "{{with .Module}}{{if not .Main}}{{.Path}}\t{{.Version}}\t{{.Dir}}{{end}}{{end}}", "./cmd/cii")
 		if err != nil {
 			return nil, err
 		}
 		for _, line := range strings.Split(out, "\n") {
-			f := strings.Fields(line)
-			if len(f) == 3 {
-				seen[f[0]] = module{f[0], f[1], f[2]}
+			if strings.TrimSpace(line) == "" {
+				continue
 			}
+			f := strings.Split(line, "\t")
+			if len(f) != 3 || f[0] == "" || f[2] == "" {
+				return nil, fmt.Errorf("%s: cannot locate module source in %q", goos, line)
+			}
+			seen[f[0]] = module{f[0], f[1], f[2]}
 		}
 	}
 	var mods []module

@@ -69,9 +69,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
-            if [ -z "$(gh release view "$TAG" --json body --jq .body)" ]; then
+            body=$(gh release view "$TAG" --json body --jq .body)
+            if [ -z "$body" ]; then
               gh release edit "$TAG" --notes-file docs/RELEASE_NOTES_TEMPLATE.md
             fi
           else
