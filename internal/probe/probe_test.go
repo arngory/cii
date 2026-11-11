@@ -172,3 +172,20 @@ func TestRunBodyFrom(t *testing.T) {
 		t.Errorf("failed prerequisite = %+v", res[2])
 	}
 }
+
+func TestChallenged(t *testing.T) {
+	page := `<!DOCTYPE html><html><head><title>Just a moment...</title><script>window._cf_chl_opt={}</script>`
+	for _, c := range []struct {
+		r    Response
+		want bool
+	}{
+		{Response{Status: 403, Body: []byte(page)}, true},
+		{Response{Status: 503, Header: http.Header{"Cf-Mitigated": {"challenge"}}}, true},
+		{Response{Status: 200, Body: []byte(`<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>`)}, false},
+		{Response{Status: 403, Body: []byte(`<title>Attention Required! | Cloudflare</title>Sorry, you have been blocked`)}, false},
+	} {
+		if got := Challenged(&c.r); got != c.want {
+			t.Errorf("Challenged(%d %q) = %v", c.r.Status, c.r.Body, got)
+		}
+	}
+}

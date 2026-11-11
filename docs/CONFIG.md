@@ -21,6 +21,7 @@ keys:
   abuseipdb_key: ""
   ipqs_key: ""
   ipdata_key: ""
+  gemini_api_key: ""
 
 data:
   sources: [dbip-country-lite, dbip-asn-lite, ipinfo-lite]
@@ -40,7 +41,7 @@ data:
 
 ## `keys`
 
-Только **ваши собственные** ключи. Переменные окружения `CII_IPINFO_TOKEN`, `CII_MAXMIND_ACCOUNT_ID`, `CII_MAXMIND_LICENSE_KEY`, `CII_IPREGISTRY_KEY`, `CII_GEOAPIFY_KEY`, `CII_IP2LOCATION_KEY`, `CII_IPAPI_IS_KEY`, `CII_PROXYCHECK_KEY`, `CII_ABUSEIPDB_KEY`, `CII_IPQS_KEY` и `CII_IPDATA_KEY` имеют приоритет над файлом. Ключи никогда не попадают в отчёты, ошибки и `manifest.json`.
+Только **ваши собственные** ключи. Переменные окружения `CII_IPINFO_TOKEN`, `CII_MAXMIND_ACCOUNT_ID`, `CII_MAXMIND_LICENSE_KEY`, `CII_IPREGISTRY_KEY`, `CII_GEOAPIFY_KEY`, `CII_IP2LOCATION_KEY`, `CII_IPAPI_IS_KEY`, `CII_PROXYCHECK_KEY`, `CII_ABUSEIPDB_KEY`, `CII_IPQS_KEY`, `CII_IPDATA_KEY` и `CII_GEMINI_API_KEY` имеют приоритет над файлом. Ключи никогда не попадают в отчёты, ошибки и `manifest.json`.
 
 | Ключ | Где используется |
 |---|---|
@@ -50,6 +51,7 @@ data:
 | `ip2location_key` | снимает суточный лимит анонимных запросов к ip2location.io |
 | `proxycheck_key` | снимает дневной лимит анонимных запросов к proxycheck.io |
 | `ipapi_is_key`, `abuseipdb_key`, `ipqs_key`, `ipdata_key` | включают соответствующие проверки репутации (см. [RISK_CHECKS.md](RISK_CHECKS.md)) |
+| `gemini_api_key` | включает проверку региона Gemini API (см. [SERVICE_CHECKS.md](SERVICE_CHECKS.md)) |
 
 ## `data.sources`
 

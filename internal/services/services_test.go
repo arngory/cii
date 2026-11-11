@@ -104,3 +104,51 @@ func TestTiers(t *testing.T) {
 		}
 	}
 }
+
+func TestNewAIChecks(t *testing.T) {
+	app := eval(t, "ChatGPT app")
+	for _, c := range []struct {
+		resp   *probe.Response
+		want   probe.Status
+		reason string
+	}{
+		{r(403, `{"cf_details":"Request is not allowed. Please try again later.", "type":"dc"}`), probe.IPBlock, "network refused (type dc)"},
+		{r(403, `Your request was blocked: disallowed ISP`), probe.IPBlock, "disallowed ISP"},
+		{r(200, `<html>app</html>`), probe.Yes, ""},
+		{r(503, ``), probe.Failed, "HTTP 503"},
+	} {
+		got := app([]*probe.Response{c.resp})[0]
+		if got.Status != c.want || got.Reason != c.reason {
+			t.Errorf("ChatGPT app %d %q = %+v", c.resp.Status, c.resp.Body, got)
+		}
+	}
+	nb := eval(t, "NotebookLM")
+	for _, c := range []struct {
+		status int
+		url    string
+		want   probe.Status
+	}{
+		{200, "https://notebook.google.com/", probe.Yes},
+		{200, "https://accounts.google.com/v3/signin/identifier?continue=x", probe.Yes},
+		{200, "https://notebooklm.google.com/?location=unsupported", probe.No},
+		{200, "https://www.google.com/sorry/index", probe.Unknown},
+	} {
+		if got := nb([]*probe.Response{{Status: c.status, URL: c.url}})[0].Status; got != c.want {
+			t.Errorf("NotebookLM %s = %s, want %s", c.url, got, c.want)
+		}
+	}
+	gem := eval(t, "Gemini API")
+	for body, want := range map[string]probe.Status{
+		`{"models":[]}`: probe.Yes,
+		`{"error":{"code":400,"message":"User location is not supported for the API use.","status":"FAILED_PRECONDITION"}}`: probe.No,
+		`{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT"}}`:    probe.Failed,
+	} {
+		status := 400
+		if want == probe.Yes {
+			status = 200
+		}
+		if got := gem([]*probe.Response{r(status, body)})[0].Status; got != want {
+			t.Errorf("Gemini %q = %s, want %s", body, got, want)
+		}
+	}
+}

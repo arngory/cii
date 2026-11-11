@@ -51,6 +51,7 @@
 | Google | `accounts.google.com/v3/signin/identifier` | скрытое поле `region` (`ZZ` = не определено) |
 | YouTube | `www.youtube.com/sw.js_data` | данные service worker |
 | Reddit | `www.reddit.com/api/v1/not-found` | текст страницы 404; 403 = `ipblock` |
+| Deezer | `www.deezer.com/en/offers` | `'country': 'XX'` в коде страницы тарифов |
 | TikTok | `www.tiktok.com/api/v1/web-cookie-privacy/config` | `body.appProps.region` |
 | Apple | `gspe1-ssl.ls.apple.com/pep/gcc` | тело ответа |
 | Steam | `HEAD store.steampowered.com` | cookie `steamCountry` |

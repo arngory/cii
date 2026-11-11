@@ -3,7 +3,9 @@ package services
 import (
 	"bytes"
 	"net/http"
+	"net/url"
 	"regexp"
+	"strings"
 
 	"github.com/arngory/cii/internal/clientids"
 	"github.com/arngory/cii/internal/config"
@@ -29,6 +31,13 @@ var Checks = []probe.Check{
 	{Service: "Reddit", Group: Web, Requests: probe.Get("https://www.reddit.com/"), Eval: reddit},
 	{Service: "Wikipedia editing", Group: Web, Requests: probe.Get("https://en.wikipedia.org/w/api.php?action=query&meta=userinfo&uiprop=blockinfo&format=json"), Eval: wikipedia},
 
+	{Service: "ChatGPT app", Group: AI, Requests: probe.Get("https://ios.chat.openai.com/"), Eval: chatGPTApp},
+	{Service: "NotebookLM", Group: AI, Requests: probe.Get("https://notebooklm.google.com/"),
+		ExtraHosts: []string{"notebook.google.com", "accounts.google.com"}, Eval: notebookLM},
+	{Service: "Gemini API", Group: AI, Requests: probe.Get("https://generativelanguage.googleapis.com/v1beta/models"),
+		KeyOK:     func(k config.Keys) bool { return k.GeminiAPIKey != "" },
+		Authorize: func(req *http.Request, k config.Keys) { req.Header.Set("X-Goog-Api-Key", k.GeminiAPIKey) },
+		Eval:      geminiAPI},
 	aiAPI("OpenAI API", "https://api.openai.com/v1/models", "unsupported_country_region_territory"),
 	aiAPI("Anthropic API", "https://api.anthropic.com/v1/models", "Request not allowed"),
 	aiAPI("Grok API", "https://api.x.ai/v1/models", "not available in your region"),
@@ -87,6 +96,57 @@ func aiAPI(service, rawURL, blockedMarker string) probe.Check {
 		}
 		return unknown(r)
 	}}
+}
+
+var chatGPTBlockType = probe.JSONPath("type")
+
+func chatGPTApp(rs []*probe.Response) []probe.Result {
+	r := rs[0]
+	lower := bytes.ToLower(r.Body)
+	switch {
+	case bytes.Contains(r.Body, []byte(`"cf_details"`)):
+		reason := "network refused"
+		if t := chatGPTBlockType(r); t != "" {
+			reason += " (type " + t + ")"
+		}
+		return []probe.Result{{Status: probe.IPBlock, Reason: reason}}
+	case bytes.Contains(lower, []byte("disallowed isp")):
+		return []probe.Result{{Status: probe.IPBlock, Reason: "disallowed ISP"}}
+	case bytes.Contains(lower, []byte("unsupported_country")):
+		return no("region not supported")
+	case r.Status < 400:
+		return yes("")
+	}
+	return unknown(r)
+}
+
+func notebookLM(rs []*probe.Response) []probe.Result {
+	r := rs[0]
+	u, err := url.Parse(r.URL)
+	switch {
+	case err != nil:
+		return unknown(r)
+	case strings.Contains(u.RawQuery, "location=unsupported"):
+		return no("region not supported")
+	case r.Status != http.StatusOK:
+		return unknown(r)
+	case u.Host == "accounts.google.com", u.Host == "notebook.google.com", u.Host == "notebooklm.google.com":
+		return yes("")
+	}
+	return []probe.Result{{Status: probe.Unknown, Reason: "unexpected destination " + u.Host}}
+}
+
+func geminiAPI(rs []*probe.Response) []probe.Result {
+	r := rs[0]
+	switch {
+	case r.Status == http.StatusOK:
+		return yes("")
+	case bytes.Contains(r.Body, []byte("User location is not supported")):
+		return no("region not supported")
+	case bytes.Contains(r.Body, []byte("API key not valid")), bytes.Contains(r.Body, []byte("API_KEY_INVALID")):
+		return probe.Fail("key rejected")
+	}
+	return unknown(r)
 }
 
 func yes(country string) []probe.Result {

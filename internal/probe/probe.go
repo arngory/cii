@@ -1,6 +1,7 @@
 package probe
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -63,6 +64,7 @@ type Request struct {
 
 type Response struct {
 	Status int
+	URL    string
 	Header http.Header
 	Body   []byte
 }
@@ -190,8 +192,28 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 			return Fail(reason(err))
 		}
 		responses = append(responses, resp)
+		if Challenged(resp) {
+			return []Result{{Status: Unknown, Reason: "Cloudflare challenge, availability not tested"}}
+		}
 	}
 	return c.Eval(responses)
+}
+
+var challengeMarkers = [][]byte{[]byte("cf_chl_opt"), []byte("<title>Just a moment...</title>"), []byte("/cdn-cgi/challenge-platform/h/")}
+
+func Challenged(r *Response) bool {
+	if r.Status != http.StatusForbidden && r.Status != http.StatusTooManyRequests && r.Status != http.StatusServiceUnavailable {
+		return false
+	}
+	if strings.EqualFold(r.Header.Get("Cf-Mitigated"), "challenge") {
+		return true
+	}
+	for _, m := range challengeMarkers {
+		if bytes.Contains(r.Body, m) {
+			return true
+		}
+	}
+	return false
 }
 
 func do(ctx context.Context, client *http.Client, keys config.Keys, ip netip.Addr, c Check, r Request) (*Response, error) {
@@ -225,7 +247,7 @@ func do(ctx context.Context, client *http.Client, keys config.Keys, ip netip.Add
 	if err != nil {
 		return nil, err
 	}
-	return &Response{Status: resp.StatusCode, Header: resp.Header, Body: data}, nil
+	return &Response{Status: resp.StatusCode, URL: resp.Request.URL.String(), Header: resp.Header, Body: data}, nil
 }
 
 func Fail(reason string) []Result {
