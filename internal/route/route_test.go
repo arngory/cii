@@ -124,7 +124,7 @@ func TestResolveLiteralFamily(t *testing.T) {
 	n6 := netx.New(netx.Options{Family: netx.IPv6}, netx.NewPolicy(Rules(Targets)...), ledger.New())
 	p := &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9"}}
 	resolve(context.Background(), n6, p)
-	if p.addr.IsValid() || p.Error != "no IPv6 address" {
+	if p.addr.IsValid() || p.Error != "no ipv6 address" {
 		t.Errorf("IPv4 literal on IPv6 = %v %q", p.addr, p.Error)
 	}
 	n4 := netx.New(netx.Options{Family: netx.IPv4}, netx.NewPolicy(Rules(Targets)...), ledger.New())
