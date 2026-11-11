@@ -327,7 +327,7 @@ func writeGrid2(w io.Writer, c paint, m marks, width int, cols []column, verdict
 			it.plain += rest
 			it.styled += rest
 			if d := detailOf(first); d != "" && len(cols) == 1 {
-				d = " " + probe.Truncate(d, 48)
+				d = " " + d
 				it.plain += d
 				it.styled += c.dim(d)
 			}
