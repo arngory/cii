@@ -137,7 +137,7 @@ Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks �
 
 **Log.** Every run saves the frame, the detailed report and JSON to a local log: `~/.local/state/cii/logs` on Linux, `~/Library/Logs/cii` on macOS, `%LOCALAPPDATA%\cii\logs` on Windows. Mode 0600, the last 20 runs are kept, nothing is sent anywhere. `cii diff` works from these logs.
 
-**`--mask`** replaces with `•••` everything that identifies the address or network: addresses and prefixes in any form, AS numbers and holders, PTR, hop addresses, VPN and datacenter names in answers. Country, city and all check results stay.
+**`--mask`** replaces with `•••` everything that identifies the address or network: addresses and prefixes in any form, AS numbers and holders, PTR, hop addresses, CDN node names (an ISP-hosted cache is often named after the ISP), VPN and datacenter names in answers. Country, city and all check results stay.
 
 ## Install and verify
 
