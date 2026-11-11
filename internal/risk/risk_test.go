@@ -75,21 +75,28 @@ func TestAuthorize(t *testing.T) {
 		t.Errorf("abuseipdb header missing")
 	}
 	req = authorized(t, proxyCheck(""), "1.2.3.4")
-	if req.URL.Query().Has("key") || req.URL.Query().Get("vpn") != "1" {
+	if req.URL.Query().Has("key") || req.URL.Path != "/v3/1.2.3.4" || req.URL.Query().Get("tag") != "0" {
 		t.Errorf("keyless proxycheck url = %s", req.URL)
 	}
 }
 
 func TestProxyCheck(t *testing.T) {
-	clean := `{"status":"ok","1.1.1.1":{"asn":"AS13335","isocode":"AU","proxy":"no","type":"Business","risk":0}}`
+	clean := `{"status":"ok","203.0.113.7":{"network":{"asn":"AS3320","type":"Business"},"location":{"country_code":"DE"},
+		"detections":{"proxy":false,"vpn":false,"tor":false,"hosting":false,"compromised":false,"scraper":false,"risk":0,"first_seen":null,"last_seen":null},"operator":null},"query_time":3}`
 	r := one(t, evalProxyCheck(resp(200, clean)))
-	if r.Status != probe.Yes || r.Country != "AU" || r.Detail != "Business; risk 0" {
+	if r.Status != probe.Yes || r.Country != "DE" || r.Detail != "Business; risk 0" {
 		t.Errorf("clean = %+v", r)
 	}
-	vpn := `{"status":"ok","2001:db8::1":{"isocode":"NL","proxy":"yes","type":"VPN","risk":66}}`
+	vpn := `{"status":"ok","2001:db8::1":{"network":{"type":"Hosting"},"location":{"country_code":"NL"},
+		"detections":{"proxy":true,"vpn":true,"tor":false,"hosting":true,"risk":66,"first_seen":"2026-01-02T03:04:05Z","last_seen":"2026-10-01T00:00:00Z"},
+		"operator":{"name":"ExampleVPN","anonymity":"high"}}}`
 	r = one(t, evalProxyCheck(resp(200, vpn)))
-	if r.Status != probe.No || r.Detail != "VPN; risk 66" {
-		t.Errorf("vpn = %+v", r)
+	if r.Status != probe.No || r.Detail != "VPN (ExampleVPN); Hosting; risk 66; seen 2026-01-02…2026-10-01" || !r.Facts.Flags[probe.Hosting] || r.Facts.Flags[probe.Proxy] {
+		t.Errorf("vpn = %+v %+v", r, r.Facts)
+	}
+	tor := `{"status":"ok","192.0.2.1":{"network":{"type":"Business"},"detections":{"proxy":true,"vpn":false,"tor":true,"compromised":true,"risk":100},"operator":{"name":"TOR"}}}`
+	if r := one(t, evalProxyCheck(resp(200, tor))); r.Detail != "Tor, compromised, high risk; Business; risk 100" || r.Facts.Flags[probe.Proxy] {
+		t.Errorf("tor = %+v", r)
 	}
 	r = one(t, evalProxyCheck(resp(200, `{"status":"denied","message":"1000 free queries exhausted"}`)))
 	if r.Status != probe.Failed || !strings.Contains(r.Reason, "exhausted") {
@@ -159,15 +166,15 @@ func TestIPData(t *testing.T) {
 }
 
 func TestReputationFacts(t *testing.T) {
-	pc := one(t, evalProxyCheck(resp(200, `{"status":"ok","203.0.113.7":{"proxy":"no","type":"Business","risk":12,"isocode":"DE"}}`))).Facts
+	pc := one(t, evalProxyCheck(resp(200, `{"status":"ok","203.0.113.7":{"network":{"type":"Business"},"location":{"country_code":"DE"},"detections":{"proxy":false,"vpn":false,"tor":false,"hosting":false,"risk":12}}}`))).Facts
 	if *pc.Level != 1 {
 		t.Errorf("proxycheck level = %d", *pc.Level)
 	}
 	if pc.Usage != "business" || *pc.Score != 12 || pc.Flags[probe.Hosting] || pc.Flags[probe.VPN] || len(pc.Flags) != 4 {
 		t.Errorf("proxycheck facts = %+v", pc)
 	}
-	vpn := one(t, evalProxyCheck(resp(200, `{"status":"ok","203.0.113.7":{"proxy":"yes","type":"VPN","risk":66}}`))).Facts
-	if vpn.Usage != "" || !vpn.Flags[probe.VPN] || vpn.Flags[probe.Proxy] || len(vpn.Flags) != 3 {
+	vpn := one(t, evalProxyCheck(resp(200, `{"status":"ok","203.0.113.7":{"network":{"type":null},"detections":{"proxy":true,"vpn":true,"tor":false,"hosting":false,"risk":66}}}`))).Facts
+	if vpn.Usage != "" || !vpn.Flags[probe.VPN] || vpn.Flags[probe.Proxy] || len(vpn.Flags) != 4 {
 		t.Errorf("proxycheck VPN facts = %+v", vpn)
 	}
 	ia := one(t, evalIPAPIis(resp(200, `{"is_datacenter":true,"is_vpn":false,"is_proxy":false,"is_tor":false,"is_abuser":true,"is_crawler":false,"is_mobile":false,
