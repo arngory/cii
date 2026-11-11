@@ -20,5 +20,7 @@ contents:
       mode: 0755
   - src: LICENSE
     dst: /usr/share/licenses/cii/LICENSE
+  - src: dist/THIRD_PARTY_LICENSES.txt
+    dst: /usr/share/licenses/cii/THIRD_PARTY_LICENSES.txt
   - src: README.md
     dst: /usr/share/doc/cii/README.md

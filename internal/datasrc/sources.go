@@ -24,6 +24,7 @@ type Source struct {
 	Title       string
 	Kind        string
 	License     string
+	LicenseURL  string
 	Attribution string
 	Homepage    string
 	Default     bool
@@ -61,26 +62,30 @@ var maxmindHosts = []string{"download.maxmind.com", "*.r2.cloudflarestorage.com"
 var Registry = []Source{
 	{
 		ID: "dbip-country-lite", Title: "DB-IP IP to Country Lite", Kind: "country",
-		License: "CC BY 4.0", Attribution: "IP Geolocation by DB-IP (https://db-ip.com)",
-		Homepage: "https://db-ip.com/db/download/ip-to-country-lite", Default: true,
+		License: "CC BY 4.0", LicenseURL: "https://creativecommons.org/licenses/by/4.0/",
+		Attribution: "IP Geolocation by DB-IP (https://db-ip.com)",
+		Homepage:    "https://db-ip.com/db/download/ip-to-country-lite", Default: true,
 		Archive: Gzip, Hosts: []string{"download.db-ip.com"}, urls: dbipURLs("country"),
 	},
 	{
 		ID: "dbip-asn-lite", Title: "DB-IP IP to ASN Lite", Kind: "asn",
-		License: "CC BY 4.0", Attribution: "IP Geolocation by DB-IP (https://db-ip.com)",
-		Homepage: "https://db-ip.com/db/download/ip-to-asn-lite", Default: true,
+		License: "CC BY 4.0", LicenseURL: "https://creativecommons.org/licenses/by/4.0/",
+		Attribution: "IP Geolocation by DB-IP (https://db-ip.com)",
+		Homepage:    "https://db-ip.com/db/download/ip-to-asn-lite", Default: true,
 		Archive: Gzip, Hosts: []string{"download.db-ip.com"}, urls: dbipURLs("asn"),
 	},
 	{
 		ID: "dbip-city-lite", Title: "DB-IP IP to City Lite (~130 MB)", Kind: "city",
-		License: "CC BY 4.0", Attribution: "IP Geolocation by DB-IP (https://db-ip.com)",
-		Homepage: "https://db-ip.com/db/download/ip-to-city-lite",
-		Archive:  Gzip, Hosts: []string{"download.db-ip.com"}, urls: dbipURLs("city"),
+		License: "CC BY 4.0", LicenseURL: "https://creativecommons.org/licenses/by/4.0/",
+		Attribution: "IP Geolocation by DB-IP (https://db-ip.com)",
+		Homepage:    "https://db-ip.com/db/download/ip-to-city-lite",
+		Archive:     Gzip, Hosts: []string{"download.db-ip.com"}, urls: dbipURLs("city"),
 	},
 	{
 		ID: "ipinfo-lite", Title: "IPinfo Lite (country + ASN)", Kind: "country+asn",
-		License: "CC BY-SA 4.0", Attribution: "IP address data powered by IPinfo (https://ipinfo.io)",
-		Homepage: "https://ipinfo.io/lite", NeedsKey: "ipinfo_token",
+		License: "CC BY-SA 4.0", LicenseURL: "https://creativecommons.org/licenses/by-sa/4.0/",
+		Attribution: "IP address data powered by IPinfo (https://ipinfo.io)",
+		Homepage:    "https://ipinfo.io/lite", NeedsKey: "ipinfo_token",
 		Archive: Raw, Hosts: []string{"ipinfo.io", "dl.assets.ipinfo.io"},
 		urls: func(_ time.Time, k config.Keys) ([]string, string, string, error) {
 			if k.IPinfoToken == "" {
@@ -91,20 +96,23 @@ var Registry = []Source{
 	},
 	{
 		ID: "geolite2-country", Title: "MaxMind GeoLite2 Country", Kind: "country",
-		License: "GeoLite2 EULA (no redistribution)", Attribution: "This product includes GeoLite2 data created by MaxMind (https://www.maxmind.com)",
-		Homepage: "https://dev.maxmind.com/geoip/geolite2-free-geolocation-data", NeedsKey: "maxmind_license_key",
+		License: "GeoLite2 EULA (no redistribution)", LicenseURL: "https://www.maxmind.com/en/geolite2/eula",
+		Attribution: "This product includes GeoLite2 data created by MaxMind (https://www.maxmind.com)",
+		Homepage:    "https://dev.maxmind.com/geoip/geolite2-free-geolocation-data", NeedsKey: "maxmind_license_key",
 		Archive: TarGz, Hosts: maxmindHosts, urls: maxmindURLs("GeoLite2-Country"),
 	},
 	{
 		ID: "geolite2-city", Title: "MaxMind GeoLite2 City", Kind: "city",
-		License: "GeoLite2 EULA (no redistribution)", Attribution: "This product includes GeoLite2 data created by MaxMind (https://www.maxmind.com)",
-		Homepage: "https://dev.maxmind.com/geoip/geolite2-free-geolocation-data", NeedsKey: "maxmind_license_key",
+		License: "GeoLite2 EULA (no redistribution)", LicenseURL: "https://www.maxmind.com/en/geolite2/eula",
+		Attribution: "This product includes GeoLite2 data created by MaxMind (https://www.maxmind.com)",
+		Homepage:    "https://dev.maxmind.com/geoip/geolite2-free-geolocation-data", NeedsKey: "maxmind_license_key",
 		Archive: TarGz, Hosts: maxmindHosts, urls: maxmindURLs("GeoLite2-City"),
 	},
 	{
 		ID: "geolite2-asn", Title: "MaxMind GeoLite2 ASN", Kind: "asn",
-		License: "GeoLite2 EULA (no redistribution)", Attribution: "This product includes GeoLite2 data created by MaxMind (https://www.maxmind.com)",
-		Homepage: "https://dev.maxmind.com/geoip/geolite2-free-geolocation-data", NeedsKey: "maxmind_license_key",
+		License: "GeoLite2 EULA (no redistribution)", LicenseURL: "https://www.maxmind.com/en/geolite2/eula",
+		Attribution: "This product includes GeoLite2 data created by MaxMind (https://www.maxmind.com)",
+		Homepage:    "https://dev.maxmind.com/geoip/geolite2-free-geolocation-data", NeedsKey: "maxmind_license_key",
 		Archive: TarGz, Hosts: maxmindHosts, urls: maxmindURLs("GeoLite2-ASN"),
 	},
 }

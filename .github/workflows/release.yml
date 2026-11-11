@@ -39,6 +39,12 @@ jobs:
           for f in data/*.mmdb; do gzip -9 -c "$f" > "dist/$(basename "$f").gz"; done
           cp data/manifest.json dist/data-manifest.json
 
+      - name: License and attribution notices
+        run: |
+          set -euo pipefail
+          go run ./tools/notices licenses dist/THIRD_PARTY_LICENSES.txt
+          go run ./tools/notices data data dist/DATA-NOTICE.txt
+
       - name: Build deb, rpm and apk packages
         env:
           TAG: ${{ github.ref_name }}
@@ -51,7 +57,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          (cd dist && sha256sum cii* *.mmdb.gz data-manifest.json > SHA256SUMS)
+          (cd dist && sha256sum cii* *.mmdb.gz data-manifest.json DATA-NOTICE.txt THIRD_PARTY_LICENSES.txt > SHA256SUMS)
           packaging/render-manifests.sh "$TAG"
 
       - uses: actions/attest-build-provenance@v2
@@ -63,8 +69,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          set -euo pipefail
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" dist/* --clobber
+            body=$(gh release view "$TAG" --json body --jq .body)
+            if [ -z "$body" ]; then
+              gh release edit "$TAG" --notes-file docs/RELEASE_NOTES_TEMPLATE.md
+            fi
           else
             gh release create "$TAG" dist/* \
               --title "$TAG" \
