@@ -23,16 +23,20 @@ func ledgerHost(rule Rule, host string) string {
 }
 
 func (n *Net) allow(module, host, proto string) (Rule, error) {
-	return n.allowAddr(module, host, netip.Addr{}, proto)
+	return n.check(module, host, netip.Addr{}, false, proto)
 }
 
 func (n *Net) allowAddr(module, host string, ip netip.Addr, proto string) (Rule, error) {
+	return n.check(module, host, ip, true, proto)
+}
+
+func (n *Net) check(module, host string, ip netip.Addr, verify bool, proto string) (Rule, error) {
 	rule, ok := n.policy.Match(module, host)
 	if !ok {
 		n.ledger.Blocked(module, "not declared", normalizeHost(host), proto)
 		return rule, &BlockedError{Module: module, Host: host}
 	}
-	if ip.IsValid() {
+	if verify {
 		if err := n.addrOf(module, host, ip); err != nil {
 			n.ledger.Blocked(module, "address not resolved for host", ledgerHost(rule, host), proto)
 			return rule, err
@@ -123,6 +127,9 @@ func resolvedKey(module, host string) string { return module + "\x00" + normaliz
 var ErrAddrNotOfHost = errors.New("address was not resolved for this host")
 
 func (n *Net) addrOf(module, host string, ip netip.Addr) error {
+	if !ip.IsValid() {
+		return ErrAddrNotOfHost
+	}
 	ip = ip.Unmap()
 	if lit, err := netip.ParseAddr(host); err == nil {
 		if lit.Unmap() == ip {
