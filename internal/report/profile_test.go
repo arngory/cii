@@ -25,12 +25,12 @@ func sampleProfileHost() *Host {
 		{Group: risk.Reputation, Service: "AbuseIPDB", Status: probe.Yes, Facts: facts("isp", 0, map[probe.Flag]bool{probe.Abuser: false})},
 		{Group: risk.Reputation, Service: "ipdata", Status: probe.Failed, Reason: "key rejected (HTTP 401)"},
 		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.Yes},
-	}, false)
+	})
 	h.SetRegion(region.Summarize([]probe.Result{
 		{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "DE", Facts: facts("isp", 3, map[probe.Flag]bool{probe.VPN: false, probe.Hosting: false})},
 		{Group: region.GeoIP, Service: "ip-api.com", Status: probe.OK, Country: "DE", Facts: facts("hosting", -1, map[probe.Flag]bool{probe.Proxy: true, probe.Hosting: true})},
 		{Group: region.Registry, Service: "RDAP (RIR)", Status: probe.OK, Country: "US"},
-	}), false)
+	}))
 	return h
 }
 
@@ -58,7 +58,7 @@ func TestProfileSummary(t *testing.T) {
 		t.Error("empty host has a profile")
 	}
 	var empty Host
-	empty.SetServices([]probe.Result{{Group: risk.DNSBL, Service: "z", Status: probe.Yes}}, false)
+	empty.SetServices([]probe.Result{{Group: risk.DNSBL, Service: "z", Status: probe.Yes}})
 	if empty.Profile != nil {
 		t.Errorf("profile without facts = %+v", empty.Profile)
 	}

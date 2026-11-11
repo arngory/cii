@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/netip"
 	"os"
-	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -64,33 +63,24 @@ type DataInfo struct {
 	Built time.Time `json:"built"`
 }
 
-func New(mode string, mask bool) *Report {
+func New(mode string) *Report {
 	return &Report{
 		Schema:      Schema,
 		Tool:        Tool{Name: version.Name, Version: version.Version},
 		GeneratedAt: time.Now().UTC().Truncate(time.Second),
 		Mode:        mode,
-		Masked:      mask,
 		Data:        []DataInfo{},
 		Network:     []ledger.Entry{},
 	}
 }
 
-func NewHost(a ipdetect.Address, geo []geodb.Record, mask bool) *Host {
+func NewHost(a ipdetect.Address, geo []geodb.Record) *Host {
 	h := &Host{Source: a.Source, Error: a.Error, Geo: geo}
-	if mask {
-		h.Error = MaskText(a.Error)
-	}
 	if a.Address.IsValid() {
-		h.Address = MaskAddr(a.Address, mask)
+		h.Address = a.Address.String()
 	}
 	for _, i := range a.Interface {
-		h.Interface = append(h.Interface, MaskAddr(i, mask))
-	}
-	if mask {
-		for i := range h.Geo {
-			h.Geo[i].Network = netip.Prefix{}
-		}
+		h.Interface = append(h.Interface, i.String())
 	}
 	return h
 }
@@ -100,45 +90,6 @@ func (r *Report) SetData(s *geodb.Set) {
 		r.Data = append(r.Data, DataInfo{ID: d.ID, Type: d.Type, Built: time.Unix(d.Built, 0).UTC()})
 	}
 	r.Attribution = s.Attribution()
-}
-
-func MaskAddr(a netip.Addr, mask bool) string {
-	if !mask {
-		return a.String()
-	}
-	if a.Is4() {
-		b := a.As4()
-		return fmt.Sprintf("%d.%d.*.*", b[0], b[1])
-	}
-	b := a.As16()
-	return fmt.Sprintf("%x:%x:*:*", uint16(b[0])<<8|uint16(b[1]), uint16(b[2])<<8|uint16(b[3]))
-}
-
-var addrLike = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*`)
-
-func MaskText(s string) string {
-	return addrLike.ReplaceAllStringFunc(s, func(tok string) string {
-		for _, cand := range []string{tok, trimEdge(tok)} {
-			if a, err := netip.ParseAddr(cand); err == nil {
-				return strings.Replace(tok, cand, MaskAddr(a.Unmap(), true), 1)
-			}
-			if ap, err := netip.ParseAddrPort(cand); err == nil {
-				return strings.Replace(tok, cand, MaskAddr(ap.Addr().Unmap(), true), 1)
-			}
-		}
-		return tok
-	})
-}
-
-func trimEdge(s string) string {
-	s = strings.TrimSuffix(s, ".")
-	if strings.HasSuffix(s, ":") && !strings.HasSuffix(s, "::") {
-		s = s[:len(s)-1]
-	}
-	if strings.HasPrefix(s, ":") && !strings.HasPrefix(s, "::") {
-		s = s[1:]
-	}
-	return s
 }
 
 func (r *Report) WriteJSON(w io.Writer) error {

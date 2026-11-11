@@ -48,7 +48,7 @@ func TestExitsAndProxyLabel(t *testing.T) {
 	if v6 := (&common{v6: true, proxy: "http://a.example:1,http://b.example:1"}).exits(); v6[0].family != netx.IPv6 || v6[1].family != netx.IPv6 {
 		t.Errorf("-6 exits = %+v", v6)
 	}
-	if got := proxyLabel("socks5://u:p@203.0.113.9:1080", true); got != "socks5://203.0.*.*" {
+	if got := proxyLabel("socks5://u:p@203.0.113.9:1080", true); got != "socks5://•••" {
 		t.Errorf("masked label = %q", got)
 	}
 }

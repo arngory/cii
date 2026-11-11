@@ -14,8 +14,8 @@ func TestDiff(t *testing.T) {
 	old := &Report{IPv4: sampleProfileHost(), Censor: []probe.Result{{Group: "telegram", Service: "DC2", Status: probe.Yes}}, Bench: &bench.Report{Speed: &bench.Speed{DownMbps: 100, UpMbps: 20}}}
 	cur := sampleProfileHost()
 	cur.Address = "198.51.100.7"
-	cur.SetServices(append(cur.Services, probe.Result{Group: services.Streaming, Service: "Netflix", Status: probe.No}), false)
-	cur.SetRegion(region.Summarize([]probe.Result{{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "NL"}}), false)
+	cur.SetServices(append(cur.Services, probe.Result{Group: services.Streaming, Service: "Netflix", Status: probe.No}))
+	cur.SetRegion(region.Summarize([]probe.Result{{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "NL"}}))
 	now := &Report{IPv4: cur, Censor: []probe.Result{{Group: "telegram", Service: "DC2", Status: probe.No}}, Bench: &bench.Report{Speed: &bench.Speed{DownMbps: 100, UpMbps: 5}}}
 	got := map[string]Change{}
 	for _, ch := range Diff(old, now) {

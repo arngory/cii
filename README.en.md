@@ -125,6 +125,8 @@ cii 0.1.0
 
 `--debug` prints full tables per source, reasons for failed checks, local database details and the network ledger: every host, request count, purpose, attempts blocked by the policy (`BLOCKED`) and raw connections skipped because of a proxy (`skipped (proxy)`). Every run also writes a local log with the same frame at 160 columns, the detailed report and JSON: `~/.local/state/cii/logs` on Linux, `~/Library/Logs/cii` on macOS, `%LOCALAPPDATA%\cii\logs` on Windows. The file mode is 0600 and the last 20 runs are kept. The log contains your address (unless `--mask` is used) and is never sent anywhere. Disable it with `--no-log`, move it with `CII_LOG_DIR`.
 
+`--mask` prepares output for screenshots and sharing. The screen, `--debug`, JSON and the log lose everything that identifies the address or network: every IPv4 and IPv6 address and prefix (with a port or in reverse `…ip6.arpa` form too), AS numbers, AS holder names and the words from them wherever they appear in text, the `Route` line, the PTR name, and VPN service and datacenter names from risk answers. Each is replaced with `•••`. Country, region, city, verdicts and all check results stay. Masking runs on the finished report as a whole, so new fields and error texts go through it as well. `cii diff --mask` masks both reports it compares.
+
 ## JSON
 
 `cii --json` prints a report that follows [`schema/report.schema.json`](schema/report.schema.json) (JSON Schema 2020-12; the format version is in the `schema` field). The schema is generated from the report types (`make schema`) and a test keeps the file in step with the code.

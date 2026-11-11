@@ -89,28 +89,28 @@ func (s *session) verdict(h *hostRun) []string {
 func (s *session) report() *report.Report {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rep := report.New(s.mode, s.mask)
+	rep := report.New(s.mode)
 	if s.dbs != nil {
 		rep.SetData(s.dbs)
 	}
 	if s.censor != nil {
-		rep.SetCensor(slices.Clone(s.censor), s.mask)
+		rep.SetCensor(slices.Clone(s.censor))
 	}
 	if s.bench != nil {
 		b := *s.bench
 		b.Notes, b.Iperf = slices.Clone(b.Notes), slices.Clone(b.Iperf)
-		rep.SetBench(&b, s.mask)
+		rep.SetBench(&b)
 	}
 	hosts := slices.SortedFunc(slices.Values(s.hosts), func(a, b *hostRun) int { return a.order - b.order })
 	for _, h := range hosts {
-		host := report.NewHost(h.addr, slices.Clone(h.geo), s.mask)
+		host := report.NewHost(h.addr, slices.Clone(h.geo))
 		if h.addr.Address.IsValid() {
 			results, svc := h.split()
 			if len(svc) > 0 {
-				host.SetServices(svc, s.mask)
+				host.SetServices(svc)
 			}
 			if len(results) > 0 {
-				host.SetRegion(region.Summarize(results), s.mask)
+				host.SetRegion(region.Summarize(results))
 			}
 		}
 		if h.label != "" {
@@ -121,5 +121,8 @@ func (s *session) report() *report.Report {
 		setHost(rep, h.family, host)
 	}
 	rep.Network = s.led.Entries()
+	if s.mask {
+		return rep.Scrubbed()
+	}
 	return rep
 }

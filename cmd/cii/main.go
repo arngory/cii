@@ -73,7 +73,7 @@ Common flags:
   --json             machine-readable output
   --debug            detailed tables, failed checks, data sources and every network contact
   --no-log           do not write the local log (default: %s)
-  --mask             mask addresses (for screenshots)
+  --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
   --no-color         disable colours
   --lang LANG        interface language: auto (from LANG/LC_ALL), en or ru; the --debug report and JSON stay in English
   --config FILE      config file (default: %s)
@@ -146,7 +146,7 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.noRisk, "no-risk", false, "skip reputation, DNSBL and SMTP checks")
 	fs.BoolVar(&c.plan, "plan", false, "print destinations and exit")
 	fs.BoolVar(&c.json, "json", false, "JSON output")
-	fs.BoolVar(&c.mask, "mask", false, "mask addresses")
+	fs.BoolVar(&c.mask, "mask", false, "hide addresses, prefixes, ASNs and AS holders")
 	fs.BoolVar(&c.noColor, "no-color", false, "disable colours")
 	fs.BoolVar(&c.debug, "debug", false, "detailed output")
 	fs.BoolVar(&c.noLog, "no-log", false, "do not write a local log")
@@ -656,7 +656,7 @@ func cmdLookup(args []string) error {
 	}
 	defer dbs.Close()
 
-	rep := report.New("lookup", c.mask)
+	rep := report.New("lookup")
 	rep.SetData(dbs)
 	for _, arg := range fs.Args() {
 		a, err := netip.ParseAddr(arg)
@@ -664,9 +664,12 @@ func cmdLookup(args []string) error {
 			return fmt.Errorf("bad address %q", arg)
 		}
 		a = a.Unmap()
-		h := report.NewHost(ipdetect.Address{Address: a, Source: "argument"}, dbs.Lookup(a), c.mask)
+		h := report.NewHost(ipdetect.Address{Address: a, Source: "argument"}, dbs.Lookup(a))
 		h.Query = h.Address
 		rep.Results = append(rep.Results, h)
+	}
+	if c.mask {
+		rep = rep.Scrubbed()
 	}
 	return output(rep, &c)
 }
@@ -700,6 +703,9 @@ func cmdDiff(args []string) error {
 			return fmt.Errorf("%s: not a cii log or JSON report: %w", f, err)
 		}
 		reps[i] = &r
+		if c.mask {
+			reps[i] = r.Scrubbed()
+		}
 	}
 	changes := report.Diff(reps[0], reps[1])
 	if c.json {
