@@ -137,7 +137,7 @@ func TestResolveLiteralFamily(t *testing.T) {
 }
 
 func TestAttributed(t *testing.T) {
-	reached := &Path{addr: netip.MustParseAddr("192.0.2.1")}
+	reached := &Path{addr: netip.MustParseAddr("8.8.8.8")}
 	if attributed([]*Path{reached}) {
 		t.Error("a reached path without any ASN counts as attributed")
 	}
@@ -146,5 +146,8 @@ func TestAttributed(t *testing.T) {
 	}
 	if !attributed([]*Path{{Target: Target{Name: "x"}}}) {
 		t.Error("nothing resolved should not claim missing ASN data")
+	}
+	if !attributed([]*Path{{addr: netip.MustParseAddr("198.18.0.7")}}) {
+		t.Error("fake-IP answers should not claim missing ASN data")
 	}
 }

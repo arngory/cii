@@ -96,6 +96,17 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 			reached[ti] = ttl
 		}
 	}
+	var active []int
+	for _, i := range candidates {
+		if err := conn.Allow(paths[i].Target.Host, paths[i].addr); err != nil {
+			paths[i].Error = describe(err)
+			continue
+		}
+		active = append(active, i)
+	}
+	if len(active) == 0 {
+		return errors.New("no target may be traced")
+	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -126,19 +137,6 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 			}
 		}
 	}()
-	var active []int
-	for _, i := range candidates {
-		if err := conn.Allow(paths[i].Target.Host, paths[i].addr); err != nil {
-			paths[i].Error = describe(err)
-			continue
-		}
-		active = append(active, i)
-	}
-	if len(active) == 0 {
-		conn.SetReadDeadline(time.Now())
-		<-done
-		return errors.New("no target may be traced")
-	}
 	sentOK := 0
 	var sendErr error
 	for round := 1; round <= o.Rounds && ctx.Err() == nil; round++ {

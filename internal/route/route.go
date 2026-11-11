@@ -115,7 +115,7 @@ func attributed(paths []*Path) bool {
 				return true
 			}
 		}
-		reached = reached || p.addr.IsValid()
+		reached = reached || netx.IsPublic(p.addr)
 	}
 	return !reached
 }
