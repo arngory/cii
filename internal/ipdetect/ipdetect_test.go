@@ -111,3 +111,21 @@ func TestDetectMajorityVote(t *testing.T) {
 		t.Fatalf("Detect = %+v", got)
 	}
 }
+
+func TestDetectTieFollowsConfigOrder(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/slow" {
+			time.Sleep(60 * time.Millisecond)
+			w.Write([]byte("203.0.113.7"))
+			return
+		}
+		w.Write([]byte("198.51.100.9"))
+	}))
+	defer srv.Close()
+	providers := []Provider{{Name: "first", URL4: srv.URL + "/slow"}, {Name: "second", URL4: srv.URL + "/fast"}}
+	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(providers)...), ledger.New())
+	got := Detect(context.Background(), n, netx.IPv4, Options{Providers: providers})
+	if got.Address.String() != "203.0.113.7" || got.Source != "echo:first" || len(got.Disagree) != 1 || got.Disagree[0] != "second: 198.51.100.9" {
+		t.Fatalf("tie = %+v", got)
+	}
+}
