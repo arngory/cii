@@ -446,15 +446,29 @@ func Offline(base string, ip netip.Addr, asn uint) []probe.Result {
 		return nil
 	}
 	var out []probe.Result
-	if _, ok := m["peeringdb"]; ok && asn != 0 {
+	pdb := probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Unknown}
+	_, havePDB := m["peeringdb"]
+	switch {
+	case !havePDB:
+		pdb.Reason = "not downloaded: cii data update risk:peeringdb"
+	case asn == 0:
+		pdb.Reason = "ASN unknown: needs the DB-IP ASN database (cii data update)"
+	default:
 		if r, found := networkType(filepath.Join(dataDir(base), "peeringdb.txt"), asn); found {
-			out = append(out, r)
+			pdb = r
+		} else {
+			pdb.Reason = "this AS is not registered in PeeringDB"
 		}
 	}
+	out = append(out, pdb)
 	var matches []Match
-	var checked []string
+	var checked, missing []string
 	for _, s := range DataSources {
-		if _, ok := m[s.ID]; !ok || s.ByASN {
+		if s.ByASN {
+			continue
+		}
+		if _, ok := m[s.ID]; !ok {
+			missing = append(missing, s.ID)
 			continue
 		}
 		found, err := lookupFile(filepath.Join(dataDir(base), s.ID+".txt"), s, ip)
@@ -464,11 +478,15 @@ func Offline(base string, ip netip.Addr, asn uint) []probe.Result {
 		checked = append(checked, s.ID)
 		matches = append(matches, found...)
 	}
+	note := ""
+	if len(missing) > 0 {
+		note = "; not downloaded: " + strings.Join(missing, ", ")
+	}
 	switch {
 	case len(checked) == 0:
 		return out
 	case len(matches) == 0:
-		return append(out, probe.Result{Group: Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: " + strings.Join(checked, ", ")})
+		return append(out, probe.Result{Group: Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: " + strings.Join(checked, ", ") + note})
 	}
 	var labels []string
 	bad := false
@@ -480,7 +498,7 @@ func Offline(base string, ip netip.Addr, asn uint) []probe.Result {
 	if bad {
 		status = probe.No
 	}
-	return append(out, probe.Result{Group: Network, Service: "Known ranges", Status: status, Detail: probe.Truncate(strings.Join(labels, "; "), 160)})
+	return append(out, probe.Result{Group: Network, Service: "Known ranges", Status: status, Detail: probe.Truncate(strings.Join(labels, "; ")+note, 200)})
 }
 
 var peeringdbUsage = map[string]string{

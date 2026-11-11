@@ -445,7 +445,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		if routeNet != nil {
 			ro := route.Defaults()
 			ro.ASN = asnLookup(dbs)
-			ro.OwnASN = s.ownASN()
+			ro.OwnASN = s.ownASN(routeNet.Options().Family)
 			rep := route.Run(ctx, routeNet, ro)
 			s.update(func() { s.route = rep })
 		}
@@ -602,11 +602,18 @@ func setHost(r *report.Report, f netx.Family, h *report.Host) {
 
 func output(r *report.Report, c *common) error {
 	logPath, logErr := writeLog(r, c)
+	if err := printReport(r, c, logPath, logErr); err != nil {
+		return err
+	}
 	if c.svg != "" {
 		if err := writeSVG(r, c, logPath, logErr); err != nil {
-			return err
+			return fmt.Errorf("--svg: %w", err)
 		}
 	}
+	return nil
+}
+
+func printReport(r *report.Report, c *common, logPath string, logErr error) error {
 	if logErr != nil && (c.json || c.debug) {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}

@@ -133,11 +133,11 @@ func (s *session) report() *report.Report {
 	return rep
 }
 
-func (s *session) ownASN() uint {
+func (s *session) ownASN(f netx.Family) uint {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, h := range s.hosts {
-		if h.label != "" {
+		if h.label != "" || h.family != f {
 			continue
 		}
 		for _, g := range h.geo {
