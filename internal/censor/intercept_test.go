@@ -37,12 +37,12 @@ func txtReply(t *testing.T, id uint16, class dnsmessage.Class, txt ...string) []
 	return msg
 }
 
-func TestParseTXT(t *testing.T) {
-	got, rcode, err := parseTXT(txtReply(t, 7, dnsmessage.ClassINET, "I am ", "r3001.lon"), 7)
-	if err != nil || rcode != dnsmessage.RCodeSuccess || len(got) != 1 || got[0] != "I am r3001.lon" {
-		t.Fatalf("parseTXT = %q %v %v", got, rcode, err)
+func TestParseAnswerTXT(t *testing.T) {
+	got, err := parseAnswer(txtReply(t, 7, dnsmessage.ClassINET, "I am ", "r3001.lon"), 7, dnsmessage.TypeTXT)
+	if err != nil || got.RCode != dnsmessage.RCodeSuccess || len(got.TXT) != 1 || got.TXT[0] != "I am r3001.lon" || len(got.IPs) != 0 {
+		t.Fatalf("parseAnswer TXT = %+v %v", got, err)
 	}
-	if _, _, err := parseTXT(txtReply(t, 7, dnsmessage.ClassINET), 8); err != errMismatch {
+	if _, err := parseAnswer(txtReply(t, 7, dnsmessage.ClassINET), 8, dnsmessage.TypeTXT); err != errMismatch {
 		t.Errorf("wrong id: %v", err)
 	}
 }

@@ -2,7 +2,6 @@ package censor
 
 import (
 	"context"
-	"errors"
 	"net"
 	"net/netip"
 	"strings"
@@ -25,84 +24,6 @@ var (
 	resolvConf    = "/etc/resolv.conf"
 )
 
-func (r *runner) queryTXT(ctx context.Context, addr, name string, class dnsmessage.Class) ([]string, dnsmessage.RCode, error) {
-	ctx, cancel := r.timeoutCtx(ctx)
-	defer cancel()
-	id := randomID()
-	if !strings.HasSuffix(name, ".") {
-		name += "."
-	}
-	qn, err := dnsmessage.NewName(name)
-	if err != nil {
-		return nil, 0, err
-	}
-	q, err := (&dnsmessage.Message{
-		Header:    dnsmessage.Header{ID: id, RecursionDesired: true},
-		Questions: []dnsmessage.Question{{Name: qn, Type: dnsmessage.TypeTXT, Class: class}},
-	}).Pack()
-	if err != nil {
-		return nil, 0, err
-	}
-	c, err := r.n.Dial(ctx, Module, "udp", addr)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer c.Close()
-	if dl, ok := ctx.Deadline(); ok {
-		c.SetDeadline(dl)
-	}
-	if _, err := c.Write(q); err != nil {
-		return nil, 0, err
-	}
-	buf := make([]byte, 4096)
-	for {
-		k, err := c.Read(buf)
-		if err != nil {
-			return nil, 0, err
-		}
-		txt, rcode, err := parseTXT(buf[:k], id)
-		if errors.Is(err, errMismatch) {
-			continue
-		}
-		return txt, rcode, err
-	}
-}
-
-func parseTXT(msg []byte, id uint16) ([]string, dnsmessage.RCode, error) {
-	var p dnsmessage.Parser
-	h, err := p.Start(msg)
-	if err != nil {
-		return nil, 0, err
-	}
-	if !h.Response || h.ID != id {
-		return nil, 0, errMismatch
-	}
-	if err := p.SkipAllQuestions(); err != nil {
-		return nil, h.RCode, err
-	}
-	var out []string
-	for {
-		rh, err := p.AnswerHeader()
-		if errors.Is(err, dnsmessage.ErrSectionDone) {
-			return out, h.RCode, nil
-		}
-		if err != nil {
-			return out, h.RCode, err
-		}
-		if rh.Type != dnsmessage.TypeTXT {
-			if err := p.SkipAnswer(); err != nil {
-				return out, h.RCode, err
-			}
-			continue
-		}
-		t, err := p.TXTResource()
-		if err != nil {
-			return out, h.RCode, err
-		}
-		out = append(out, strings.Join(t.TXT, ""))
-	}
-}
-
 func (r *runner) interception(ctx context.Context) []probe.Result {
 	fam := r.n.Options().Family
 	if fam != netx.IPv6 {
@@ -112,25 +33,23 @@ func (r *runner) interception(ctx context.Context) []probe.Result {
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		defer r.acquire()()
-		var txt []string
-		var rcode dnsmessage.RCode
+		var a answer
 		err := r.attempt(func() error {
 			var err error
-			txt, rcode, err = r.queryTXT(ctx, net.JoinHostPort(openDNSServer[fam], "53"), "which.opendns.com", dnsmessage.ClassINET)
+			a, err = r.queryUDP(ctx, net.JoinHostPort(openDNSServer[fam], "53"), "which.opendns.com", dnsmessage.TypeTXT)
 			return err
 		})
-		out[0] = openDNSResult(txt, rcode, err)
+		out[0] = openDNSResult(a.TXT, a.RCode, err)
 	})
 	wg.Go(func() {
 		defer r.acquire()()
-		var txt []string
-		var rcode dnsmessage.RCode
+		var a answer
 		err := r.attempt(func() error {
 			var err error
-			txt, rcode, err = r.queryTXT(ctx, net.JoinHostPort(googleServer[fam], "53"), "id.server", dnsmessage.ClassCHAOS)
+			a, err = r.queryUDP(ctx, net.JoinHostPort(googleServer[fam], "53"), "id.server", dnsmessage.TypeTXT, dnsmessage.ClassCHAOS)
 			return err
 		})
-		out[1] = googleChaosResult(txt, rcode, err)
+		out[1] = googleChaosResult(a.TXT, a.RCode, err)
 	})
 	wg.Wait()
 	return out

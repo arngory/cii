@@ -56,7 +56,7 @@ func TestJudge(t *testing.T) {
 		{path("f", 15169, 30, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 55}), Detour, "one hop adds 54 ms"},
 		{path("g", 13335, 0.4, 13335, Hop{TTL: 1}, Hop{TTL: 2, Addr: "1.1.1.1", RTTms: 0.4}), Intercepted, "local proxy"},
 		{path("h", 15169, 4, 64500), Direct, "cache inside your network"},
-		{path("i", 15169, 4, 20940), Direct, "served from AS20940 Org, not AS15169"},
+		{path("i", 15169, 4, 20940), Direct, "served from AS20940, not AS15169"},
 		{&Path{Target: Target{Name: "j"}, Error: "timeout"}, Unreachable, "timeout"},
 	}
 	for _, c := range cases {

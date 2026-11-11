@@ -82,7 +82,7 @@ func judge(p *Path, floor float64, own uint) {
 	case own != 0 && p.ASN == own && p.ASN != p.Target.Expect:
 		parts = append(parts, "served from a cache inside your network")
 	case p.ASN != p.Target.Expect:
-		parts = append(parts, fmt.Sprintf("served from AS%d %s, not AS%d", p.ASN, p.Org, p.Target.Expect))
+		parts = append(parts, fmt.Sprintf("served from AS%d, not AS%d", p.ASN, p.Target.Expect))
 	}
 	p.Reason = strings.Join(parts, "; ")
 }

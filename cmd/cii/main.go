@@ -76,7 +76,7 @@ Common flags:
   --debug            detailed tables, failed checks, data sources and every network contact
   --no-log           do not write the local log (default: %s)
   --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
-  --svg FILE         also save the final screen as an SVG image (colours kept, width of the terminal)
+  --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route)
   --demo             show the report on invented sample data without touching the network (cii only)
   --no-color         disable colours
   --lang LANG        interface language: auto (from LANG/LC_ALL), en or ru; the --debug report and JSON stay in English
@@ -156,11 +156,13 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.noColor, "no-color", false, "disable colours")
 	fs.BoolVar(&c.debug, "debug", false, "detailed output")
 	fs.BoolVar(&c.noLog, "no-log", false, "do not write a local log")
-	fs.BoolVar(&c.demo, "demo", false, "render invented sample data, no network")
-	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
 	fs.StringVar(&c.cfgPath, "config", "", "config file")
 	fs.StringVar(&c.dataDir, "data-dir", "", "database directory")
 	fs.Usage = printUsage
+}
+
+func (c *common) registerSVG(fs *flag.FlagSet) {
+	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
 }
 
 func (c *common) color() bool { return !c.noColor && !c.json && report.ColorEnabled() }
@@ -259,6 +261,8 @@ func cmdIP(ctx context.Context, args []string) error {
 	fs.BoolVar(&withBench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
 	fs.BoolVar(&noCensor, "no-censor", false, "skip censorship checks")
 	fs.BoolVar(&withRoute, "route", false, "also analyse paths to major networks (see cii route)")
+	fs.BoolVar(&c.demo, "demo", false, "render invented sample data, no network")
+	c.registerSVG(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -703,6 +707,7 @@ func terminalWidth() int {
 func cmdLookup(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii lookup", flag.ContinueOnError)
+	c.registerSVG(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -945,6 +950,7 @@ func cmdCensor(ctx context.Context, args []string) error {
 	var retries int
 	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
 	c.register(fs)
+	c.registerSVG(fs)
 	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal (comma-separated)")
 	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
 	fs.StringVar(&domain, "domain", "", "check a single domain")
@@ -999,6 +1005,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	var c common
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
 	c.register(fs)
+	c.registerSVG(fs)
 	opts := bench.Defaults()
 	var noDisk, noCPU, noNet, noIperf bool
 	var diskSize string
@@ -1071,6 +1078,7 @@ func cmdRoute(ctx context.Context, args []string) error {
 	var tcpOnly bool
 	fs := flag.NewFlagSet("cii route", flag.ContinueOnError)
 	c.register(fs)
+	c.registerSVG(fs)
 	opts := route.Defaults()
 	fs.BoolVar(&tcpOnly, "tcp", false, "skip ICMP tracing, measure TCP connect time only")
 	fs.IntVar(&opts.Rounds, "rounds", opts.Rounds, "ICMP probe rounds (1-15)")
