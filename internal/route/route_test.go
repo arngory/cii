@@ -1,9 +1,12 @@
 package route
 
 import (
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/arngory/cii/internal/ledger"
+	"github.com/arngory/cii/internal/netx"
 	"github.com/arngory/cii/internal/probe"
 )
 
@@ -114,5 +117,20 @@ func TestAnsweredLocally(t *testing.T) {
 	}
 	if answeredLocally(ps[:3]) {
 		t.Error("three fast targets are not enough evidence")
+	}
+}
+
+func TestResolveLiteralFamily(t *testing.T) {
+	n6 := netx.New(netx.Options{Family: netx.IPv6}, netx.NewPolicy(Rules(Targets)...), ledger.New())
+	p := &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9"}}
+	resolve(context.Background(), n6, p)
+	if p.addr.IsValid() || p.Error != "no IPv6 address" {
+		t.Errorf("IPv4 literal on IPv6 = %v %q", p.addr, p.Error)
+	}
+	n4 := netx.New(netx.Options{Family: netx.IPv4}, netx.NewPolicy(Rules(Targets)...), ledger.New())
+	p = &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9"}}
+	resolve(context.Background(), n4, p)
+	if p.addr.String() != "9.9.9.9" || p.Error != "" {
+		t.Errorf("IPv4 literal on IPv4 = %v %q", p.addr, p.Error)
 	}
 }

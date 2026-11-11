@@ -2,6 +2,7 @@ package route
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/arngory/cii/internal/probe"
@@ -48,7 +49,7 @@ func judge(p *Path, floor float64, own uint) {
 		}
 		if name, ok := transitASNs[h.ASN]; ok && !seenDest && h.ASN != own && h.ASN != p.Target.Expect && h.ASN != p.ASN {
 			label := fmt.Sprintf("AS%d %s", h.ASN, name)
-			if !containsString(p.Transit, label) {
+			if !slices.Contains(p.Transit, label) {
 				p.Transit = append(p.Transit, label)
 			}
 		}
@@ -84,15 +85,6 @@ func judge(p *Path, floor float64, own uint) {
 		parts = append(parts, fmt.Sprintf("served from AS%d %s, not AS%d", p.ASN, p.Org, p.Target.Expect))
 	}
 	p.Reason = strings.Join(parts, "; ")
-}
-
-func containsString(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 func (r *Report) Results() []probe.Result {

@@ -118,8 +118,13 @@ func answeredLocally(paths []*Path) bool {
 }
 
 func resolve(ctx context.Context, n *netx.Net, p *Path) {
+	want4 := n.Options().Family != netx.IPv6
 	if a, err := netip.ParseAddr(p.Target.Host); err == nil {
-		p.addr = a
+		if a.Unmap().Is4() == want4 {
+			p.addr = a.Unmap()
+		} else {
+			p.Error = "no " + n.Options().Family.String() + " address"
+		}
 		return
 	}
 	addrs, err := n.LookupHost(ctx, Module, p.Target.Host)
@@ -127,7 +132,6 @@ func resolve(ctx context.Context, n *netx.Net, p *Path) {
 		p.Error = describe(err)
 		return
 	}
-	want4 := n.Options().Family != netx.IPv6
 	for _, s := range addrs {
 		if a, err := netip.ParseAddr(s); err == nil && a.Unmap().Is4() == want4 {
 			p.addr = a.Unmap()

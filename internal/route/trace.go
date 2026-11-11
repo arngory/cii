@@ -78,7 +78,13 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 		rtt := float64(at.Sub(t0).Microseconds()) / 1000
 		addr := ""
 		if ip, ok := from.(*net.IPAddr); ok {
-			addr = ip.IP.String()
+			if a, ok := netip.AddrFromSlice(ip.IP); ok {
+				addr = a.Unmap().String()
+				echo = echo && a.Unmap() == paths[ti].addr
+			}
+		}
+		if addr == "" {
+			echo = false
 		}
 		h := got[ti][ttl]
 		if h.Addr == "" || rtt < h.RTTms {

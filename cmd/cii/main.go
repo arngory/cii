@@ -1106,7 +1106,7 @@ func cmdRoute(ctx context.Context, args []string) error {
 	opts.ASN = asnLookup(dbs)
 	led := ledger.New()
 	n := netx.New(netOpts, policy, led)
-	s := &session{mode: "route", mask: c.mask, led: led}
+	s := &session{mode: "route", mask: c.mask, dbs: dbs, led: led}
 	screen := startScreen(&c, s)
 	defer screen.stop()
 	rep := route.Run(ctx, n, opts)
