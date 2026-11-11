@@ -18,7 +18,7 @@ func maskedSample() *Report {
 	geo := []geodb.Record{{
 		Source: "dbip-asn-lite", Network: netip.MustParsePrefix("203.0.113.0/24"),
 		Country: "DE", CountryName: "Germany", City: "Berlin",
-		ASN: 3320, ASOrg: "Deutsche Telekom AG", ASDomain: "telekom.de",
+		ASN: 3320, ASOrg: "Deutsche Telekom AG Cable Content", ASDomain: "telekom.de",
 	}}
 	h := NewHost(ipdetect.Address{
 		Address: netip.MustParseAddr("203.0.113.7"), Source: "echo:test",
@@ -28,7 +28,7 @@ func maskedSample() *Report {
 		{Group: risk.DNSBL, Service: risk.PTRService, Status: probe.Yes, Detail: "p203-0-113-7.dip0.t-ipconnect.de"},
 		{Group: risk.DNSBL, Service: "zen.spamhaus.org", Status: probe.Unknown, Reason: "127.255.255.254 refused"},
 		{Group: risk.Mail, Service: "Outbound SMTP (25)", Status: probe.No, Detail: "554 Client host [203.0.113.7] blocked"},
-		{Group: risk.Network, Service: "PeeringDB", Status: probe.Yes, Detail: "AS3320 Cable/DSL/ISP"},
+		{Group: risk.Network, Service: "PeeringDB", Status: probe.Yes, Detail: "AS3320 Cable/DSL/ISP Content"},
 		{Group: risk.Reputation, Service: "ipapi.is", Status: probe.No, Detail: "VPN (ExampleVPN), proxy; datacenter Telekom Cloud; mobile"},
 	})
 	h.SetRegion(region.Summarize([]probe.Result{
@@ -37,9 +37,13 @@ func maskedSample() *Report {
 	}))
 	r.IPv4 = h
 	r.IPv6 = NewHost(ipdetect.Address{Address: netip.MustParseAddr("2001:db8:1234::7"), Source: "echo:test"}, nil)
-	r.SetCensor([]probe.Result{{Group: "dpi", Service: "instagram.com", Status: probe.IPBlock, Detail: "31.13.66.174"}})
+	r.SetCensor([]probe.Result{
+		{Group: "dpi", Service: "instagram.com", Status: probe.IPBlock, Detail: "31.13.66.174"},
+		{Group: "dns", Service: "Cloudflare 1.1.1.1", Status: probe.Yes},
+		{Group: "dns", Service: "Cloudflare 1.0.0.1", Status: probe.Yes},
+	})
 	r.Network = []ledger.Entry{
-		{Module: "risk", Host: "7.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.4.3.2.1.8.b.d.0.1.0.0.2.ip6.arpa", Proto: "dns"},
+		{Module: "censor", Host: "1.1.1.1", Proto: "dns"},
 		{Module: "region", Host: "www.telekom.de", Proto: "https", Purpose: "Telekom check"},
 	}
 	return r
@@ -56,19 +60,22 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 	m.WriteDetailed(&det, false)
 	screen := strings.Join(m.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
 	for name, out := range map[string]string{"json": js.String(), "detailed": det.String(), "screen": screen} {
-		for _, leak := range []string{"203.0.113", "203-0-113", "2001:db8", "1.2.3.4.8.b.d", "3320", "Telekom", "telekom", "Deutsche", "DTAG", "t-ipconnect", "ExampleVPN", "31.13.66", "127.255"} {
-			if strings.Contains(strings.ReplaceAll(strings.ReplaceAll(out, "www.telekom.de", ""), "Telekom check", ""), leak) {
+		for _, leak := range []string{"203.0.113", "203-0-113", "2001:db8", "3320", "Telekom", "telekom", "Deutsche", "DTAG", "t-ipconnect", "ExampleVPN", "31.13.66", "127.255"} {
+			if strings.Contains(strings.NewReplacer("www.telekom.de", "", "Telekom check", "").Replace(out), leak) {
 				t.Errorf("%s leaks %q", name, leak)
 			}
 		}
-		for _, keep := range []string{"DE", "Berlin", "Cable/DSL/ISP", "VPN", "datacenter"} {
+		for _, keep := range []string{"DE", "Berlin", "Cable/DSL/ISP Content", "VPN", "datacenter"} {
 			if !strings.Contains(out, keep) {
 				t.Errorf("%s lost %q", name, keep)
 			}
 		}
 	}
-	if e := m.Network[1]; e.Host != "www.telekom.de" || e.Purpose != "Telekom check" {
-		t.Errorf("ledger entry rewritten: %+v", e)
+	if e := m.Network[1]; e.Host != "www.telekom.de" || e.Purpose != "Telekom check" || m.Network[0].Host != "1.1.1.1" {
+		t.Errorf("ledger rewritten: %+v", m.Network)
+	}
+	if m.Censor[1].Service != "Cloudflare 1.1.1.1" || m.Censor[2].Service != "Cloudflare 1.0.0.1" {
+		t.Errorf("check names rewritten: %+v", m.Censor)
 	}
 	if !m.Masked || orig.Masked {
 		t.Errorf("Masked flag: scrubbed %v, original %v", m.Masked, orig.Masked)

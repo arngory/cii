@@ -431,15 +431,12 @@ type target struct {
 	c      common
 }
 
-func proxyLabel(raw string, mask bool) string {
+func proxyLabel(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "proxy"
 	}
 	u.User = nil
-	if mask {
-		return report.MaskText(u.String())
-	}
 	return u.String()
 }
 
@@ -450,7 +447,7 @@ func (c *common) exits() []target {
 		if p = strings.TrimSpace(p); p != "" {
 			cc := *c
 			cc.proxy = p
-			out = append(out, target{family: family, label: fmt.Sprintf("exit %d", len(out)+1), via: proxyLabel(p, c.mask), c: cc})
+			out = append(out, target{family: family, label: fmt.Sprintf("exit %d", len(out)+1), via: proxyLabel(p), c: cc})
 		}
 	}
 	switch len(out) {

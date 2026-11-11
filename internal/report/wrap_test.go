@@ -3,6 +3,10 @@ package report
 import (
 	"strings"
 	"testing"
+
+	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/services"
 )
 
 func TestWrapVisible(t *testing.T) {
@@ -47,5 +51,27 @@ func TestWrapVisible(t *testing.T) {
 		if visibleLen(l) > 40 {
 			t.Errorf("unbroken word overflows: %q", l)
 		}
+	}
+}
+
+func TestLongDetailKeepsOtherGroupsInColumns(t *testing.T) {
+	rs := []probe.Result{
+		{Group: services.Streaming, Service: "Netflix", Status: probe.Yes},
+		{Group: services.Streaming, Service: "Disney+", Status: probe.Yes},
+		{Group: services.Streaming, Service: "Hulu", Status: probe.No},
+		{Group: services.Streaming, Service: "Max", Status: probe.Yes},
+		{Group: risk.DNSBL, Service: "zen.spamhaus.org", Status: probe.Unknown, Detail: "refused: query via public/open resolver, use your own resolver to get an answer"},
+	}
+	var b strings.Builder
+	writeGrid2(&b, paint(false), unicodeMarks, 100, []column{newColumn("result", rs)}, [][]string{nil})
+	out := b.String()
+	paired := false
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, "Netflix") && strings.Contains(l, "Disney+") {
+			paired = true
+		}
+	}
+	if !paired || !strings.Contains(out, "use your own resolver to get an answer") {
+		t.Errorf("streaming collapsed to one column or detail cut:\n%s", out)
 	}
 }
