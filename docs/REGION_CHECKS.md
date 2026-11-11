@@ -40,7 +40,7 @@
 
 | Сервис | Запрос | Ключ | Заметки |
 |---|---|---|---|
-| RIPEstat | `stat.ripe.net/data/rir-stats-country` и `…/prefix-overview` (`?resource={ip}&sourceapp=cii`) | — | публичный Data API RIPE NCC. Страна — по статистике всех пяти RIR; из второго запроса — анонсируемый префикс и ASN, они показываются строкой `Route` в панели «IP quality» (с `--mask` префикс маскируется). Если адрес не анонсируется, так и пишется |
+| RIPEstat | `stat.ripe.net/data/rir-stats-country` и `…/prefix-overview` (`?resource={ip}&sourceapp=cii`) | — | публичный Data API RIPE NCC. Страна — по статистике всех пяти RIR; из второго запроса — анонсируемый префикс и ASN, они показываются строкой `Route` в панели «IP quality» (с `--mask` строка не показывается). Если адрес не анонсируется, так и пишется |
 | RDAP (RIR) | `rdap.db.ripe.net/ip/{ip}` с редиректом к нужному RIR | — | страна регистрации, а не геолокация; для ARIN — из адреса регистранта. Разрешены RIPE, ARIN, APNIC, LACNIC, registro.br, AFRINIC; редирект к другим NIR блокируется политикой |
 
 ### Platforms (по входящему соединению)
@@ -51,6 +51,7 @@
 | Google | `accounts.google.com/v3/signin/identifier` | скрытое поле `region` (`ZZ` = не определено) |
 | YouTube | `www.youtube.com/sw.js_data` | данные service worker |
 | Reddit | `www.reddit.com/api/v1/not-found` | текст страницы 404; 403 = `ipblock` |
+| Deezer | `www.deezer.com/en/offers` | `'country': 'XX'` в коде страницы тарифов |
 | TikTok | `www.tiktok.com/api/v1/web-cookie-privacy/config` | `body.appProps.region` |
 | Apple | `gspe1-ssl.ls.apple.com/pep/gcc` | тело ответа |
 | Steam | `HEAD store.steampowered.com` | cookie `steamCountry` |

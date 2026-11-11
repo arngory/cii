@@ -61,6 +61,118 @@ func clipVisible(s string, n int) string {
 	return b.String()
 }
 
+type styledRune struct {
+	esc string
+	r   rune
+}
+
+func styledRunes(s string) ([]styledRune, string) {
+	var out []styledRune
+	esc := ""
+	for i := 0; i < len(s); {
+		if loc := ansiSeq.FindStringIndex(s[i:]); loc != nil && loc[0] == 0 {
+			esc += s[i : i+loc[1]]
+			i += loc[1]
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		out = append(out, styledRune{esc, r})
+		esc = ""
+		i += size
+	}
+	return out, esc
+}
+
+func hangingIndent(plain []rune, width int) int {
+	limit := min(len(plain), width/2)
+	indent, run := 0, 0
+	for i := 0; i < limit; i++ {
+		if plain[i] != ' ' {
+			if run >= 2 || run == i {
+				indent = i
+			}
+			run = 0
+			continue
+		}
+		run++
+	}
+	return indent
+}
+
+func wrapVisible(s string, width int) []string {
+	if width <= 0 || visibleLen(s) <= width {
+		return []string{s}
+	}
+	cs, tail := styledRunes(s)
+	plain := make([]rune, len(cs))
+	for i, c := range cs {
+		plain[i] = c.r
+	}
+	indent := hangingIndent(plain, width)
+	if width-indent < 10 {
+		indent = 0
+	}
+	var lines []string
+	active := ""
+	apply := func(esc string) {
+		if esc == "" {
+			return
+		}
+		for _, e := range ansiSeq.FindAllString(esc, -1) {
+			if e == "\x1b[0m" || e == "\x1b[m" {
+				active = ""
+			} else {
+				active += e
+			}
+		}
+	}
+	for start, first := 0, true; start < len(cs); first = false {
+		avail, prefix := width, ""
+		if !first {
+			avail, prefix = width-indent, strings.Repeat(" ", indent)
+		}
+		end := min(start+avail, len(cs))
+		next := end
+		if end < len(cs) {
+			if cut := lastSpace(plain, start, end); cut > start {
+				end, next = cut, cut
+			}
+		}
+		var b strings.Builder
+		b.WriteString(prefix + active)
+		for _, c := range cs[start:end] {
+			apply(c.esc)
+			b.WriteString(c.esc)
+			b.WriteRune(c.r)
+		}
+		for next < len(cs) && plain[next] == ' ' {
+			apply(cs[next].esc)
+			b.WriteString(cs[next].esc)
+			next++
+		}
+		if next >= len(cs) {
+			b.WriteString(tail)
+		} else if active != "" {
+			b.WriteString("\x1b[0m")
+		}
+		lines = append(lines, strings.TrimRight(b.String(), " "))
+		start = next
+	}
+	return lines
+}
+
+func lastSpace(plain []rune, start, end int) int {
+	if end < len(plain) && plain[end] == ' ' {
+		return end
+	}
+	for i := end - 1; i > start; i-- {
+		if plain[i] == ' ' {
+			return i
+		}
+	}
+	return -1
+}
+
 func padVisible(s string, n int) string {
 	s = clipVisible(s, n)
 	return s + strings.Repeat(" ", max(0, n-visibleLen(s)))
@@ -77,7 +189,9 @@ func (p panel) box(c paint, f frameChars, width int) []string {
 	top := f.tl + f.h + " " + c.bold(title) + " " + strings.Repeat(f.h, max(0, width-visibleLen(title)-5)) + f.tr
 	out := []string{top}
 	for _, l := range p.lines {
-		out = append(out, f.v+" "+padVisible(l, inner)+" "+f.v)
+		for _, w := range wrapVisible(l, inner) {
+			out = append(out, f.v+" "+padVisible(w, inner)+" "+f.v)
+		}
 	}
 	return append(out, f.bl+strings.Repeat(f.h, max(0, width-2))+f.br)
 }
@@ -183,6 +297,9 @@ func (r *Report) panels(c paint, m marks) []slotPanel {
 		slotPanel{1, m.tr("Region & services"), func(iw int) []string { return serviceLines(c, m, fams, iw) }},
 		slotPanel{2, m.tr("Reputation lists & mail"), func(iw int) []string { return checkLines(c, m, fams, iw) }},
 	)
+	if r.Route != nil {
+		ps = append(ps, slotPanel{2, m.tr("Routes"), func(iw int) []string { return routeLines(c, m, r.Route, iw) }})
+	}
 	if len(r.Censor) > 0 {
 		ps = append(ps, slotPanel{2, m.tr("Censorship"), func(iw int) []string {
 			if r.Mode == "censor" {

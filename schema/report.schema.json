@@ -509,6 +509,15 @@
         "address": {
           "type": "string"
         },
+        "disagree": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "error": {
           "type": "string"
         },
@@ -891,6 +900,16 @@
             "null"
           ]
         },
+        "route": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "schema": {
           "type": "string"
         },
@@ -908,6 +927,142 @@
         "data",
         "network",
         "masked"
+      ],
+      "type": "object"
+    },
+    "RouteHop": {
+      "properties": {
+        "addr": {
+          "type": "string"
+        },
+        "asn": {
+          "type": "integer"
+        },
+        "org": {
+          "type": "string"
+        },
+        "rtt_ms": {
+          "type": "number"
+        },
+        "ttl": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ttl"
+      ],
+      "type": "object"
+    },
+    "RoutePath": {
+      "properties": {
+        "addr": {
+          "type": "string"
+        },
+        "asn": {
+          "type": "integer"
+        },
+        "error": {
+          "type": "string"
+        },
+        "hops": {
+          "items": {
+            "$ref": "#/$defs/RouteHop"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "jump_ms": {
+          "type": "number"
+        },
+        "org": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "rtt_ms": {
+          "type": "number"
+        },
+        "samples": {
+          "type": "integer"
+        },
+        "target": {
+          "$ref": "#/$defs/RouteTarget"
+        },
+        "timing": {
+          "type": "string"
+        },
+        "transit": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "verdict": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "samples",
+        "verdict"
+      ],
+      "type": "object"
+    },
+    "RouteReport": {
+      "properties": {
+        "floor_ms": {
+          "type": "number"
+        },
+        "method": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        },
+        "own_asn": {
+          "type": "integer"
+        },
+        "paths": {
+          "items": {
+            "$ref": "#/$defs/RoutePath"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "paths"
+      ],
+      "type": "object"
+    },
+    "RouteTarget": {
+      "properties": {
+        "expect_asn": {
+          "type": "integer"
+        },
+        "group": {
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "host",
+        "group"
       ],
       "type": "object"
     },

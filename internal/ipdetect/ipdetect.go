@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/arngory/cii/internal/netx"
@@ -46,6 +47,7 @@ type Address struct {
 	Address   netip.Addr   `json:"address"`
 	Source    string       `json:"source"`
 	Interface []netip.Addr `json:"interface,omitempty"`
+	Disagree  []string     `json:"disagree,omitempty"`
 	Error     string       `json:"error,omitempty"`
 }
 
@@ -79,25 +81,12 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		}
 		return res
 	}
-	client := n.HTTPClient(Module)
-	var errs []string
-	for _, p := range o.Providers {
-		raw := p.URL4
-		if f == netx.IPv6 {
-			raw = p.URL6
+	votes, errs := vote(ctx, n.HTTPClient(Module), f, o.Providers)
+	if len(votes) > 0 {
+		res.Address, res.Source = votes[0].addr, "echo:"+strings.Join(votes[0].names, "+")
+		for _, v := range votes[1:] {
+			res.Disagree = append(res.Disagree, strings.Join(v.names, "+")+": "+v.addr.String())
 		}
-		if raw == "" {
-			continue
-		}
-		a, err := query(ctx, client, raw, p.Format)
-		if err == nil && a.Is4() != (f == netx.IPv4) {
-			err = fmt.Errorf("returned an %s address", familyOf(a))
-		}
-		if err != nil {
-			errs = append(errs, p.Name+": "+err.Error())
-			continue
-		}
-		res.Address, res.Source = a, "echo:"+p.Name
 		return res
 	}
 	if len(res.Interface) > 0 {
@@ -110,6 +99,65 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		res.Error = strings.Join(errs, "; ")
 	}
 	return res
+}
+
+type tally struct {
+	addr  netip.Addr
+	names []string
+}
+
+func vote(ctx context.Context, client *http.Client, f netx.Family, providers []Provider) ([]tally, []string) {
+	type answer struct {
+		name string
+		addr netip.Addr
+		err  error
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ch := make(chan answer, len(providers))
+	asked := 0
+	for _, p := range providers {
+		raw := p.URL4
+		if f == netx.IPv6 {
+			raw = p.URL6
+		}
+		if raw == "" {
+			continue
+		}
+		asked++
+		go func() {
+			a, err := query(ctx, client, raw, p.Format)
+			if err == nil && a.Is4() != (f == netx.IPv4) {
+				err = fmt.Errorf("returned an %s address", familyOf(a))
+			}
+			ch <- answer{p.Name, a, err}
+		}()
+	}
+	need := min(2, asked)
+	var tallies []tally
+	var errs []string
+	for range asked {
+		a := <-ch
+		if a.err != nil {
+			errs = append(errs, a.name+": "+a.err.Error())
+			continue
+		}
+		i := slices.IndexFunc(tallies, func(t tally) bool { return t.addr == a.addr })
+		if i < 0 {
+			tallies = append(tallies, tally{addr: a.addr})
+			i = len(tallies) - 1
+		}
+		tallies[i].names = append(tallies[i].names, a.name)
+		if len(tallies[i].names) >= need {
+			break
+		}
+	}
+	for i := range tallies {
+		slices.Sort(tallies[i].names)
+	}
+	slices.SortStableFunc(tallies, func(a, b tally) int { return len(b.names) - len(a.names) })
+	slices.Sort(errs)
+	return tallies, errs
 }
 
 func familyOf(a netip.Addr) string {

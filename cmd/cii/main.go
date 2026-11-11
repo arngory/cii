@@ -36,6 +36,7 @@ import (
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/report"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 	"github.com/arngory/cii/internal/runlog"
 	"github.com/arngory/cii/internal/services"
 	"github.com/arngory/cii/internal/version"
@@ -51,6 +52,7 @@ Usage:
   cii data sources            list supported databases and their licenses
   cii censor [flags]          only censorship: all modes, own lists and domains (see docs/CENSOR_CHECKS.md)
   cii bench [flags]           only the benchmark, with its own options (see docs/BENCH.md)
+  cii route [flags]           paths to major networks: hops, transit, detours (see docs/ROUTE.md)
   cii diff [OLD NEW]          what changed between two runs (default: the last two local logs)
   cii version
 
@@ -73,7 +75,9 @@ Common flags:
   --json             machine-readable output
   --debug            detailed tables, failed checks, data sources and every network contact
   --no-log           do not write the local log (default: %s)
-  --mask             mask addresses (for screenshots)
+  --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
+  --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route)
+  --demo             show the report on invented sample data without touching the network (cii only)
   --no-color         disable colours
   --lang LANG        interface language: auto (from LANG/LC_ALL), en or ru; the --debug report and JSON stay in English
   --config FILE      config file (default: %s)
@@ -112,6 +116,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdCensor(ctx, args)
 	case "bench":
 		return cmdBench(ctx, args)
+	case "route":
+		return cmdRoute(ctx, args)
 	case "diff":
 		return cmdDiff(args)
 	case "version":
@@ -126,9 +132,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang                             string
-	timeout                                                                           time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo bool
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg                              string
+	timeout                                                                                 time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -146,13 +152,17 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.noRisk, "no-risk", false, "skip reputation, DNSBL and SMTP checks")
 	fs.BoolVar(&c.plan, "plan", false, "print destinations and exit")
 	fs.BoolVar(&c.json, "json", false, "JSON output")
-	fs.BoolVar(&c.mask, "mask", false, "mask addresses")
+	fs.BoolVar(&c.mask, "mask", false, "hide addresses, prefixes, ASNs and AS holders")
 	fs.BoolVar(&c.noColor, "no-color", false, "disable colours")
 	fs.BoolVar(&c.debug, "debug", false, "detailed output")
 	fs.BoolVar(&c.noLog, "no-log", false, "do not write a local log")
 	fs.StringVar(&c.cfgPath, "config", "", "config file")
 	fs.StringVar(&c.dataDir, "data-dir", "", "database directory")
 	fs.Usage = printUsage
+}
+
+func (c *common) registerSVG(fs *flag.FlagSet) {
+	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
 }
 
 func (c *common) color() bool { return !c.noColor && !c.json && report.ColorEnabled() }
@@ -246,15 +256,26 @@ func (c *common) check() error {
 
 func cmdIP(ctx context.Context, args []string) error {
 	var c common
-	var withBench, noCensor bool
+	var withBench, noCensor, withRoute bool
 	fs := flag.NewFlagSet("cii", flag.ContinueOnError)
 	fs.BoolVar(&withBench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
 	fs.BoolVar(&noCensor, "no-censor", false, "skip censorship checks")
+	fs.BoolVar(&withRoute, "route", false, "also analyse paths to major networks (see cii route)")
+	fs.BoolVar(&c.demo, "demo", false, "render invented sample data, no network")
+	c.registerSVG(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument %q (did you mean `cii lookup`?)", fs.Arg(0))
+	}
+	if c.demo {
+		c.noLog = true
+		rep := report.Demo("online")
+		if c.mask {
+			rep = rep.Scrubbed()
+		}
+		return output(rep, &c)
 	}
 	cfg, err := config.Load(c.cfgPath)
 	if err != nil {
@@ -274,6 +295,12 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	if len(exits) > 1 && withBench {
 		return errors.New("--bench measures one path; run it without a list of proxies")
+	}
+	if len(exits) > 1 && withRoute {
+		return errors.New("--route measures one path; run it without a list of proxies")
+	}
+	if withRoute && c.offline {
+		return errors.New("--route needs the network; drop --offline")
 	}
 
 	providers := cfg.IPEcho
@@ -296,7 +323,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		checks = append(checks, risk.Checks(cfg.Keys, c.extended)...)
 	}
 	censorOn := !c.quick && !noCensor && !c.offline && len(exits) == 1
-	censorOpts := censor.Options{Modes: []string{"dns", "telegram"}, Protocol: "both"}
+	censorOpts := censor.Options{Modes: []string{"dns", "telegram", "portal"}, Protocol: "both"}
 	if c.extended {
 		censorOpts.Modes = nil
 	}
@@ -315,6 +342,9 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		if withBench {
 			policy.Add(bench.Rules(benchOpts)...)
+		}
+		if withRoute {
+			policy.Add(route.Rules(route.Targets)...)
 		}
 	}
 	if c.plan {
@@ -402,6 +432,24 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	stacks.Wait()
 	side.Wait()
+	if withRoute {
+		routeNet := shared
+		if routeNet == nil {
+			opts, err := c.options(c.families()[0])
+			if err != nil {
+				s.update(func() { s.route = &route.Report{Method: "none", Note: "skipped: " + err.Error()} })
+			} else {
+				routeNet = netx.New(opts, policy, led)
+			}
+		}
+		if routeNet != nil {
+			ro := route.Defaults()
+			ro.ASN = asnLookup(dbs)
+			ro.OwnASN = s.ownASN()
+			rep := route.Run(ctx, routeNet, ro)
+			s.update(func() { s.route = rep })
+		}
+	}
 	if withBench {
 		benchNet, skipped := shared, ""
 		if benchNet == nil && (benchOpts.Net || benchOpts.Iperf) {
@@ -431,15 +479,12 @@ type target struct {
 	c      common
 }
 
-func proxyLabel(raw string, mask bool) string {
+func proxyLabel(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "proxy"
 	}
 	u.User = nil
-	if mask {
-		return report.MaskText(u.String())
-	}
 	return u.String()
 }
 
@@ -450,7 +495,7 @@ func (c *common) exits() []target {
 		if p = strings.TrimSpace(p); p != "" {
 			cc := *c
 			cc.proxy = p
-			out = append(out, target{family: family, label: fmt.Sprintf("exit %d", len(out)+1), via: proxyLabel(p, c.mask), c: cc})
+			out = append(out, target{family: family, label: fmt.Sprintf("exit %d", len(out)+1), via: proxyLabel(p), c: cc})
 		}
 	}
 	switch len(out) {
@@ -557,6 +602,11 @@ func setHost(r *report.Report, f netx.Family, h *report.Host) {
 
 func output(r *report.Report, c *common) error {
 	logPath, logErr := writeLog(r, c)
+	if c.svg != "" {
+		if err := writeSVG(r, c, logPath, logErr); err != nil {
+			return err
+		}
+	}
 	if logErr != nil && (c.json || c.debug) {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}
@@ -631,6 +681,19 @@ func footer(r *report.Report, unicode bool, lang, logPath string, logErr error) 
 	return parts
 }
 
+func writeSVG(r *report.Report, c *common, logPath string, logErr error) error {
+	style := report.Style{Color: true, Unicode: true, Width: terminalWidth(), Lang: c.language()}
+	f, err := os.Create(c.svg)
+	if err != nil {
+		return err
+	}
+	if err := report.WriteSVG(f, r.Screen(style, screenTitle(r), footer(r, true, c.language(), logPath, logErr))); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
+}
+
 func terminalWidth() int {
 	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
 		return w
@@ -644,6 +707,7 @@ func terminalWidth() int {
 func cmdLookup(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii lookup", flag.ContinueOnError)
+	c.registerSVG(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -656,7 +720,7 @@ func cmdLookup(args []string) error {
 	}
 	defer dbs.Close()
 
-	rep := report.New("lookup", c.mask)
+	rep := report.New("lookup")
 	rep.SetData(dbs)
 	for _, arg := range fs.Args() {
 		a, err := netip.ParseAddr(arg)
@@ -664,9 +728,12 @@ func cmdLookup(args []string) error {
 			return fmt.Errorf("bad address %q", arg)
 		}
 		a = a.Unmap()
-		h := report.NewHost(ipdetect.Address{Address: a, Source: "argument"}, dbs.Lookup(a), c.mask)
+		h := report.NewHost(ipdetect.Address{Address: a, Source: "argument"}, dbs.Lookup(a))
 		h.Query = h.Address
 		rep.Results = append(rep.Results, h)
+	}
+	if c.mask {
+		rep = rep.Scrubbed()
 	}
 	return output(rep, &c)
 }
@@ -700,6 +767,9 @@ func cmdDiff(args []string) error {
 			return fmt.Errorf("%s: not a cii log or JSON report: %w", f, err)
 		}
 		reps[i] = &r
+		if c.mask {
+			reps[i] = r.Scrubbed()
+		}
 	}
 	changes := report.Diff(reps[0], reps[1])
 	if c.json {
@@ -880,7 +950,8 @@ func cmdCensor(ctx context.Context, args []string) error {
 	var retries int
 	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
 	c.register(fs)
-	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram (comma-separated)")
+	c.registerSVG(fs)
+	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal (comma-separated)")
 	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
 	fs.StringVar(&domain, "domain", "", "check a single domain")
 	fs.StringVar(&protocol, "protocol", "both", "http, https or both")
@@ -934,6 +1005,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	var c common
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
 	c.register(fs)
+	c.registerSVG(fs)
 	opts := bench.Defaults()
 	var noDisk, noCPU, noNet, noIperf bool
 	var diskSize string
@@ -986,6 +1058,76 @@ func cmdBench(ctx context.Context, args []string) error {
 	b := bench.Run(ctx, bench.Env{Net: n, Ledger: led}, opts, progress)
 	progress("")
 	s.update(func() { s.bench = &b })
+	screen.stop()
+	return output(s.report(), &c)
+}
+
+func asnLookup(dbs *geodb.Set) func(netip.Addr) (uint, string) {
+	return func(a netip.Addr) (uint, string) {
+		for _, r := range dbs.Lookup(a) {
+			if r.ASN != 0 {
+				return r.ASN, r.ASOrg
+			}
+		}
+		return 0, ""
+	}
+}
+
+func cmdRoute(ctx context.Context, args []string) error {
+	var c common
+	var tcpOnly bool
+	fs := flag.NewFlagSet("cii route", flag.ContinueOnError)
+	c.register(fs)
+	c.registerSVG(fs)
+	opts := route.Defaults()
+	fs.BoolVar(&tcpOnly, "tcp", false, "skip ICMP tracing, measure TCP connect time only")
+	fs.IntVar(&opts.Rounds, "rounds", opts.Rounds, "ICMP probe rounds (1-15)")
+	fs.IntVar(&opts.MaxTTL, "max-hops", opts.MaxTTL, "maximum hops (1-31)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := c.check(); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	if c.offline {
+		return errors.New("--offline: path analysis needs the network")
+	}
+	if opts.Rounds < 1 || opts.Rounds > 15 || opts.MaxTTL < 1 || opts.MaxTTL > 31 {
+		return errors.New("--rounds must be 1-15 and --max-hops 1-31")
+	}
+	opts.TCPOnly = tcpOnly
+	policy := netx.NewPolicy(route.Rules(opts.Targets)...)
+	if c.plan {
+		report.WritePlan(os.Stdout, c.color(), policy.Rules())
+		return nil
+	}
+	f := netx.IPv4
+	if fams := c.families(); len(fams) == 1 {
+		f = fams[0]
+	}
+	netOpts, err := c.options(f)
+	if err != nil {
+		return err
+	}
+	dbs, err := geodb.Open(c.dir())
+	if err != nil {
+		return err
+	}
+	defer dbs.Close()
+	opts.ASN = asnLookup(dbs)
+	led := ledger.New()
+	n := netx.New(netOpts, policy, led)
+	s := &session{mode: "route", mask: c.mask, dbs: dbs, led: led}
+	screen := startScreen(&c, s)
+	defer screen.stop()
+	rep := route.Run(ctx, n, opts)
+	if len(dbs.DBs) == 0 {
+		rep.Note = strings.TrimPrefix(rep.Note+"; no local ASN database (cii data update): hops and destinations are not attributed", "; ")
+	}
+	s.update(func() { s.route = rep })
 	screen.stop()
 	return output(s.report(), &c)
 }

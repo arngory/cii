@@ -14,6 +14,7 @@ import (
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 	"github.com/arngory/cii/internal/services"
 )
 
@@ -223,6 +224,8 @@ var groupTitles = map[probe.Group]string{
 	censor.DPI:         "DPI",
 	censor.Geoblock:    "Geoblock",
 	censor.Telegram:    "Telegram",
+	censor.Local:       "Local",
+	censor.Portal:      "Portal",
 	services.Streaming: "Streaming",
 	services.AI:        "AI",
 	services.Web:       "Web",
@@ -249,6 +252,9 @@ func detailOf(r probe.Result) string {
 
 func groupTitle(g probe.Group) string {
 	if t, ok := groupTitles[g]; ok {
+		return t
+	}
+	if t, ok := route.Groups[g]; ok {
 		return t
 	}
 	if t := services.Title(g); t != "" {
@@ -306,6 +312,7 @@ func writeGrid2(w io.Writer, c paint, m marks, width int, cols []column, verdict
 	}
 	sections := make([][]item, len(groups))
 	widths := make([]int, len(groups))
+	long := make([]bool, len(groups))
 	for gi, g := range groups {
 		var items []item
 		for _, first := range rowsOf(cols, g) {
@@ -327,7 +334,8 @@ func writeGrid2(w io.Writer, c paint, m marks, width int, cols []column, verdict
 			it.plain += rest
 			it.styled += rest
 			if d := detailOf(first); d != "" && len(cols) == 1 {
-				d = " " + probe.Truncate(d, 48)
+				d = " " + d
+				long[gi] = long[gi] || utf8.RuneCountInString(d) > 49
 				it.plain += d
 				it.styled += c.dim(d)
 			}
@@ -338,13 +346,13 @@ func writeGrid2(w io.Writer, c paint, m marks, width int, cols []column, verdict
 	}
 	cell := 0
 	for gi := range groups {
-		if !wide(groups[gi]) {
+		if !wide(groups[gi]) && !long[gi] {
 			cell = max(cell, widths[gi])
 		}
 	}
 	for gi, g := range groups {
 		cw := cell
-		if wide(g) || cw == 0 {
+		if wide(g) || long[gi] || cw == 0 {
 			cw = widths[gi]
 		}
 		writeColumns(w, c.bold(pad(groupTitle(g), labelWidth))+"  ", labelWidth+2, width, cw, sections[gi])

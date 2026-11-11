@@ -85,3 +85,29 @@ func TestDetectBehindProxyNeverFallsBackToInterface(t *testing.T) {
 		t.Errorf("proxied offline = %+v", got)
 	}
 }
+
+func TestDetectMajorityVote(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/odd":
+			w.Write([]byte("192.0.2.9"))
+		case "/slow":
+			time.Sleep(80 * time.Millisecond)
+			w.Write([]byte("203.0.113.7"))
+		default:
+			time.Sleep(40 * time.Millisecond)
+			w.Write([]byte("203.0.113.7"))
+		}
+	}))
+	defer srv.Close()
+	providers := []Provider{
+		{Name: "b", URL4: srv.URL + "/slow"},
+		{Name: "odd", URL4: srv.URL + "/odd"},
+		{Name: "a", URL4: srv.URL + "/a"},
+	}
+	n := netx.New(netx.Options{}, netx.NewPolicy(Rules(providers)...), ledger.New())
+	got := Detect(context.Background(), n, netx.IPv4, Options{Providers: providers})
+	if got.Address.String() != "203.0.113.7" || got.Source != "echo:a+b" || len(got.Disagree) != 1 || got.Disagree[0] != "odd: 192.0.2.9" {
+		t.Fatalf("Detect = %+v", got)
+	}
+}

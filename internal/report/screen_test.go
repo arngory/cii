@@ -89,7 +89,7 @@ func TestScreenPendingAndProgress(t *testing.T) {
 		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.Pending},
 		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.Pending},
 		{Group: risk.DNSBL, Service: "psbl.surriel.com", Status: probe.Yes},
-	}, false)
+	})
 	r := &Report{IPv4: h}
 	if done, total := Progress(r); done != 1 || total != 3 {
 		t.Errorf("progress = %d/%d", done, total)
@@ -152,12 +152,16 @@ func TestQualityRouteAndPTR(t *testing.T) {
 		h.SetServices([]probe.Result{
 			{Group: risk.Network, Service: risk.PTRService, Status: probe.Yes, Detail: "host-203-0-113-7.example.net"},
 			{Group: risk.Reputation, Service: "IPQualityScore", Status: probe.Yes, Facts: &probe.Facts{Score: &score, Level: &level}},
-		}, mask)
+		})
 		h.SetRegion(region.Summarize([]probe.Result{
 			{Group: region.GeoIP, Service: "a", Status: probe.OK, Country: "DE"},
 			{Group: region.Registry, Service: "RIPEstat", Status: probe.OK, Country: "DE", Detail: "203.0.112.0/20 · AS64500 Example"},
-		}), mask)
-		return strings.Join((&Report{IPv4: h}).Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
+		}))
+		r := &Report{IPv4: h}
+		if mask {
+			r = r.Scrubbed()
+		}
+		return strings.Join(r.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
 	}
 	out := build(false)
 	for _, s := range []string{"Route    203.0.112.0/20 · AS64500 Example", "PTR      host-203-0-113-7.example.net", "62 ■■□□□ low"} {
@@ -169,7 +173,7 @@ func TestQualityRouteAndPTR(t *testing.T) {
 		t.Errorf("PTR repeated in the lists panel\n%s", out)
 	}
 	masked := build(true)
-	if strings.Contains(masked, "113-7") || strings.Contains(masked, "203.0.112.0") || !strings.Contains(masked, "PTR      hidden (--mask)") {
+	if strings.Contains(masked, "113-7") || strings.Contains(masked, "203.0.112.0") || strings.Contains(masked, "Route") || strings.Contains(masked, "AS64500") || !strings.Contains(masked, "PTR      •••") || !strings.Contains(masked, "Address  •••") {
 		t.Errorf("masked output leaks\n%s", masked)
 	}
 }
@@ -177,7 +181,7 @@ func TestQualityRouteAndPTR(t *testing.T) {
 func TestScreenExits(t *testing.T) {
 	exit := func(label, via, netflix string) *Host {
 		h := &Host{Address: "203.0.113.7", Query: label, Via: via}
-		h.SetServices([]probe.Result{{Group: "streaming", Service: "Netflix", Status: probe.Status(netflix)}}, false)
+		h.SetServices([]probe.Result{{Group: "streaming", Service: "Netflix", Status: probe.Status(netflix)}})
 		return h
 	}
 	r := &Report{Exits: []*Host{exit("exit 1", "socks5://a.example:1080", "yes"), exit("exit 2", "http://b.example:3128", "no")}}

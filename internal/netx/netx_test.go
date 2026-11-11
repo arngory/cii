@@ -1,12 +1,14 @@
 package netx
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/arngory/cii/internal/ledger"
 )
@@ -133,4 +135,25 @@ func TestForcedFamilyNotAppliedToProxy(t *testing.T) {
 		t.Fatalf("IPv6-forced request through IPv4 proxy failed: %v", err)
 	}
 	resp.Body.Close()
+}
+
+func TestCancelledRequestIsNotAnError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	led := ledger.New()
+	n := New(Options{}, NewPolicy(Rule{Module: "m", Pattern: u.Hostname(), Purpose: "p"}), led)
+	ctx, cancel := context.WithCancel(context.Background())
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	go func() { time.Sleep(20 * time.Millisecond); cancel() }()
+	if _, err := n.HTTPClient("m").Do(req); err == nil {
+		t.Fatal("cancelled request succeeded")
+	}
+	for _, e := range led.Entries() {
+		if e.Errors != 0 || e.Requests != 1 {
+			t.Errorf("ledger = %+v", e)
+		}
+	}
 }

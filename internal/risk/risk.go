@@ -52,7 +52,7 @@ func proxyCheck(key string) probe.Check {
 	return probe.Check{
 		Service:   "proxycheck.io",
 		Group:     Reputation,
-		Requests:  probe.Get("https://proxycheck.io/v2/{ip}?vpn=1&risk=1"),
+		Requests:  probe.Get("https://proxycheck.io/v3/{ip}?tag=0"),
 		Authorize: queryKey("key", key),
 		Eval:      evalProxyCheck,
 	}
@@ -197,19 +197,37 @@ func evalProxyCheck(rs []*probe.Response) []probe.Result {
 	var status, message string
 	json.Unmarshal(top["status"], &status)
 	json.Unmarshal(top["message"], &message)
-	var e struct {
-		Proxy   string  `json:"proxy"`
-		VPN     string  `json:"vpn"`
-		Type    string  `json:"type"`
-		Risk    *number `json:"risk"`
-		ISOCode string  `json:"isocode"`
+	type entry struct {
+		Network *struct {
+			Type string `json:"type"`
+		} `json:"network"`
+		Location struct {
+			CountryCode string `json:"country_code"`
+		} `json:"location"`
+		Detections *struct {
+			Proxy       bool    `json:"proxy"`
+			VPN         bool    `json:"vpn"`
+			Tor         bool    `json:"tor"`
+			Hosting     bool    `json:"hosting"`
+			Compromised bool    `json:"compromised"`
+			Scraper     bool    `json:"scraper"`
+			Risk        *number `json:"risk"`
+			FirstSeen   string  `json:"first_seen"`
+			LastSeen    string  `json:"last_seen"`
+		} `json:"detections"`
+		Operator *struct {
+			Name      string `json:"name"`
+			Anonymity string `json:"anonymity"`
+		} `json:"operator"`
 	}
+	var e entry
 	found := false
 	for k, raw := range top {
-		if k == "status" || k == "message" || k == "query time" {
+		if k == "status" || k == "message" || k == "query_time" {
 			continue
 		}
-		if json.Unmarshal(raw, &e) == nil && e.Proxy != "" {
+		e = entry{}
+		if json.Unmarshal(raw, &e) == nil && e.Detections != nil {
 			found = true
 			break
 		}
@@ -217,23 +235,43 @@ func evalProxyCheck(rs []*probe.Response) []probe.Result {
 	if !found || r.Status >= 400 || status == "denied" || status == "error" {
 		return failure(r, message)
 	}
-	typ := strings.ToLower(e.Type)
-	v := verdict{country: e.ISOCode}
-	v.mark(probe.VPN, typ == "vpn" || strings.EqualFold(e.VPN, "yes"), "VPN")
-	v.mark(probe.Tor, typ == "tor", "Tor")
-	v.mark(probe.Proxy, strings.EqualFold(e.Proxy, "yes") && typ != "vpn" && typ != "tor", "proxy")
-	v.flag(e.Risk != nil && *e.Risk >= 67, "high risk")
-	v.note(typ != "vpn" && typ != "tor", e.Type)
-	if e.Risk != nil {
-		v.note(true, "risk "+e.Risk.String())
-		v.facts.SetScore(float64(*e.Risk))
-		v.facts.SetLevel(probe.LevelByThresholds(float64(*e.Risk), 1, 34, 67))
+	d := e.Detections
+	v := verdict{country: e.Location.CountryCode}
+	vpn := "VPN"
+	if e.Operator != nil && e.Operator.Name != "" && !d.Tor {
+		vpn += " (" + e.Operator.Name + ")"
 	}
-	if u := probe.NormalizeUsage(e.Type); u != "" {
+	v.mark(probe.VPN, d.VPN, vpn)
+	v.mark(probe.Tor, d.Tor, "Tor")
+	v.mark(probe.Proxy, d.Proxy && !d.VPN && !d.Tor, "proxy")
+	v.flag(d.Compromised, "compromised")
+	v.flag(d.Risk != nil && *d.Risk >= 67, "high risk")
+	typ := ""
+	if e.Network != nil {
+		typ = e.Network.Type
+	}
+	v.note(typ != "", typ)
+	v.note(d.Scraper, "scraper")
+	if d.Risk != nil {
+		v.note(true, "risk "+d.Risk.String())
+		v.facts.SetScore(float64(*d.Risk))
+		v.facts.SetLevel(probe.LevelByThresholds(float64(*d.Risk), 1, 34, 67))
+	}
+	if d.LastSeen != "" {
+		v.note(true, "seen "+shortDate(d.FirstSeen)+"…"+shortDate(d.LastSeen))
+	}
+	if u := probe.NormalizeUsage(typ); u != "" {
 		v.facts.Usage = u
-		v.facts.Set(probe.Hosting, u == "hosting")
 	}
+	v.facts.Set(probe.Hosting, d.Hosting)
 	return v.result()
+}
+
+func shortDate(s string) string {
+	if len(s) >= 10 {
+		return s[:10]
+	}
+	return s
 }
 
 func evalIPAPIis(rs []*probe.Response) []probe.Result {

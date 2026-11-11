@@ -14,7 +14,7 @@ cii censor --mode dns,telegram
 cii censor --domains my-list.txt --protocol https
 ```
 
-Режимы (`--mode`, через запятую, по умолчанию `all`): `dns`, `dpi`, `geoblock`, `telegram` (`tg`). Флаги `--domains FILE` и `--domain HOST` заменяют встроенные списки своими; `--protocol` — `http`, `https` или `both` (другое значение — ошибка); `--retries N` — дополнительные попытки на цель (по умолчанию 0: одна попытка). Общие флаги cii (`-4`/`-6`, `--iface`, `--source`, `--timeout`, `--json`, `--debug`, `--mask`) работают как обычно.
+Режимы (`--mode`, через запятую, по умолчанию `all`): `dns`, `dpi`, `geoblock`, `telegram` (`tg`), `portal`. В основном запуске `cii` без `--extended` выполняются `dns`, `telegram` и `portal`, с `--extended` — все. Флаги `--domains FILE` и `--domain HOST` заменяют встроенные списки своими; `--protocol` — `http`, `https` или `both` (другое значение — ошибка); `--retries N` — дополнительные попытки на цель (по умолчанию 0: одна попытка). Общие флаги cii (`-4`/`-6`, `--iface`, `--source`, `--timeout`, `--json`, `--debug`, `--mask`) работают как обычно.
 
 ## DNS
 
@@ -29,6 +29,48 @@ cii censor --domains my-list.txt --protocol https
 **Подмена DNS.** Первый доступный DoH (или DoT) становится эталоном. Для доменов `rutracker.org`, `linkedin.com`, `flibusta.is` эталонный ответ сравнивается с ответами тех же 12 резолверов по обычному UDP: совпадение хотя бы одного адреса — `clean`; `NXDOMAIN` или адреса без пересечения — `spoofed`; приватный/локальный адрес в ответе помечается как «bogus». Как и в censorcheck, проверка останавливается на первом домене, где найдена подмена, и отдельной строкой «DNS hijacking» даёт итог. Без доступного DoH/DoT итог — `?`.
 
 Строки в выводе: `Имя IP` (UDP), `Имя IP DoH`, `Имя IP DoT`, затем `DNS hijacking` и по строке на резолвер с результатом сравнения.
+
+**Перехват 53-го порта.** Сверка с DoH ловит только поддельные ответы. Прозрачное перенаправление 53-го порта на чужой резолвер, который отвечает правильно, она не видит. Для него есть две отдельные проверки (идея из [remnawave/geocheck](https://github.com/remnawave/geocheck)):
+
+- `Port 53 interception (OpenDNS)` — TXT-запрос `which.opendns.com` к 208.67.222.222 (по IPv6 — 2620:119:35::35). Настоящий резолвер OpenDNS отвечает именем своего сервера. Любой другой резолвер получает запись от авторитетных серверов, а там написано «I am not an OpenDNS resolver». Такой ответ значит, что запрос перехватили по пути: `✗`.
+- `Port 53 interception (Google)` — запрос класса CHAOS `id.server` к 8.8.8.8 (по IPv6 — 2001:4860:4860::8888). Google такие запросы не поддерживает. Любой TXT-ответ пришёл не от Google: `✗`.
+
+Нет ответа или тайм-аут — `?`: недоступность ещё не перехват. При прокси обе проверки не выполняются, как и весь обычный DNS.
+
+## Local
+
+Две проверки без обращений в сеть. Они показывают, что результаты других проверок описывают не прямое подключение:
+
+- `Default route` — через какой интерфейс ядро отправило бы трафик в интернет. Чтобы это узнать, создаётся UDP-сокет к документационному адресу 192.0.2.1 (2001:db8::1 для IPv6): пакетов при этом не уходит. Point-to-point интерфейс или имя `tun*`, `utun*`, `tap*`, `ppp*`, `wg*`, `ipsec*`, `gpd*`, `nordlynx*`, `tailscale*`, `zt*` — `partial`: трафик идёт через туннель, и результаты описывают его выход. Если задан `--source` или `--iface`, строка называется `Source interface` и проверяет интерфейс этого адреса. При прокси — `?`: путь начинается у прокси, а не у этой машины.
+- `System resolver` — адреса `nameserver` из `/etc/resolv.conf`. Адрес из 198.18.0.0/15 (диапазон для бенчмарков, в реальных сетях не встречается) — `partial`: DNS отвечает локальный прокси в режиме fake-IP, как у Clash или sing-box. Если файла нет (Windows), строка не выводится.
+
+
+## Portal
+
+Проверки связи, по которым операционные системы определяют, есть ли интернет и нет ли captive-портала (идея и эталоны из [remnawave/geocheck](https://github.com/remnawave/geocheck)). Каждый адрес отвечает заранее известным кодом и телом. Ответ сверяется с эталоном, редиректы не выполняются:
+
+| Строка | Адрес | Эталон |
+|---|---|---|
+| Google, Google HTTPS | `connectivitycheck.gstatic.com/generate_204` по HTTP и HTTPS | 204, пустое тело |
+| Cloudflare, Cloudflare HTTPS | `cp.cloudflare.com/generate_204` по HTTP и HTTPS | 204 |
+| Apple | `http://captive.apple.com/hotspot-detect.html` | 200, `<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>` |
+| Microsoft NCSI | `http://www.msftconnecttest.com/connecttest.txt` | 200, `Microsoft Connect Test` |
+| Microsoft Edge | `http://edge-http.microsoft.com/captiveportal/generate_204` | 204 |
+| Firefox | `http://detectportal.firefox.com/success.txt` | 200, `success` |
+| Ubuntu | `http://connectivity-check.ubuntu.com/` | 204 |
+| Arch Linux | `http://ping.archlinux.org/` | 200, фраза о проверке связи |
+
+Адреса принадлежат разным сетям (Google, Cloudflare, Apple, Akamai, Microsoft, Fastly, Canonical, Hetzner), поэтому сбой одного CDN не выглядит как проблема всей сети. Тело сравнивается без учёта пробелов по краям.
+
+Вердикты:
+- совпало — `✓`;
+- редирект 3xx — `✗` «captive portal or filter page», с хостом, куда ведёт редирект;
+- 200 вместо 204 — `✗`: ответ переписал прокси;
+- другой код или другое тело — `✗` с началом полученного тела;
+- неверный сертификат на HTTPS — `✗` «TLS interception»;
+- 5xx и сетевые ошибки — `?` или `✗` по типу ошибки, как в DPI.
+
+Если HTTP-проверки не проходят, а HTTPS-пара совпадает, путь переписывает незашифрованный HTTP. Если не проходит и HTTPS, а HTTP совпадает, это признак перехвата TLS. При прокси (`--proxy`) проверяется путь от прокси, а не от этой машины.
 
 ## DPI и геоблокировки
 

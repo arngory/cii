@@ -8,7 +8,7 @@
 
 | Сервис | Ключ | Запрос | Как читается |
 |---|---|---|---|
-| proxycheck.io | не нужен; `proxycheck_key` снимает дневной лимит | `GET proxycheck.io/v2/{ip}?vpn=1&risk=1` | `proxy`/`vpn: yes`, тип Tor, `risk ≥ 67` → `no`; детали: тип и риск |
+| proxycheck.io | не нужен; `proxycheck_key` снимает дневной лимит | `GET proxycheck.io/v3/{ip}?tag=0` (API v3; `tag=0` — запрос не сохраняется в истории аккаунта) | `detections`: VPN, Tor, прокси, `compromised` или `risk ≥ 67` → `no`; детали: оператор VPN (`operator.name`), тип сети, риск и период обнаружений `first_seen…last_seen`; флаг хостинга — из `detections.hosting` |
 | ipapi.is | **нужен** `ipapi_is_key`: без ключа API отдаёт только гео, без флагов | `GET api.ipapi.is/?q={ip}` | `is_vpn`, `is_proxy`, `is_tor`, `is_abuser` → `no`; заметки: дата-центр, тип компании |
 | AbuseIPDB | **нужен** `abuseipdb_key` | `GET api.abuseipdb.com/api/v2/check` (ключ в заголовке `Key`) | `isTor` или `abuseConfidenceScore ≥ 25` → `no`; заметки: число жалоб за 90 дней, тип использования |
 | IPQualityScore | **нужен** `ipqs_key` | `GET ipqualityscore.com/api/json/ip/<key>/{ip}` | VPN, Tor, прокси, `recent_abuse`, `bot_status`, `fraud_score ≥ 75` → `no` |

@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/netip"
 	"os"
-	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/arngory/cii/internal/netx"
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
+	"github.com/arngory/cii/internal/route"
 	"github.com/arngory/cii/internal/version"
 )
 
@@ -34,6 +34,7 @@ type Report struct {
 	Exits       []*Host        `json:"exits,omitempty"`
 	Censor      []probe.Result `json:"censor,omitempty"`
 	Bench       *bench.Report  `json:"bench,omitempty"`
+	Route       *route.Report  `json:"route,omitempty"`
 	Data        []DataInfo     `json:"data"`
 	Attribution []string       `json:"attribution,omitempty"`
 	Network     []ledger.Entry `json:"network"`
@@ -51,6 +52,7 @@ type Host struct {
 	Source    string          `json:"source,omitempty"`
 	Via       string          `json:"via,omitempty"`
 	Interface []string        `json:"interface,omitempty"`
+	Disagree  []string        `json:"disagree,omitempty"`
 	Error     string          `json:"error,omitempty"`
 	Geo       []geodb.Record  `json:"geo,omitempty"`
 	Region    *region.Summary `json:"region,omitempty"`
@@ -64,33 +66,24 @@ type DataInfo struct {
 	Built time.Time `json:"built"`
 }
 
-func New(mode string, mask bool) *Report {
+func New(mode string) *Report {
 	return &Report{
 		Schema:      Schema,
 		Tool:        Tool{Name: version.Name, Version: version.Version},
 		GeneratedAt: time.Now().UTC().Truncate(time.Second),
 		Mode:        mode,
-		Masked:      mask,
 		Data:        []DataInfo{},
 		Network:     []ledger.Entry{},
 	}
 }
 
-func NewHost(a ipdetect.Address, geo []geodb.Record, mask bool) *Host {
-	h := &Host{Source: a.Source, Error: a.Error, Geo: geo}
-	if mask {
-		h.Error = MaskText(a.Error)
-	}
+func NewHost(a ipdetect.Address, geo []geodb.Record) *Host {
+	h := &Host{Source: a.Source, Error: a.Error, Geo: geo, Disagree: a.Disagree}
 	if a.Address.IsValid() {
-		h.Address = MaskAddr(a.Address, mask)
+		h.Address = a.Address.String()
 	}
 	for _, i := range a.Interface {
-		h.Interface = append(h.Interface, MaskAddr(i, mask))
-	}
-	if mask {
-		for i := range h.Geo {
-			h.Geo[i].Network = netip.Prefix{}
-		}
+		h.Interface = append(h.Interface, i.String())
 	}
 	return h
 }
@@ -100,45 +93,6 @@ func (r *Report) SetData(s *geodb.Set) {
 		r.Data = append(r.Data, DataInfo{ID: d.ID, Type: d.Type, Built: time.Unix(d.Built, 0).UTC()})
 	}
 	r.Attribution = s.Attribution()
-}
-
-func MaskAddr(a netip.Addr, mask bool) string {
-	if !mask {
-		return a.String()
-	}
-	if a.Is4() {
-		b := a.As4()
-		return fmt.Sprintf("%d.%d.*.*", b[0], b[1])
-	}
-	b := a.As16()
-	return fmt.Sprintf("%x:%x:*:*", uint16(b[0])<<8|uint16(b[1]), uint16(b[2])<<8|uint16(b[3]))
-}
-
-var addrLike = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*`)
-
-func MaskText(s string) string {
-	return addrLike.ReplaceAllStringFunc(s, func(tok string) string {
-		for _, cand := range []string{tok, trimEdge(tok)} {
-			if a, err := netip.ParseAddr(cand); err == nil {
-				return strings.Replace(tok, cand, MaskAddr(a.Unmap(), true), 1)
-			}
-			if ap, err := netip.ParseAddrPort(cand); err == nil {
-				return strings.Replace(tok, cand, MaskAddr(ap.Addr().Unmap(), true), 1)
-			}
-		}
-		return tok
-	})
-}
-
-func trimEdge(s string) string {
-	s = strings.TrimSuffix(s, ".")
-	if strings.HasSuffix(s, ":") && !strings.HasSuffix(s, "::") {
-		s = s[:len(s)-1]
-	}
-	if strings.HasPrefix(s, ":") && !strings.HasPrefix(s, "::") {
-		s = s[1:]
-	}
-	return s
 }
 
 func (r *Report) WriteJSON(w io.Writer) error {
@@ -174,6 +128,9 @@ func (r *Report) WriteDetailed(w io.Writer, color bool) {
 	if r.Bench != nil {
 		writeBenchDetailed(w, c, r.Bench)
 	}
+	if r.Route != nil {
+		writeRouteDetailed(w, c, r.Route)
+	}
 
 	if len(r.Data) > 0 {
 		fmt.Fprintln(w, c.bold("Local data"))
@@ -199,6 +156,9 @@ func writeHost(w io.Writer, c paint, label string, h *Host) {
 	fmt.Fprintf(w, "%s  %s  %s\n", c.bold(label), c.green(h.Address), c.dim("("+h.Source+")"))
 	if len(h.Interface) > 0 && (len(h.Interface) > 1 || h.Interface[0] != h.Address) {
 		fmt.Fprintf(w, "      on interfaces: %s\n", strings.Join(h.Interface, ", "))
+	}
+	if len(h.Disagree) > 0 {
+		fmt.Fprintf(w, "      %s %s\n", c.yellow("other echo answers:"), strings.Join(h.Disagree, "; "))
 	}
 	if len(h.Geo) > 0 {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

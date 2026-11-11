@@ -72,6 +72,7 @@ var Checks = []probe.Check{
 	platform("YouTube", "https://www.youtube.com/sw.js_data", probe.JSONPathAfter(")]}'", "[0][2][0][0][1]")),
 	{Service: "Reddit", Group: Platform, Requests: probe.Get("https://www.reddit.com/api/v1/not-found"),
 		Eval: probe.CountryFrom(probe.BodyRegex(`country code: ([A-Z]{2})`), http.StatusForbidden)},
+	platform("Deezer", "https://www.deezer.com/en/offers", probe.BodyRegex(`'country':\s*'([A-Z]{2})'`)),
 	platform("TikTok", "https://www.tiktok.com/api/v1/web-cookie-privacy/config?appId=1988", probe.JSONPath("body.appProps.region")),
 	platform("Apple", "https://gspe1-ssl.ls.apple.com/pep/gcc", probe.WholeBody),
 	{Service: "Steam", Group: Platform, Requests: head("https://store.steampowered.com/"),

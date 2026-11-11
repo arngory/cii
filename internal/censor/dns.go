@@ -25,9 +25,14 @@ import (
 type answer struct {
 	RCode dnsmessage.RCode
 	IPs   []string
+	TXT   []string
 }
 
-func buildQuery(id uint16, name string, qtype dnsmessage.Type) ([]byte, error) {
+func buildQuery(id uint16, name string, qtype dnsmessage.Type, class ...dnsmessage.Class) ([]byte, error) {
+	qclass := dnsmessage.ClassINET
+	if len(class) > 0 {
+		qclass = class[0]
+	}
 	if !strings.HasSuffix(name, ".") {
 		name += "."
 	}
@@ -37,7 +42,7 @@ func buildQuery(id uint16, name string, qtype dnsmessage.Type) ([]byte, error) {
 	}
 	m := dnsmessage.Message{
 		Header:    dnsmessage.Header{ID: id, RecursionDesired: true},
-		Questions: []dnsmessage.Question{{Name: qn, Type: qtype, Class: dnsmessage.ClassINET}},
+		Questions: []dnsmessage.Question{{Name: qn, Type: qtype, Class: qclass}},
 	}
 	return m.Pack()
 }
@@ -78,6 +83,12 @@ func parseAnswer(msg []byte, id uint16, qtype dnsmessage.Type) (answer, error) {
 				return a, err
 			}
 			a.IPs = append(a.IPs, netip.AddrFrom16(r.AAAA).String())
+		case rh.Type == dnsmessage.TypeTXT && qtype == dnsmessage.TypeTXT:
+			r, err := p.TXTResource()
+			if err != nil {
+				return a, err
+			}
+			a.TXT = append(a.TXT, strings.Join(r.TXT, ""))
 		default:
 			if err := p.SkipAnswer(); err != nil {
 				return a, err
@@ -100,11 +111,11 @@ func (r *runner) qtype() dnsmessage.Type {
 	return dnsmessage.TypeA
 }
 
-func (r *runner) queryUDP(ctx context.Context, addr, name string, qtype dnsmessage.Type) (answer, error) {
+func (r *runner) queryUDP(ctx context.Context, addr, name string, qtype dnsmessage.Type, class ...dnsmessage.Class) (answer, error) {
 	ctx, cancel := r.timeoutCtx(ctx)
 	defer cancel()
 	id := randomID()
-	q, err := buildQuery(id, name, qtype)
+	q, err := buildQuery(id, name, qtype, class...)
 	if err != nil {
 		return answer{}, err
 	}
@@ -256,7 +267,9 @@ func (r *runner) dns(ctx context.Context) []probe.Result {
 	for i := range out {
 		out[i].Group = DNS
 	}
-	return append(out, r.hijack(ctx, refIdx, refDoH)...)
+	out = append(out, r.hijack(ctx, refIdx, refDoH)...)
+	out = append(out, r.interception(ctx)...)
+	return append(out, localChecks(r.n)...)
 }
 
 func udpResult(service string, t transportResult) probe.Result {

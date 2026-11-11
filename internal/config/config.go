@@ -25,6 +25,7 @@ type Keys struct {
 	AbuseIPDBKey      string `yaml:"abuseipdb_key"`
 	IPQSKey           string `yaml:"ipqs_key"`
 	IPDataKey         string `yaml:"ipdata_key"`
+	GeminiAPIKey      string `yaml:"gemini_api_key"`
 }
 
 type Config struct {
@@ -63,6 +64,7 @@ func Load(path string) (*Config, error) {
 	envOverride(&c.Keys.ProxyCheckKey, "CII_PROXYCHECK_KEY")
 	envOverride(&c.Keys.AbuseIPDBKey, "CII_ABUSEIPDB_KEY")
 	envOverride(&c.Keys.IPQSKey, "CII_IPQS_KEY")
+	envOverride(&c.Keys.GeminiAPIKey, "CII_GEMINI_API_KEY")
 	envOverride(&c.Keys.IPDataKey, "CII_IPDATA_KEY")
 	return c, nil
 }

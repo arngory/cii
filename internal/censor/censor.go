@@ -26,7 +26,7 @@ const (
 	Telegram probe.Group = "telegram"
 )
 
-var Modes = []string{"dns", "telegram", "dpi", "geoblock"}
+var Modes = []string{"dns", "telegram", "dpi", "geoblock", "portal"}
 
 type Options struct {
 	Modes       []string
@@ -47,7 +47,7 @@ func canonicalMode(m string) ([]string, bool) {
 		return Modes, true
 	case "tg":
 		return []string{"telegram"}, true
-	case "dns", "telegram", "dpi", "geoblock":
+	case "dns", "telegram", "dpi", "geoblock", "portal":
 		return []string{m}, true
 	}
 	return nil, false
@@ -75,7 +75,7 @@ func selectedModes(opts Options) (map[string]bool, []string) {
 	return set, bad
 }
 
-var modeGroups = map[string]probe.Group{"dns": DNS, "telegram": Telegram, "dpi": DPI, "geoblock": Geoblock}
+var modeGroups = map[string]probe.Group{"dns": DNS, "telegram": Telegram, "dpi": DPI, "geoblock": Geoblock, "portal": Portal}
 
 func Placeholders(opts Options) []probe.Result {
 	modes, _ := selectedModes(opts)
@@ -163,6 +163,17 @@ func Rules(opts Options) []netx.Rule {
 		for _, d := range hijackDomains {
 			add(d, "DNS hijack check via system resolver")
 		}
+		for _, fam := range []netx.Family{netx.IPv4, netx.IPv6} {
+			add(openDNSServer[fam], "port 53 interception check (TXT which.opendns.com)")
+			add(googleServer[fam], "port 53 interception check (CHAOS id.server)")
+		}
+	}
+	if modes["portal"] {
+		for _, e := range portalEndpoints {
+			if u, err := url.Parse(e.URL); err == nil {
+				add(u.Hostname(), "connectivity check "+e.Name)
+			}
+		}
 	}
 	if modes["telegram"] {
 		for _, dc := range telegramDCs {
@@ -223,13 +234,16 @@ func Run(ctx context.Context, n *netx.Net, opts Options) []probe.Result {
 	for _, m := range bad {
 		out = append(out, probe.Result{Service: "mode " + m, Status: probe.Failed, Reason: "unknown mode"})
 	}
-	parts := make([][]probe.Result, 3)
+	parts := make([][]probe.Result, 4)
 	var wg sync.WaitGroup
 	if modes["dns"] {
 		wg.Go(func() { parts[0] = r.dns(ctx) })
 	}
 	if modes["telegram"] {
 		wg.Go(func() { parts[1] = r.telegram(ctx) })
+	}
+	if modes["portal"] {
+		wg.Go(func() { parts[3] = r.portal(ctx) })
 	}
 	lists, err := webLists(opts, modes)
 	if err != nil {

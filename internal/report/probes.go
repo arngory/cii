@@ -8,50 +8,18 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
-	"github.com/arngory/cii/internal/risk"
 )
 
-func maskReasons(rs []probe.Result, mask bool) {
-	if !mask {
-		return
-	}
-	for i := range rs {
-		rs[i].Reason = MaskText(rs[i].Reason)
-	}
-}
-
-func (h *Host) SetRegion(s region.Summary, mask bool) {
-	maskReasons(s.Results, mask)
-	for i := range s.Results {
-		if mask && s.Results[i].Group == region.Registry {
-			s.Results[i].Detail = MaskText(s.Results[i].Detail)
-		}
-	}
-	maskReasons(s.Attention, mask)
+func (h *Host) SetRegion(s region.Summary) {
 	h.Region = &s
 	h.refreshProfile()
 }
 
-func (r *Report) SetCensor(rs []probe.Result, mask bool) {
-	maskReasons(rs, mask)
-	for i := range rs {
-		if mask {
-			rs[i].Detail = MaskText(rs[i].Detail)
-		}
-	}
+func (r *Report) SetCensor(rs []probe.Result) {
 	r.Censor = rs
 }
 
-func (h *Host) SetServices(rs []probe.Result, mask bool) {
-	maskReasons(rs, mask)
-	for i := range rs {
-		switch {
-		case mask && rs[i].Group == risk.Mail:
-			rs[i].Detail = MaskText(rs[i].Detail)
-		case mask && rs[i].Service == risk.PTRService && rs[i].Detail != "":
-			rs[i].Detail = "hidden (--mask)"
-		}
-	}
+func (h *Host) SetServices(rs []probe.Result) {
 	h.Services = rs
 	h.refreshProfile()
 }
