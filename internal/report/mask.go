@@ -22,9 +22,10 @@ var (
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
 	prefixType = reflect.TypeFor[netip.Prefix]()
-	orgFields  = []string{"ASOrg", "ASDomain"}
+	orgFields  = []string{"ASOrg", "ASDomain", "Org"}
+	asnFields  = []string{"ASN", "OwnASN"}
 	freeText   = []string{"Detail", "Reason", "Error", "Notes"}
-	addrText   = []string{"Address", "Interface", "Query", "Via", "Disagree"}
+	addrText   = []string{"Address", "Interface", "Query", "Via", "Disagree", "Addr", "Transit"}
 	genericOrg = map[string]bool{
 		"limited": true, "company": true, "corporation": true, "online": true, "internet": true,
 		"network": true, "networks": true, "telecom": true, "telecommunications": true,
@@ -235,7 +236,7 @@ func (s scrubber) copy(v reflect.Value, kind textKind) reflect.Value {
 				continue
 			}
 			switch {
-			case f.Name == "ASN" && f.Type.Kind() == reflect.Uint:
+			case slices.Contains(asnFields, f.Name) && f.Type.Kind() == reflect.Uint:
 				out.Field(i).SetUint(0)
 			case slices.Contains(orgFields, f.Name) && f.Type.Kind() == reflect.String:
 				out.Field(i).SetString("")

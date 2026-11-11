@@ -36,6 +36,7 @@ import (
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/report"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 	"github.com/arngory/cii/internal/runlog"
 	"github.com/arngory/cii/internal/services"
 	"github.com/arngory/cii/internal/version"
@@ -51,6 +52,7 @@ Usage:
   cii data sources            list supported databases and their licenses
   cii censor [flags]          only censorship: all modes, own lists and domains (see docs/CENSOR_CHECKS.md)
   cii bench [flags]           only the benchmark, with its own options (see docs/BENCH.md)
+  cii route [flags]           paths to major networks: hops, transit, detours (see docs/ROUTE.md)
   cii diff [OLD NEW]          what changed between two runs (default: the last two local logs)
   cii version
 
@@ -114,6 +116,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdCensor(ctx, args)
 	case "bench":
 		return cmdBench(ctx, args)
+	case "route":
+		return cmdRoute(ctx, args)
 	case "diff":
 		return cmdDiff(args)
 	case "version":
@@ -250,10 +254,11 @@ func (c *common) check() error {
 
 func cmdIP(ctx context.Context, args []string) error {
 	var c common
-	var withBench, noCensor bool
+	var withBench, noCensor, withRoute bool
 	fs := flag.NewFlagSet("cii", flag.ContinueOnError)
 	fs.BoolVar(&withBench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
 	fs.BoolVar(&noCensor, "no-censor", false, "skip censorship checks")
+	fs.BoolVar(&withRoute, "route", false, "also analyse paths to major networks (see cii route)")
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -286,6 +291,9 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	if len(exits) > 1 && withBench {
 		return errors.New("--bench measures one path; run it without a list of proxies")
+	}
+	if len(exits) > 1 && withRoute {
+		return errors.New("--route measures one path; run it without a list of proxies")
 	}
 
 	providers := cfg.IPEcho
@@ -327,6 +335,9 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		if withBench {
 			policy.Add(bench.Rules(benchOpts)...)
+		}
+		if withRoute {
+			policy.Add(route.Rules(route.Targets)...)
 		}
 	}
 	if c.plan {
@@ -414,6 +425,21 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	stacks.Wait()
 	side.Wait()
+	if withRoute && !c.offline {
+		routeNet := shared
+		if routeNet == nil {
+			if opts, err := c.options(c.families()[0]); err == nil {
+				routeNet = netx.New(opts, policy, led)
+			}
+		}
+		if routeNet != nil {
+			ro := route.Defaults()
+			ro.ASN = asnLookup(dbs)
+			ro.OwnASN = s.ownASN()
+			rep := route.Run(ctx, routeNet, ro)
+			s.update(func() { s.route = rep })
+		}
+	}
 	if withBench {
 		benchNet, skipped := shared, ""
 		if benchNet == nil && (benchOpts.Net || benchOpts.Iperf) {
@@ -1019,6 +1045,75 @@ func cmdBench(ctx context.Context, args []string) error {
 	b := bench.Run(ctx, bench.Env{Net: n, Ledger: led}, opts, progress)
 	progress("")
 	s.update(func() { s.bench = &b })
+	screen.stop()
+	return output(s.report(), &c)
+}
+
+func asnLookup(dbs *geodb.Set) func(netip.Addr) (uint, string) {
+	return func(a netip.Addr) (uint, string) {
+		for _, r := range dbs.Lookup(a) {
+			if r.ASN != 0 {
+				return r.ASN, r.ASOrg
+			}
+		}
+		return 0, ""
+	}
+}
+
+func cmdRoute(ctx context.Context, args []string) error {
+	var c common
+	var tcpOnly bool
+	fs := flag.NewFlagSet("cii route", flag.ContinueOnError)
+	c.register(fs)
+	opts := route.Defaults()
+	fs.BoolVar(&tcpOnly, "tcp", false, "skip ICMP tracing, measure TCP connect time only")
+	fs.IntVar(&opts.Rounds, "rounds", opts.Rounds, "ICMP probe rounds (1-15)")
+	fs.IntVar(&opts.MaxTTL, "max-hops", opts.MaxTTL, "maximum hops (1-31)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if err := c.check(); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	}
+	if c.offline {
+		return errors.New("--offline: path analysis needs the network")
+	}
+	if opts.Rounds < 1 || opts.Rounds > 15 || opts.MaxTTL < 1 || opts.MaxTTL > 31 {
+		return errors.New("--rounds must be 1-15 and --max-hops 1-31")
+	}
+	opts.TCPOnly = tcpOnly
+	policy := netx.NewPolicy(route.Rules(opts.Targets)...)
+	if c.plan {
+		report.WritePlan(os.Stdout, c.color(), policy.Rules())
+		return nil
+	}
+	f := netx.IPv4
+	if fams := c.families(); len(fams) == 1 {
+		f = fams[0]
+	}
+	netOpts, err := c.options(f)
+	if err != nil {
+		return err
+	}
+	dbs, err := geodb.Open(c.dir())
+	if err != nil {
+		return err
+	}
+	defer dbs.Close()
+	opts.ASN = asnLookup(dbs)
+	led := ledger.New()
+	n := netx.New(netOpts, policy, led)
+	s := &session{mode: "route", mask: c.mask, led: led}
+	screen := startScreen(&c, s)
+	defer screen.stop()
+	rep := route.Run(ctx, n, opts)
+	if len(dbs.DBs) == 0 {
+		rep.Note = strings.TrimPrefix(rep.Note+"; no local ASN database (cii data update): hops and destinations are not attributed", "; ")
+	}
+	s.update(func() { s.route = rep })
 	screen.stop()
 	return output(s.report(), &c)
 }

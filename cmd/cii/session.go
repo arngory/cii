@@ -12,6 +12,7 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/report"
+	"github.com/arngory/cii/internal/route"
 )
 
 type hostRun struct {
@@ -39,6 +40,7 @@ type session struct {
 	censor    []probe.Result
 	bench     *bench.Report
 	benchStep string
+	route     *route.Report
 }
 
 func (s *session) step() string {
@@ -120,9 +122,29 @@ func (s *session) report() *report.Report {
 		}
 		setHost(rep, h.family, host)
 	}
+	if s.route != nil {
+		rt := *s.route
+		rep.Route = &rt
+	}
 	rep.Network = s.led.Entries()
 	if s.mask {
 		return rep.Scrubbed()
 	}
 	return rep
+}
+
+func (s *session) ownASN() uint {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, h := range s.hosts {
+		if h.label != "" {
+			continue
+		}
+		for _, g := range h.geo {
+			if g.ASN != 0 {
+				return g.ASN
+			}
+		}
+	}
+	return 0
 }

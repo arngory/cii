@@ -17,6 +17,7 @@ import (
 	"github.com/arngory/cii/internal/netx"
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
+	"github.com/arngory/cii/internal/route"
 	"github.com/arngory/cii/internal/version"
 )
 
@@ -33,6 +34,7 @@ type Report struct {
 	Exits       []*Host        `json:"exits,omitempty"`
 	Censor      []probe.Result `json:"censor,omitempty"`
 	Bench       *bench.Report  `json:"bench,omitempty"`
+	Route       *route.Report  `json:"route,omitempty"`
 	Data        []DataInfo     `json:"data"`
 	Attribution []string       `json:"attribution,omitempty"`
 	Network     []ledger.Entry `json:"network"`
@@ -125,6 +127,9 @@ func (r *Report) WriteDetailed(w io.Writer, color bool) {
 	}
 	if r.Bench != nil {
 		writeBenchDetailed(w, c, r.Bench)
+	}
+	if r.Route != nil {
+		writeRouteDetailed(w, c, r.Route)
 	}
 
 	if len(r.Data) > 0 {

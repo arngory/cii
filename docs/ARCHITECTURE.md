@@ -23,6 +23,7 @@
 | `internal/services` | Каталог проверок доступности сервисов. Перечень — в [SERVICE_CHECKS.md](SERVICE_CHECKS.md) |
 | `internal/risk` | Репутация адреса (keyless proxycheck.io + платные базы с ключом пользователя), DNSBL с правилами FUP через `netx.LookupHost`, проба SMTP через `netx.Dial`, офлайн-списки Tor и облаков со своим манифестом. Перечень — в [RISK_CHECKS.md](RISK_CHECKS.md) |
 | `internal/censor` | `cii censor`: собственный DNS по UDP/DoH/DoT, детектор подмены, веб-проверки с `httptrace`-фазами, MTProto-рукопожатие Telegram — всё через `netx`. Перечень — в [CENSOR_CHECKS.md](CENSOR_CHECKS.md) |
+| `internal/route` | `cii route` и `--route`: трассировка ICMP с параллельными TTL (нужен root или `CAP_NET_RAW`), время TCP-соединения как запасной вариант, ASN хопов из локальной базы, вердикты по задержке и транзитным AS. Описание — в [ROUTE.md](ROUTE.md) |
 | `internal/bench` | `cii bench`: сведения о системе из `/proc` и `/sys`, дисковый тест с прямым вводом-выводом, CPU-тест, скорость через Cloudflare, собственный iperf3-клиент; установленные iperf3 и fio — по флагу. Описание — в [BENCH.md](BENCH.md) |
 | `internal/clientids` | Все сторонние идентификаторы клиентов, нужные проверкам уровня B, в одном месте |
 | `internal/refdata` | Встроенные справочники: названия стран (CLDR) и «IATA → страна» (OurAirports); генерируются `go generate ./internal/refdata` |

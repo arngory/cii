@@ -14,6 +14,7 @@ import (
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 	"github.com/arngory/cii/internal/services"
 )
 
@@ -251,6 +252,9 @@ func detailOf(r probe.Result) string {
 
 func groupTitle(g probe.Group) string {
 	if t, ok := groupTitles[g]; ok {
+		return t
+	}
+	if t, ok := route.Groups[g]; ok {
 		return t
 	}
 	if t := services.Title(g); t != "" {

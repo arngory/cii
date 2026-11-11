@@ -297,6 +297,9 @@ func (r *Report) panels(c paint, m marks) []slotPanel {
 		slotPanel{1, m.tr("Region & services"), func(iw int) []string { return serviceLines(c, m, fams, iw) }},
 		slotPanel{2, m.tr("Reputation lists & mail"), func(iw int) []string { return checkLines(c, m, fams, iw) }},
 	)
+	if r.Route != nil {
+		ps = append(ps, slotPanel{2, m.tr("Routes"), func(iw int) []string { return routeLines(c, m, r.Route, iw) }})
+	}
 	if len(r.Censor) > 0 {
 		ps = append(ps, slotPanel{2, m.tr("Censorship"), func(iw int) []string {
 			if r.Mode == "censor" {
