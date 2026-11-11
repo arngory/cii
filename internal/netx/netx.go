@@ -58,12 +58,13 @@ func DefaultUserAgent() string {
 }
 
 type Net struct {
-	opts    Options
-	policy  *Policy
-	ledger  *ledger.Ledger
-	tr      *http.Transport
-	proxy   sync.Map
-	proxied bool
+	opts     Options
+	policy   *Policy
+	ledger   *ledger.Ledger
+	tr       *http.Transport
+	proxy    sync.Map
+	proxied  bool
+	resolved sync.Map
 }
 
 func firstEnv(keys ...string) string {

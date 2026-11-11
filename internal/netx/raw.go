@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -66,6 +67,9 @@ func (n *Net) DialAddr(ctx context.Context, module, network, host string, ip net
 	if err != nil {
 		return nil, err
 	}
+	if err := n.addrOf(module, host, ip); err != nil {
+		return nil, err
+	}
 	rule, err := n.allow(module, host, network)
 	if err != nil {
 		return nil, err
@@ -94,7 +98,35 @@ func (n *Net) dial(ctx context.Context, module string, rule Rule, host, base, ne
 }
 
 func (n *Net) LookupHost(ctx context.Context, module, name string) ([]string, error) {
-	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupHost(ctx, name) })
+	out, err := n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupHost(ctx, name) })
+	if err == nil {
+		var addrs []netip.Addr
+		for _, s := range out {
+			if a, err := netip.ParseAddr(s); err == nil {
+				addrs = append(addrs, a.Unmap())
+			}
+		}
+		n.resolved.Store(resolvedKey(module, name), addrs)
+	}
+	return out, err
+}
+
+func resolvedKey(module, host string) string { return module + "\x00" + normalizeHost(host) }
+
+var ErrAddrNotOfHost = errors.New("address was not resolved for this host")
+
+func (n *Net) addrOf(module, host string, ip netip.Addr) error {
+	ip = ip.Unmap()
+	if lit, err := netip.ParseAddr(host); err == nil {
+		if lit.Unmap() == ip {
+			return nil
+		}
+		return ErrAddrNotOfHost
+	}
+	if v, ok := n.resolved.Load(resolvedKey(module, host)); ok && slices.Contains(v.([]netip.Addr), ip) {
+		return nil
+	}
+	return ErrAddrNotOfHost
 }
 
 func (n *Net) resolve(ctx context.Context, module, name string, do func(context.Context) ([]string, error)) ([]string, error) {

@@ -53,12 +53,11 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	if len(candidates) == 0 {
 		return errors.New("no target resolved")
 	}
-	conn, err := n.ListenICMP4()
+	conn, err := n.ListenICMP4(Module)
 	if err != nil {
 		return errors.New(describe(err))
 	}
 	defer conn.Close()
-	pc := conn.IPv4PacketConn()
 	id := os.Getpid() & 0xffff
 	var mu sync.Mutex
 	sent := map[int]time.Time{}
@@ -129,7 +128,7 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	}()
 	var active []int
 	for _, i := range candidates {
-		if err := n.AllowICMP(Module, paths[i].Target.Host); err != nil {
+		if err := conn.Allow(paths[i].Target.Host, paths[i].addr); err != nil {
 			paths[i].Error = describe(err)
 			continue
 		}
@@ -144,9 +143,6 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	var sendErr error
 	for round := 1; round <= o.Rounds && ctx.Err() == nil; round++ {
 		for ttl := 1; ttl <= o.MaxTTL; ttl++ {
-			if err := pc.SetTTL(ttl); err != nil {
-				return err
-			}
 			for _, i := range active {
 				mu.Lock()
 				limit := reached[i]
@@ -159,7 +155,7 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 				mu.Lock()
 				sent[seq] = time.Now()
 				mu.Unlock()
-				if _, err := conn.WriteTo(b, &net.IPAddr{IP: paths[i].addr.AsSlice()}); err != nil {
+				if err := conn.WriteTo(b, paths[i].addr, ttl); err != nil {
 					if sendErr == nil {
 						sendErr = err
 					}

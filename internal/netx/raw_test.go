@@ -151,16 +151,30 @@ func TestDialAddrChecksHostDialsAddress(t *testing.T) {
 	}()
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	led := ledger.New()
-	n := New(Options{}, NewPolicy(Rule{Module: "route", Pattern: "target.example", Purpose: "path"}), led)
-	c, err := n.DialAddr(context.Background(), "route", "tcp", "target.example", netip.MustParseAddr("127.0.0.1"), port)
+	n := New(Options{}, NewPolicy(Rule{Module: "route", Pattern: "localhost", Purpose: "path"}, Rule{Module: "route", Pattern: "127.0.0.1", Purpose: "lit"}), led)
+	if _, err := n.DialAddr(context.Background(), "route", "tcp", "localhost", netip.MustParseAddr("127.0.0.1"), port); !errors.Is(err, ErrAddrNotOfHost) {
+		t.Fatalf("dial before the host was resolved: %v", err)
+	}
+	if _, err := n.LookupHost(context.Background(), "route", "localhost"); err != nil {
+		t.Skipf("no localhost resolution here: %v", err)
+	}
+	c, err := n.DialAddr(context.Background(), "route", "tcp", "localhost", netip.MustParseAddr("127.0.0.1"), port)
 	if err != nil {
 		t.Fatalf("DialAddr: %v", err)
 	}
 	c.Close()
-	if es := led.Entries(); len(es) != 1 || es[0].Host != "target.example" || es[0].Requests != 1 {
-		t.Errorf("ledger = %+v", es)
+	if _, err := n.DialAddr(context.Background(), "route", "tcp", "localhost", netip.MustParseAddr("192.0.2.1"), port); !errors.Is(err, ErrAddrNotOfHost) {
+		t.Errorf("address outside the resolved set dialled: %v", err)
 	}
-	if _, err := n.DialAddr(context.Background(), "route", "tcp", "other.example", netip.MustParseAddr("127.0.0.1"), port); AsBlocked(err) == nil {
+	if _, err := n.DialAddr(context.Background(), "route", "tcp", "127.0.0.1", netip.MustParseAddr("192.0.2.1"), port); !errors.Is(err, ErrAddrNotOfHost) {
+		t.Errorf("literal host with another address dialled: %v", err)
+	}
+	if _, err := n.DialAddr(context.Background(), "route", "tcp", "other.example", netip.MustParseAddr("127.0.0.1"), port); !errors.Is(err, ErrAddrNotOfHost) && AsBlocked(err) == nil {
 		t.Errorf("undeclared host dialled: %v", err)
+	}
+	for _, e := range led.Entries() {
+		if e.Host == "localhost" && e.Proto == "tcp" && e.Requests != 1 {
+			t.Errorf("ledger = %+v", e)
+		}
 	}
 }

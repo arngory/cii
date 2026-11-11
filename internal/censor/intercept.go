@@ -95,10 +95,16 @@ func googleChaosResult(txt []string, rcode dnsmessage.RCode, err error) probe.Re
 func localChecks(n *netx.Net) []probe.Result {
 	var out []probe.Result
 	route := probe.Result{Group: Local, Service: "Default route"}
-	ifc, src, ok := netx.RouteInterface(n.Options().Family)
-	if s := n.Options().Source; s.IsValid() {
+	var ifc net.Interface
+	var src netip.Addr
+	ok := false
+	switch s := n.Options().Source; {
+	case n.Proxied():
+	case s.IsValid():
 		route.Service, src = "Source interface", s
 		ifc, ok = netx.InterfaceOf(s)
+	default:
+		ifc, src, ok = netx.RouteInterface(n.Options().Family)
 	}
 	switch {
 	case n.Proxied():
