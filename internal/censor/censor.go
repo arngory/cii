@@ -163,6 +163,10 @@ func Rules(opts Options) []netx.Rule {
 		for _, d := range hijackDomains {
 			add(d, "DNS hijack check via system resolver")
 		}
+		for _, fam := range []netx.Family{netx.IPv4, netx.IPv6} {
+			add(openDNSServer[fam], "port 53 interception check (TXT which.opendns.com)")
+			add(googleServer[fam], "port 53 interception check (CHAOS id.server)")
+		}
 	}
 	if modes["telegram"] {
 		for _, dc := range telegramDCs {

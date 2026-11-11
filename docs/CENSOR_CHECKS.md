@@ -30,6 +30,20 @@ cii censor --domains my-list.txt --protocol https
 
 Строки в выводе: `Имя IP` (UDP), `Имя IP DoH`, `Имя IP DoT`, затем `DNS hijacking` и по строке на резолвер с результатом сравнения.
 
+**Перехват 53-го порта.** Сверка с DoH ловит только поддельные ответы. Прозрачное перенаправление 53-го порта на чужой резолвер, который отвечает правильно, она не видит. Для него есть две отдельные проверки (идея из [remnawave/geocheck](https://github.com/remnawave/geocheck)):
+
+- `Port 53 interception (OpenDNS)` — TXT-запрос `which.opendns.com` к 208.67.222.222 (по IPv6 — 2620:119:35::35). Настоящий резолвер OpenDNS отвечает именем своего сервера. Любой другой резолвер получает запись от авторитетных серверов, а там написано «I am not an OpenDNS resolver». Такой ответ значит, что запрос перехватили по пути: `✗`.
+- `Port 53 interception (Google)` — запрос класса CHAOS `id.server` к 8.8.8.8 (по IPv6 — 2001:4860:4860::8888). Google такие запросы не поддерживает. Любой TXT-ответ пришёл не от Google: `✗`.
+
+Нет ответа или тайм-аут — `?`: недоступность ещё не перехват. При прокси обе проверки не выполняются, как и весь обычный DNS.
+
+## Local
+
+Две проверки без обращений в сеть. Они показывают, что результаты других проверок описывают не прямое подключение:
+
+- `Default route` — через какой интерфейс ядро отправило бы трафик в интернет. Чтобы это узнать, создаётся UDP-сокет к документационному адресу 192.0.2.1 (2001:db8::1 для IPv6): пакетов при этом не уходит. Point-to-point интерфейс или имя `tun*`, `utun*`, `tap*`, `ppp*`, `wg*`, `ipsec*`, `gpd*`, `nordlynx*`, `tailscale*`, `zt*` — `partial`: трафик идёт через туннель, и результаты описывают его выход.
+- `System resolver` — адреса `nameserver` из `/etc/resolv.conf`. Адрес из 198.18.0.0/15 (диапазон для бенчмарков, в реальных сетях не встречается) — `partial`: DNS отвечает локальный прокси в режиме fake-IP, как у Clash или sing-box. Если файла нет (Windows), строка не выводится.
+
 ## DPI и геоблокировки
 
 Списки доменов перенесены из censorcheck без изменений: 18 «DPI» (YouTube, Discord, Instagram, Facebook, X, LinkedIn, rutracker, DigitalOcean, Amnezia, Outline, Mailfence, Flibusta, rezka, `api.telegram.org`, Google Play, GitHub…) и 10 «geoblock» (Spotify, Netflix, Patreon, Swagger, Snyk, MongoDB, Autodesk, Graylog, Redis, Copilot). Для каждого домена делается `GET` по HTTP (без перехода) и HTTPS (с переходами внутри того же сайта) с честным User-Agent.

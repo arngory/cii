@@ -256,7 +256,9 @@ func (r *runner) dns(ctx context.Context) []probe.Result {
 	for i := range out {
 		out[i].Group = DNS
 	}
-	return append(out, r.hijack(ctx, refIdx, refDoH)...)
+	out = append(out, r.hijack(ctx, refIdx, refDoH)...)
+	out = append(out, r.interception(ctx)...)
+	return append(out, localChecks(r.n.Options().Family)...)
 }
 
 func udpResult(service string, t transportResult) probe.Result {
