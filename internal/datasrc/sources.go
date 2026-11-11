@@ -81,7 +81,7 @@ var Registry = []Source{
 		ID: "ipinfo-lite", Title: "IPinfo Lite (country + ASN)", Kind: "country+asn",
 		License: "CC BY-SA 4.0", Attribution: "IP address data powered by IPinfo (https://ipinfo.io)",
 		Homepage: "https://ipinfo.io/lite", NeedsKey: "ipinfo_token",
-		Archive: Raw, Hosts: []string{"ipinfo.io"},
+		Archive: Raw, Hosts: []string{"ipinfo.io", "dl.assets.ipinfo.io"},
 		urls: func(_ time.Time, k config.Keys) ([]string, string, string, error) {
 			if k.IPinfoToken == "" {
 				return nil, "", "", fmt.Errorf("requires your own %s in config", "ipinfo_token")
