@@ -1,8 +1,10 @@
 package censor
 
 import (
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/net/dns/dnsmessage"
@@ -71,7 +73,7 @@ func TestLocalResolverCheck(t *testing.T) {
 	resolvConf = filepath.Join(dir, "resolv.conf")
 	os.WriteFile(resolvConf, []byte("# managed\nnameserver 198.18.0.2\nsearch lan\n"), 0o644)
 	var got probe.Result
-	for _, r := range localChecks(netx.IPv4) {
+	for _, r := range localChecks(netx.New(netx.Options{Family: netx.IPv4}, netx.NewPolicy(), nil)) {
 		if r.Service == "System resolver" {
 			got = r
 		}
@@ -83,9 +85,17 @@ func TestLocalResolverCheck(t *testing.T) {
 	if ns := netx.SystemNameservers(resolvConf); len(ns) != 2 || ns[1].String() != "fe80::1" {
 		t.Errorf("nameservers = %v", ns)
 	}
-	for _, r := range localChecks(netx.IPv4) {
+	for _, r := range localChecks(netx.New(netx.Options{Family: netx.IPv4}, netx.NewPolicy(), nil)) {
 		if r.Service == "System resolver" && r.Status != probe.Yes {
 			t.Errorf("plain resolver = %+v", r)
 		}
+	}
+}
+
+func TestLocalRouteBehindProxy(t *testing.T) {
+	proxy, _ := url.Parse("http://127.0.0.1:1")
+	n := netx.New(netx.Options{Family: netx.IPv4, Proxy: proxy}, netx.NewPolicy(), nil)
+	if r := localChecks(n)[0]; r.Status != probe.Unknown || !strings.Contains(r.Reason, "proxy") {
+		t.Errorf("route behind proxy = %+v", r)
 	}
 }

@@ -295,6 +295,9 @@ func cmdIP(ctx context.Context, args []string) error {
 	if len(exits) > 1 && withRoute {
 		return errors.New("--route measures one path; run it without a list of proxies")
 	}
+	if withRoute && c.offline {
+		return errors.New("--route needs the network; drop --offline")
+	}
 
 	providers := cfg.IPEcho
 	if len(providers) == 0 {
@@ -425,10 +428,13 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	stacks.Wait()
 	side.Wait()
-	if withRoute && !c.offline {
+	if withRoute {
 		routeNet := shared
 		if routeNet == nil {
-			if opts, err := c.options(c.families()[0]); err == nil {
+			opts, err := c.options(c.families()[0])
+			if err != nil {
+				s.update(func() { s.route = &route.Report{Method: "none", Note: "skipped: " + err.Error()} })
+			} else {
 				routeNet = netx.New(opts, policy, led)
 			}
 		}

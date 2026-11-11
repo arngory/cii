@@ -28,21 +28,26 @@ func RouteInterface(f Family) (net.Interface, netip.Addr, bool) {
 		return net.Interface{}, netip.Addr{}, false
 	}
 	src = src.Unmap()
+	ifc, ok := InterfaceOf(src)
+	return ifc, src, ok
+}
+
+func InterfaceOf(src netip.Addr) (net.Interface, bool) {
 	ifs, err := net.Interfaces()
 	if err != nil {
-		return net.Interface{}, src, false
+		return net.Interface{}, false
 	}
 	for _, ifc := range ifs {
 		addrs, _ := ifc.Addrs()
 		for _, a := range addrs {
 			if pn, ok := a.(*net.IPNet); ok {
-				if ip, ok := netip.AddrFromSlice(pn.IP); ok && ip.Unmap() == src {
-					return ifc, src, true
+				if ip, ok := netip.AddrFromSlice(pn.IP); ok && ip.Unmap() == src.Unmap() {
+					return ifc, true
 				}
 			}
 		}
 	}
-	return net.Interface{}, src, false
+	return net.Interface{}, false
 }
 
 var tunnelPrefixes = []string{"tun", "utun", "tap", "ppp", "wg", "ipsec", "gpd", "nordlynx", "tailscale", "zt"}

@@ -173,12 +173,19 @@ func googleChaosResult(txt []string, rcode dnsmessage.RCode, err error) probe.Re
 	return res
 }
 
-func localChecks(fam netx.Family) []probe.Result {
+func localChecks(n *netx.Net) []probe.Result {
 	var out []probe.Result
 	route := probe.Result{Group: Local, Service: "Default route"}
-	switch ifc, src, ok := netx.RouteInterface(fam); {
+	ifc, src, ok := netx.RouteInterface(n.Options().Family)
+	if s := n.Options().Source; s.IsValid() {
+		route.Service, src = "Source interface", s
+		ifc, ok = netx.InterfaceOf(s)
+	}
+	switch {
+	case n.Proxied():
+		route.Status, route.Reason = probe.Unknown, "a proxy is in effect: the path starts at the proxy"
 	case !ok:
-		route.Status, route.Reason = probe.Unknown, "no route or interface for "+fam.String()
+		route.Status, route.Reason = probe.Unknown, "no interface for "+n.Options().Family.String()
 	case netx.IsTunnel(ifc):
 		route.Status, route.Reason = probe.Partial, "through tunnel "+ifc.Name+": results describe the tunnel exit"
 		route.Detail = src.String()

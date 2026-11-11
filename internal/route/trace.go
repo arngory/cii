@@ -45,10 +45,6 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	}
 	conn, err := n.ListenICMP4()
 	if err != nil {
-		var se *net.OpError
-		if errors.As(err, &se) && errors.Is(se.Err, os.ErrPermission) || errors.Is(err, os.ErrPermission) {
-			return errors.New("raw ICMP needs root or CAP_NET_RAW")
-		}
 		if errors.Is(err, netx.ErrProxyRaw) {
 			return err
 		}
