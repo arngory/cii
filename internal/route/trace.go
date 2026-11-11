@@ -214,7 +214,7 @@ func timeTCP(ctx context.Context, n *netx.Net, paths []*Path) {
 			var lastErr error
 			for range 4 {
 				start := time.Now()
-				c, err := n.Dial(ctx, Module, "tcp", net.JoinHostPort(p.Target.Host, "443"))
+				c, err := n.DialAddr(ctx, Module, "tcp", p.Target.Host, p.addr, "443")
 				if err != nil {
 					lastErr = err
 					if errors.Is(err, netx.ErrProxyRaw) || netx.AsBlocked(err) != nil {
@@ -223,11 +223,6 @@ func timeTCP(ctx context.Context, n *netx.Net, paths []*Path) {
 					continue
 				}
 				rtts = append(rtts, float64(time.Since(start).Microseconds())/1000)
-				if ra, ok := c.RemoteAddr().(*net.TCPAddr); ok {
-					if a, ok := netip.AddrFromSlice(ra.IP); ok {
-						p.addr = a.Unmap()
-					}
-				}
 				c.Close()
 				time.Sleep(50 * time.Millisecond)
 			}

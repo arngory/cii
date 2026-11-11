@@ -35,24 +35,45 @@ func (n *Net) allow(module, host, proto string) (Rule, error) {
 	return rule, nil
 }
 
+func baseNetwork(network string) (string, error) {
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		return "tcp", nil
+	case "udp", "udp4", "udp6":
+		return "udp", nil
+	}
+	return "", fmt.Errorf("dial: unsupported network %q", network)
+}
+
 func (n *Net) Dial(ctx context.Context, module, network, addr string) (net.Conn, error) {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, fmt.Errorf("dial %s: %w", addr, err)
 	}
-	var base string
-	switch network {
-	case "tcp", "tcp4", "tcp6":
-		base = "tcp"
-	case "udp", "udp4", "udp6":
-		base = "udp"
-	default:
-		return nil, fmt.Errorf("dial: unsupported network %q", network)
+	base, err := baseNetwork(network)
+	if err != nil {
+		return nil, err
 	}
 	rule, err := n.allow(module, host, network)
 	if err != nil {
 		return nil, err
 	}
+	return n.dial(ctx, module, rule, host, base, network, addr)
+}
+
+func (n *Net) DialAddr(ctx context.Context, module, network, host string, ip netip.Addr, port string) (net.Conn, error) {
+	base, err := baseNetwork(network)
+	if err != nil {
+		return nil, err
+	}
+	rule, err := n.allow(module, host, network)
+	if err != nil {
+		return nil, err
+	}
+	return n.dial(ctx, module, rule, host, base, network, net.JoinHostPort(ip.Unmap().String(), port))
+}
+
+func (n *Net) dial(ctx context.Context, module string, rule Rule, host, base, network, addr string) (net.Conn, error) {
 	d := net.Dialer{Timeout: n.opts.Timeout}
 	if n.opts.Source.IsValid() {
 		if base == "tcp" {

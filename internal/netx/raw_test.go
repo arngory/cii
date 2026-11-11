@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"testing"
 
 	"github.com/arngory/cii/internal/ledger"
@@ -127,5 +128,39 @@ func TestAllProxyRoutesHTTP(t *testing.T) {
 	resp.Body.Close()
 	if hits != 1 {
 		t.Fatalf("proxy hits = %d", hits)
+	}
+}
+
+func TestDialAddrChecksHostDialsAddress(t *testing.T) {
+	for _, k := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
+		t.Setenv(k, "")
+	}
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	led := ledger.New()
+	n := New(Options{}, NewPolicy(Rule{Module: "route", Pattern: "target.example", Purpose: "path"}), led)
+	c, err := n.DialAddr(context.Background(), "route", "tcp", "target.example", netip.MustParseAddr("127.0.0.1"), port)
+	if err != nil {
+		t.Fatalf("DialAddr: %v", err)
+	}
+	c.Close()
+	if es := led.Entries(); len(es) != 1 || es[0].Host != "target.example" || es[0].Requests != 1 {
+		t.Errorf("ledger = %+v", es)
+	}
+	if _, err := n.DialAddr(context.Background(), "route", "tcp", "other.example", netip.MustParseAddr("127.0.0.1"), port); AsBlocked(err) == nil {
+		t.Errorf("undeclared host dialled: %v", err)
 	}
 }
