@@ -1,0 +1,24 @@
+name: cii
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${VERSION}
+section: net
+priority: optional
+maintainer: arngory <https://github.com/arngory>
+description: |
+  Complete information about the current IP address: region as seen by
+  GeoIP databases and services, service availability, IP quality and
+  reputation, censorship checks and benchmarks. Contacts only the
+  destinations listed by `cii --plan`.
+vendor: arngory
+homepage: https://github.com/arngory/cii
+license: AGPL-3.0-only
+contents:
+  - src: ${BINARY}
+    dst: /usr/bin/cii
+    file_info:
+      mode: 0755
+  - src: LICENSE
+    dst: /usr/share/licenses/cii/LICENSE
+  - src: README.md
+    dst: /usr/share/doc/cii/README.md

@@ -1,0 +1,51 @@
+cii golden
+┌─ IP quality · IPv4 ──────────────────────────────────────┐ ┌─ Region & services ───────────────────────────────────────────────────────────────────┐
+│ Address  203.0.113.7                                     │ │ Region  DE Germany · GeoIP 2/2                                                        │
+│ Registry US  ⚠ geo-discrepant                            │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│                                                          │ ┌─ Reputation lists & mail ─────────────────────────────────────────────────────────────┐
+│ Type ─────────────────────────────────────────────────── │ │ DNSBL  ✓ bl.spamcop.net                                                               │
+│                usage  company                            │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ ipquery.io    [ISP ]  —                                  │ ┌─ Censorship ──────────────────────────────────────────────────────────────────────────┐
+│ ip-api.com    [HOST]  —                                  │ │ DNS       ✓ 1                                                                         │
+│ AbuseIPDB     [ISP ]  —                                  │ │ Telegram  ✗ 1                                                                         │
+│                                                          │ │                                                                                       │
+│ Score ────────────────────────────────────────────────── │ │ ✗ Telegram: DC2 reset                                                                 │
+│ ipquery.io      3 ■□□□□ very low                         │ └───────────────────────────────────────────────────────────────────────────────────────┘
+│ proxycheck.io  66 ■■■■□ high                             │
+│ AbuseIPDB       0 ■□□□□ very low                         │
+│                                                          │
+│ Factors ──────────────────────────────────────────────── │
+│                cc proxy   VPN   Tor  host abuse   bot    │
+│ ipquery.io     DE     ·     ✓     ·     ✓     ·     ·    │
+│ ip-api.com     DE     ✗     ·     ·     ✗     ·     ·    │
+│ proxycheck.io  —      ✓     ✗     ·     ·     ·     ·    │
+│ AbuseIPDB      —      ·     ·     ·     ·     ✓     ·    │
+│ ✓ clean, ✗ detected, · not reported                      │
+│                                                          │
+│ ✗ proxycheck.io: VPN; risk 66                            │
+│ ! ipdata: key rejected (HTTP 401)                        │
+└──────────────────────────────────────────────────────────┘
+┌─ IP quality · IPv6 ──────────────────────────────────────┐
+│ unavailable                                              │
+└──────────────────────────────────────────────────────────┘
+┌─ Benchmark ──────────────────────────────────────────────┐
+│ System  Test Linux 1 · linux 6.1.0 · amd64               │
+│         4 × Test CPU, AES-NI · 8.0 GiB RAM, 6.0 GiB free │
+│         swap 1.0 GiB · virt kvm · up 1d 1h               │
+│         load 0.50 0.00 0.00                              │
+│ Disk    /tmp, direct I/O, 1.0 GiB                        │
+│         seq 1.50 GB/s R / 900 MB/s W                     │
+│         4k 40 MB/s / 38 MB/s (10k / 9.7k IOPS)           │
+│ fio     fio-3.33                                         │
+│         rand-4k 100 MB/s / 50 MB/s (26k / 13k IOPS)      │
+│ CPU     single 314 · multi 1200 (4 threads)              │
+│         sha256 400 MB/s · aes-gcm 2.50 GB/s              │
+│         deflate 60 MB/s                                  │
+│ Speed   Cloudflare FRA · 12.3 ms · ↓ 940 Mbit/s          │
+│         ↑ 87.5 Mbit/s                                    │
+│ iperf3  Prov City ↑ 1.20 Gbit/s ↓ 95.5 Mbit/s 150 ms     │
+│         [iperf3] Prov City ↑ 800 Mbit/s ↓ 700 Mbit/s     │
+│         Other Town: server busy                          │
+│         fio is not installed; apt install fio            │
+└──────────────────────────────────────────────────────────┘
+footer
