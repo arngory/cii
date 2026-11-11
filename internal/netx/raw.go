@@ -113,14 +113,11 @@ func resolvedKey(module, host string) string { return module + "\x00" + normaliz
 var ErrAddrNotOfHost = errors.New("address was not resolved for this host")
 
 func (n *Net) allowAddr(module, host string, ip netip.Addr, proto string) (Rule, error) {
-	rule, ok := n.policy.Match(module, host)
-	if !ok {
-		n.ledger.Blocked(module, "not declared", normalizeHost(host), proto)
-		return rule, &BlockedError{Module: module, Host: host}
-	}
-	if err := n.addrOf(module, host, ip); err != nil {
-		n.ledger.Blocked(module, "address not resolved for host", ledgerHost(rule, host), proto)
-		return rule, err
+	if rule, ok := n.policy.Match(module, host); ok {
+		if err := n.addrOf(module, host, ip); err != nil {
+			n.ledger.Blocked(module, "address not resolved for host", ledgerHost(rule, host), proto)
+			return rule, err
+		}
 	}
 	return n.allow(module, host, proto)
 }

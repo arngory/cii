@@ -2,6 +2,7 @@ package route
 
 import (
 	"context"
+	"net/netip"
 	"strings"
 	"testing"
 
@@ -132,5 +133,18 @@ func TestResolveLiteralFamily(t *testing.T) {
 	resolve(context.Background(), n4, p)
 	if p.addr.String() != "9.9.9.9" || p.Error != "" {
 		t.Errorf("IPv4 literal on IPv4 = %v %q", p.addr, p.Error)
+	}
+}
+
+func TestAttributed(t *testing.T) {
+	reached := &Path{addr: netip.MustParseAddr("192.0.2.1")}
+	if attributed([]*Path{reached}) {
+		t.Error("a reached path without any ASN counts as attributed")
+	}
+	if !attributed([]*Path{reached, {Hops: []Hop{{TTL: 2, ASN: 64500}}}}) {
+		t.Error("a hop ASN does not count")
+	}
+	if !attributed([]*Path{{Target: Target{Name: "x"}}}) {
+		t.Error("nothing resolved should not claim missing ASN data")
 	}
 }
