@@ -74,6 +74,8 @@ Common flags:
   --debug            detailed tables, failed checks, data sources and every network contact
   --no-log           do not write the local log (default: %s)
   --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
+  --svg FILE         also save the final screen as an SVG image (colours kept, width of the terminal)
+  --demo             show the report on invented sample data without touching the network (cii only)
   --no-color         disable colours
   --lang LANG        interface language: auto (from LANG/LC_ALL), en or ru; the --debug report and JSON stay in English
   --config FILE      config file (default: %s)
@@ -126,9 +128,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang                             string
-	timeout                                                                           time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo bool
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg                              string
+	timeout                                                                                 time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -150,6 +152,8 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.noColor, "no-color", false, "disable colours")
 	fs.BoolVar(&c.debug, "debug", false, "detailed output")
 	fs.BoolVar(&c.noLog, "no-log", false, "do not write a local log")
+	fs.BoolVar(&c.demo, "demo", false, "render invented sample data, no network")
+	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
 	fs.StringVar(&c.cfgPath, "config", "", "config file")
 	fs.StringVar(&c.dataDir, "data-dir", "", "database directory")
 	fs.Usage = printUsage
@@ -255,6 +259,14 @@ func cmdIP(ctx context.Context, args []string) error {
 	}
 	if fs.NArg() > 0 {
 		return fmt.Errorf("unexpected argument %q (did you mean `cii lookup`?)", fs.Arg(0))
+	}
+	if c.demo {
+		c.noLog = true
+		rep := report.Demo("online")
+		if c.mask {
+			rep = rep.Scrubbed()
+		}
+		return output(rep, &c)
 	}
 	cfg, err := config.Load(c.cfgPath)
 	if err != nil {
@@ -554,6 +566,11 @@ func setHost(r *report.Report, f netx.Family, h *report.Host) {
 
 func output(r *report.Report, c *common) error {
 	logPath, logErr := writeLog(r, c)
+	if c.svg != "" {
+		if err := writeSVG(r, c, logPath, logErr); err != nil {
+			return err
+		}
+	}
 	if logErr != nil && (c.json || c.debug) {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}
@@ -626,6 +643,19 @@ func footer(r *report.Report, unicode bool, lang, logPath string, logErr error) 
 		parts = append(parts, t("details")+": --debug")
 	}
 	return parts
+}
+
+func writeSVG(r *report.Report, c *common, logPath string, logErr error) error {
+	style := report.Style{Color: true, Unicode: true, Width: terminalWidth(), Lang: c.language()}
+	f, err := os.Create(c.svg)
+	if err != nil {
+		return err
+	}
+	if err := report.WriteSVG(f, r.Screen(style, screenTitle(r), footer(r, true, c.language(), logPath, logErr))); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func terminalWidth() int {
