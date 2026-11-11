@@ -24,3 +24,7 @@ cii написан с нуля на Go, но идеи, наборы провер
 
 - [oschwald/maxminddb-golang](https://github.com/oschwald/maxminddb-golang) — ISC
 - [go-yaml/yaml](https://github.com/go-yaml/yaml) — MIT / Apache-2.0
+- [golang.org/x/net, sys, term, text](https://cs.opensource.google/go/x) — BSD-3-Clause
+- стандартная библиотека и рантайм Go — BSD-3-Clause
+
+Полные тексты лицензий всего, что входит в бинарник, включая Unicode License v3 для данных CLDR, собираются при выпуске в файл `THIRD_PARTY_LICENSES.txt`. Он прикладывается к релизу и кладётся в пакеты deb, rpm и apk. Локально его можно собрать командой `go run ./tools/notices licenses THIRD_PARTY_LICENSES.txt`.
