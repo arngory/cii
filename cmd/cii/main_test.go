@@ -72,7 +72,9 @@ func TestLoadReportFromLogAndJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	jsonPath := filepath.Join(dir, "r.json")
-	os.WriteFile(jsonPath, js.Bytes(), 0o600)
+	if err := os.WriteFile(jsonPath, js.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for _, p := range []string{logPath, jsonPath} {
 		r, err := loadReport(p)
 		if err != nil || r.IPv4 == nil || r.IPv4.Address != "203.0.113.7" {
@@ -83,7 +85,9 @@ func TestLoadReportFromLogAndJSON(t *testing.T) {
 		}
 	}
 	bad := filepath.Join(dir, "bad.json")
-	os.WriteFile(bad, []byte(`{"schema":"other/v9"}`), 0o600)
+	if err := os.WriteFile(bad, []byte(`{"schema":"other/v9"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := loadReport(bad); err == nil || !strings.Contains(err.Error(), "unsupported report schema") {
 		t.Errorf("foreign schema = %v", err)
 	}

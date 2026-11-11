@@ -141,11 +141,6 @@ func orgNames(r *Report) []string {
 			for _, t := range p.Transit {
 				addOrg(asnPrefix.ReplaceAllString(t, ""))
 			}
-			for _, h := range p.Hops {
-				if h.ASN != 0 && h.ASN != p.ASN && h.ASN != p.Target.Expect {
-					addOrg(h.Org)
-				}
-			}
 		}
 	}
 	names := make([]string, 0, len(seen))
