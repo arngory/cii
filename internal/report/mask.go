@@ -24,7 +24,7 @@ var (
 	prefixType = reflect.TypeFor[netip.Prefix]()
 	orgFields  = []string{"ASOrg", "ASDomain"}
 	freeText   = []string{"Detail", "Reason", "Error", "Notes"}
-	addrText   = []string{"Address", "Interface", "Query", "Via"}
+	addrText   = []string{"Address", "Interface", "Query", "Via", "Disagree"}
 	genericOrg = map[string]bool{
 		"limited": true, "company": true, "corporation": true, "online": true, "internet": true,
 		"network": true, "networks": true, "telecom": true, "telecommunications": true,

@@ -50,6 +50,7 @@ type Host struct {
 	Source    string          `json:"source,omitempty"`
 	Via       string          `json:"via,omitempty"`
 	Interface []string        `json:"interface,omitempty"`
+	Disagree  []string        `json:"disagree,omitempty"`
 	Error     string          `json:"error,omitempty"`
 	Geo       []geodb.Record  `json:"geo,omitempty"`
 	Region    *region.Summary `json:"region,omitempty"`
@@ -75,7 +76,7 @@ func New(mode string) *Report {
 }
 
 func NewHost(a ipdetect.Address, geo []geodb.Record) *Host {
-	h := &Host{Source: a.Source, Error: a.Error, Geo: geo}
+	h := &Host{Source: a.Source, Error: a.Error, Geo: geo, Disagree: a.Disagree}
 	if a.Address.IsValid() {
 		h.Address = a.Address.String()
 	}
@@ -150,6 +151,9 @@ func writeHost(w io.Writer, c paint, label string, h *Host) {
 	fmt.Fprintf(w, "%s  %s  %s\n", c.bold(label), c.green(h.Address), c.dim("("+h.Source+")"))
 	if len(h.Interface) > 0 && (len(h.Interface) > 1 || h.Interface[0] != h.Address) {
 		fmt.Fprintf(w, "      on interfaces: %s\n", strings.Join(h.Interface, ", "))
+	}
+	if len(h.Disagree) > 0 {
+		fmt.Fprintf(w, "      %s %s\n", c.yellow("other echo answers:"), strings.Join(h.Disagree, "; "))
 	}
 	if len(h.Geo) > 0 {
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

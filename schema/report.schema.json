@@ -509,6 +509,15 @@
         "address": {
           "type": "string"
         },
+        "disagree": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "error": {
           "type": "string"
         },

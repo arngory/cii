@@ -45,7 +45,7 @@
 | Поле | Содержимое |
 |---|---|
 | `schema`, `tool`, `generated_at`, `mode` | метаданные (`mode`: `online`, `offline`, `lookup`) |
-| `ipv4`, `ipv6` | `address`, `source` (`echo:<провайдер>` или `interface`), `interface[]`, `error`, `geo[]`, `region` |
+| `ipv4`, `ipv6` | `address`, `source` (`echo:<провайдеры через +>`, согласившиеся с адресом, или `interface`), `interface[]`, `disagree[]` (echo-сервисы, назвавшие другой адрес), `error`, `geo[]`, `region` |
 | `region` | `verdict[]` (одна страна или несколько при равенстве), `results[]`, `attention[]` |
 | `services` | список результатов |
 | результат проверки | `group`, `service`, `status` (`ok`, `yes`, `no`, `partial`, `unknown`, `ipblock`, `error`), `country`, `iata`, `node`, `reason`, `extended` |

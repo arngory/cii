@@ -15,6 +15,7 @@ var translations = map[string]map[string]string{
 		"Lookup":                            "Поиск",
 		"Address":                           "Адрес",
 		"Via":                               "Через",
+		"Also seen":                         "Ещё видно",
 		"Place":                             "Место",
 		"Route":                             "Маршрут",
 		"Registry":                          "Реестр",

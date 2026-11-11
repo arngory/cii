@@ -89,6 +89,9 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	if h.Via != "" {
 		lines = append(lines, field("Via", h.Via))
 	}
+	if len(h.Disagree) > 0 {
+		lines = append(lines, field("Also seen", c.yellow(m.warn+" "+strings.Join(h.Disagree, "; "))))
+	}
 	if as := bestASN(h.Geo); as != "" {
 		lines = append(lines, field("ASN", as))
 	}
