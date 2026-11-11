@@ -161,7 +161,11 @@ func regionParts(c paint, m marks, s *region.Summary) []gcell {
 		}
 	}
 	for _, r := range s.Attention {
-		parts = append(parts, gcell{text: serviceName(r) + " " + m.tr("says") + " " + r.Country, style: c.yellow})
+		text := serviceName(r) + " " + m.tr("says") + " " + r.Country
+		if edge := edgeIn(s, r.Country); edge != "" {
+			text += " (" + m.tr("= CDN edge") + " " + edge + ")"
+		}
+		parts = append(parts, gcell{text: text, style: c.yellow})
 	}
 	for _, r := range s.Results {
 		if r.Group != region.CDN && r.Status == probe.Unknown && strings.HasPrefix(r.Reason, "service default") {
@@ -169,6 +173,15 @@ func regionParts(c paint, m marks, s *region.Summary) []gcell {
 		}
 	}
 	return parts
+}
+
+func edgeIn(s *region.Summary, country string) string {
+	for _, r := range s.Results {
+		if r.Group == region.CDN && r.Status == probe.OK && r.Country == country && r.IATA != "" {
+			return serviceName(r) + " " + r.IATA
+		}
+	}
+	return ""
 }
 
 func cdnParts(c paint, s *region.Summary) []gcell {

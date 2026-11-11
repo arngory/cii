@@ -105,11 +105,11 @@ func chatGPTApp(rs []*probe.Response) []probe.Result {
 	lower := bytes.ToLower(r.Body)
 	switch {
 	case bytes.Contains(r.Body, []byte(`"cf_details"`)):
-		reason := "network refused"
+		reason := "refused a client that is not the app"
 		if t := chatGPTBlockType(r); t != "" {
 			reason += " (type " + t + ")"
 		}
-		return []probe.Result{{Status: probe.IPBlock, Reason: reason}}
+		return []probe.Result{{Status: probe.Unknown, Reason: reason}}
 	case bytes.Contains(lower, []byte("disallowed isp")):
 		return []probe.Result{{Status: probe.IPBlock, Reason: "disallowed ISP"}}
 	case bytes.Contains(lower, []byte("unsupported_country")):

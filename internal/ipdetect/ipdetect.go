@@ -3,8 +3,10 @@ package ipdetect
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -81,7 +83,7 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		}
 		return res
 	}
-	votes, errs := vote(ctx, n.HTTPClient(Module), f, o.Providers)
+	votes, errs, noRecords := vote(ctx, n.HTTPClient(Module), f, o.Providers)
 	if len(votes) > 0 {
 		res.Address, res.Source = votes[0].addr, "echo:"+strings.Join(votes[0].names, "+")
 		for _, v := range votes[1:] {
@@ -93,9 +95,16 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		res.Address, res.Source = res.Interface[0], "interface"
 		return res
 	}
-	if len(errs) == 0 {
+	switch {
+	case len(errs) == 0:
 		res.Error = "no providers configured for " + f.String()
-	} else {
+	case noRecords:
+		rr := "A"
+		if f == netx.IPv6 {
+			rr = "AAAA"
+		}
+		res.Error = fmt.Sprintf("the resolver returns no %s records for any echo service: %s is off or filtered on this network", rr, familyName(f))
+	default:
 		res.Error = strings.Join(errs, "; ")
 	}
 	return res
@@ -107,7 +116,14 @@ type tally struct {
 	first int
 }
 
-func vote(ctx context.Context, client *http.Client, f netx.Family, providers []Provider) ([]tally, []string) {
+func familyName(f netx.Family) string {
+	if f == netx.IPv6 {
+		return "IPv6"
+	}
+	return "IPv4"
+}
+
+func vote(ctx context.Context, client *http.Client, f netx.Family, providers []Provider) ([]tally, []string, bool) {
 	type answer struct {
 		name  string
 		order int
@@ -138,10 +154,15 @@ func vote(ctx context.Context, client *http.Client, f netx.Family, providers []P
 	need := min(2, asked)
 	var tallies []tally
 	var errs []string
+	notFound := 0
 	for range asked {
 		a := <-ch
 		if a.err != nil {
 			errs = append(errs, a.name+": "+a.err.Error())
+			var dnsErr *net.DNSError
+			if errors.As(a.err, &dnsErr) && dnsErr.IsNotFound {
+				notFound++
+			}
 			continue
 		}
 		i := slices.IndexFunc(tallies, func(t tally) bool { return t.addr == a.addr })
@@ -165,7 +186,7 @@ func vote(ctx context.Context, client *http.Client, f netx.Family, providers []P
 		return a.first - b.first
 	})
 	slices.Sort(errs)
-	return tallies, errs
+	return tallies, errs, asked > 0 && notFound == asked
 }
 
 func familyOf(a netip.Addr) string {

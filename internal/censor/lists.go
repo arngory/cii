@@ -120,7 +120,7 @@ var geoblockDomains = []string{
 	"autodesk.com",
 	"graylog.org",
 	"redis.io",
-	"copilot.microsoft.com",
+	"copilot.com",
 }
 
 var blockPageHosts = []string{

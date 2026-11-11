@@ -112,7 +112,7 @@ func TestNewAIChecks(t *testing.T) {
 		want   probe.Status
 		reason string
 	}{
-		{r(403, `{"cf_details":"Request is not allowed. Please try again later.", "type":"dc"}`), probe.IPBlock, "network refused (type dc)"},
+		{r(403, `{"cf_details":"Request is not allowed. Please try again later.", "type":"dc"}`), probe.Unknown, "refused a client that is not the app (type dc)"},
 		{r(403, `Your request was blocked: disallowed ISP`), probe.IPBlock, "disallowed ISP"},
 		{r(200, `<html>app</html>`), probe.Yes, ""},
 		{r(503, ``), probe.Failed, "HTTP 503"},

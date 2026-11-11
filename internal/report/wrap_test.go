@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 	"github.com/arngory/cii/internal/services"
 )
@@ -73,5 +74,24 @@ func TestLongDetailKeepsOtherGroupsInColumns(t *testing.T) {
 	}
 	if !paired || !strings.Contains(out, "use your own resolver to get an answer") {
 		t.Errorf("streaming collapsed to one column or detail cut:\n%s", out)
+	}
+}
+
+func TestRegionNotesEdgeCountry(t *testing.T) {
+	s := region.Summarize([]probe.Result{
+		{Group: region.GeoIP, Service: "a", Status: probe.OK, Country: "KG"},
+		{Group: region.GeoIP, Service: "b", Status: probe.OK, Country: "KG"},
+		{Group: region.GeoIP, Service: "c", Status: probe.OK, Country: "KG"},
+		{Group: region.Platform, Service: "Google", Status: probe.OK, Country: "KG"},
+		{Group: region.Platform, Service: "Apple", Status: probe.OK, Country: "KG"},
+		{Group: region.Platform, Service: "ChatGPT", Status: probe.OK, Country: "PL"},
+		{Group: region.CDN, Service: "Cloudflare", Status: probe.OK, Country: "PL", IATA: "WAW"},
+	})
+	var text []string
+	for _, p := range regionParts(paint(false), unicodeMarks, &s) {
+		text = append(text, p.text)
+	}
+	if got := strings.Join(text, " | "); !strings.Contains(got, "ChatGPT says PL (= CDN edge Cloudflare WAW)") {
+		t.Errorf("region parts = %s", got)
 	}
 }

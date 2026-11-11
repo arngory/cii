@@ -44,6 +44,7 @@ var translations = map[string]map[string]string{
 		"Region":                              "Регион",
 		"platforms":                           "платформы",
 		"says":                                "считает",
+		"= CDN edge":                          "= узел CDN",
 		"marks":                               "отметки",
 		"yes":                                 "да",
 		"no":                                  "нет",
