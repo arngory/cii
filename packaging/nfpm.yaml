@@ -1,7 +1,7 @@
 name: cii
-arch: ${NFPM_ARCH}
+arch: @ARCH@
 platform: linux
-version: ${VERSION}
+version: @VERSION@
 section: net
 priority: optional
 maintainer: arngory <https://github.com/arngory>
@@ -14,7 +14,7 @@ vendor: arngory
 homepage: https://github.com/arngory/cii
 license: AGPL-3.0-only
 contents:
-  - src: ${BINARY}
+  - src: @BINARY@
     dst: /usr/bin/cii
     file_info:
       mode: 0755
