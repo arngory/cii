@@ -2,6 +2,7 @@ package netx
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/netip"
@@ -166,7 +167,7 @@ func (g *guard) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.Header.Set("User-Agent", g.n.opts.UserAgent)
 	}
 	resp, err := g.n.tr.RoundTrip(req)
-	if err != nil {
+	if err != nil && !errors.Is(req.Context().Err(), context.Canceled) {
 		g.n.ledger.Error(g.module, rule.Purpose, normalizeHost(host), req.URL.Scheme)
 	}
 	return resp, err

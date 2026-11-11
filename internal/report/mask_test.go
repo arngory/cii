@@ -11,6 +11,7 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 )
 
 func maskedSample() *Report {
@@ -42,6 +43,9 @@ func maskedSample() *Report {
 		{Group: "dns", Service: "Cloudflare 1.1.1.1", Status: probe.Yes},
 		{Group: "dns", Service: "Cloudflare 1.0.0.1", Status: probe.Yes},
 	})
+	r.Route = &route.Report{Method: "tcp", Note: "no hop data: listen ip4:icmp 203.0.113.7: bind: permission denied", OwnASN: 3320,
+		Paths: []route.Path{{Target: route.Target{Name: "Google", Host: "www.google.com"}, Addr: "192.0.2.80", ASN: 15169, Org: "Google LLC",
+			Hops: []route.Hop{{TTL: 1, Addr: "203.0.113.1", ASN: 3320, Org: "Deutsche Telekom AG"}}, Transit: []string{"AS1299 Arelion"}}}}
 	r.Network = []ledger.Entry{
 		{Module: "censor", Host: "1.1.1.1", Proto: "dns"},
 		{Module: "region", Host: "www.telekom.de", Proto: "https", Purpose: "Telekom check"},

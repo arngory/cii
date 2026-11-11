@@ -112,6 +112,8 @@ func vote(ctx context.Context, client *http.Client, f netx.Family, providers []P
 		addr netip.Addr
 		err  error
 	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	ch := make(chan answer, len(providers))
 	asked := 0
 	for _, p := range providers {

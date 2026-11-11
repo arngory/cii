@@ -45,9 +45,6 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	}
 	conn, err := n.ListenICMP4()
 	if err != nil {
-		if errors.Is(err, netx.ErrProxyRaw) {
-			return err
-		}
 		return errors.New(describe(err))
 	}
 	defer conn.Close()
