@@ -296,7 +296,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		checks = append(checks, risk.Checks(cfg.Keys, c.extended)...)
 	}
 	censorOn := !c.quick && !noCensor && !c.offline && len(exits) == 1
-	censorOpts := censor.Options{Modes: []string{"dns", "telegram"}, Protocol: "both"}
+	censorOpts := censor.Options{Modes: []string{"dns", "telegram", "portal"}, Protocol: "both"}
 	if c.extended {
 		censorOpts.Modes = nil
 	}
@@ -883,7 +883,7 @@ func cmdCensor(ctx context.Context, args []string) error {
 	var retries int
 	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
 	c.register(fs)
-	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram (comma-separated)")
+	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal (comma-separated)")
 	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
 	fs.StringVar(&domain, "domain", "", "check a single domain")
 	fs.StringVar(&protocol, "protocol", "both", "http, https or both")

@@ -224,6 +224,7 @@ var groupTitles = map[probe.Group]string{
 	censor.Geoblock:    "Geoblock",
 	censor.Telegram:    "Telegram",
 	censor.Local:       "Local",
+	censor.Portal:      "Portal",
 	services.Streaming: "Streaming",
 	services.AI:        "AI",
 	services.Web:       "Web",
