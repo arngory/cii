@@ -65,7 +65,7 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 	m.WriteDetailed(&det, false)
 	screen := strings.Join(m.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
 	for name, out := range map[string]string{"json": js.String(), "detailed": det.String(), "screen": screen} {
-		for _, leak := range []string{"203.0.113", "203-0-113", "2001:db8", "3320", "Telekom", "telekom", "Deutsche", "DTAG", "dtag", "t-ipconnect", "ExampleVPN", "31.13.66", "127.255"} {
+		for _, leak := range []string{"203.0.113", "203-0-113", "2001:db8", "3320", "Telekom", "telekom", "Deutsche", "DTAG", "dtag", "Arelion", "t-ipconnect", "ExampleVPN", "31.13.66", "127.255"} {
 			if strings.Contains(strings.NewReplacer("www.telekom.de", "", "Telekom check", "").Replace(out), leak) {
 				t.Errorf("%s leaks %q", name, leak)
 			}
@@ -102,5 +102,24 @@ func TestMaskTextKeepsPlainText(t *testing.T) {
 		if !strings.Contains(got, keep) {
 			t.Errorf("MaskText lost %q: %s", keep, got)
 		}
+	}
+}
+
+func TestScrubbedRouteOnly(t *testing.T) {
+	r := New("route")
+	r.Route = &route.Report{Method: "icmp", Paths: []route.Path{{
+		Target: route.Target{Name: "Google", Expect: 15169}, ASN: 15169, Org: "Google LLC", Verdict: route.Transit,
+		Reason: "via AS1299 Arelion", Transit: []string{"AS1299 Arelion"},
+		Hops: []route.Hop{{TTL: 2, Addr: "198.51.100.1", ASN: 64500, Org: "Example Access Networks"}, {TTL: 3, ASN: 1299, Org: "Arelion Sweden AB"}},
+	}}}
+	var js strings.Builder
+	r.Scrubbed().WriteJSON(&js)
+	for _, leak := range []string{"Arelion", "Example Access", "198.51.100", "1299", "64500"} {
+		if strings.Contains(js.String(), leak) {
+			t.Errorf("route-only masked report leaks %q", leak)
+		}
+	}
+	if !strings.Contains(js.String(), `"name": "Google"`) {
+		t.Errorf("target name lost:\n%s", js.String())
 	}
 }

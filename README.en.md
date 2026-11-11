@@ -104,6 +104,7 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 | `cii censor` | censorship only, every mode and the full grid ([docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md)) |
 | `cii route` | routes only ([docs/ROUTE.md](docs/ROUTE.md)) |
 | `cii bench` | the benchmark only, with its own options ([docs/BENCH.md](docs/BENCH.md)) |
+| `cii show [LOG\|JSON\|-]` | print a past run again: the latest local log by default, or a log file, a `--json` file or `-` for standard input. `--mask`, `--json`, `--debug`, `--svg` and `--lang` apply; the title names the file and when the run was taken |
 | `cii diff [OLD NEW]` | what changed between two runs; without arguments, the last two logs |
 | `cii data update [ID…]` | fetch offline databases from their publishers; `status` shows what is installed, `sources` what is available |
 | `cii version` | version |
@@ -135,7 +136,7 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 
 Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks — see [docs/CONFIG.md](docs/CONFIG.md). Everything works without them.
 
-**Log.** Every run saves the frame, the detailed report and JSON to a local log: `~/.local/state/cii/logs` on Linux, `~/Library/Logs/cii` on macOS, `%LOCALAPPDATA%\cii\logs` on Windows. Mode 0600, the last 20 runs are kept, nothing is sent anywhere. `cii diff` works from these logs.
+**Log.** Every run saves the frame, the detailed report and JSON to a local log: `~/.local/state/cii/logs` on Linux, `~/Library/Logs/cii` on macOS, `%LOCALAPPDATA%\cii\logs` on Windows. Mode 0600, the last 20 runs are kept, nothing is sent anywhere. `cii show` and `cii diff` work from these logs: `cii show --mask`, for example, prints the latest run without addresses or provider even if it ran without `--mask`.
 
 **`--mask`** replaces with `•••` everything that identifies the address or network: addresses and prefixes in any form, AS numbers and holders, PTR, hop addresses, CDN node names (an ISP-hosted cache is often named after the ISP), VPN and datacenter names in answers. Country, city and all check results stay.
 

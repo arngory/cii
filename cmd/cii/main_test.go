@@ -1,9 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/arngory/cii/internal/netx"
+	"github.com/arngory/cii/internal/report"
+	"github.com/arngory/cii/internal/runlog"
 )
 
 func TestParseSize(t *testing.T) {
@@ -50,5 +57,34 @@ func TestExitsAndProxyLabel(t *testing.T) {
 	}
 	if got := proxyLabel("socks5://u:p@203.0.113.9:1080"); got != "socks5://203.0.113.9:1080" {
 		t.Errorf("masked label = %q", got)
+	}
+}
+
+func TestLoadReportFromLogAndJSON(t *testing.T) {
+	dir := t.TempDir()
+	rep := report.Demo("online")
+	var js bytes.Buffer
+	if err := rep.WriteJSON(&js); err != nil {
+		t.Fatal(err)
+	}
+	logPath, err := runlog.Write(dir, time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC), []byte("frame text\n\n"), []byte(runlog.JSONMarker), js.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	jsonPath := filepath.Join(dir, "r.json")
+	os.WriteFile(jsonPath, js.Bytes(), 0o600)
+	for _, p := range []string{logPath, jsonPath} {
+		r, err := loadReport(p)
+		if err != nil || r.IPv4 == nil || r.IPv4.Address != "203.0.113.7" {
+			t.Fatalf("loadReport(%s) = %+v, %v", p, r, err)
+		}
+		if m := r.Scrubbed(); m.IPv4.Address != "•••" || !m.Masked {
+			t.Errorf("masked past report = %+v", m.IPv4)
+		}
+	}
+	bad := filepath.Join(dir, "bad.json")
+	os.WriteFile(bad, []byte(`{"schema":"other/v9"}`), 0o600)
+	if _, err := loadReport(bad); err == nil || !strings.Contains(err.Error(), "unsupported report schema") {
+		t.Errorf("foreign schema = %v", err)
 	}
 }

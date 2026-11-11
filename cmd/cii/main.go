@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"net/netip"
@@ -54,6 +55,7 @@ Usage:
   cii bench [flags]           only the benchmark, with its own options (see docs/BENCH.md)
   cii route [flags]           paths to major networks: hops, transit, detours (see docs/ROUTE.md)
   cii diff [OLD NEW]          what changed between two runs (default: the last two local logs)
+  cii show [LOG|JSON|-]       print a past run again (default: the latest local log); works with --mask, --json, --debug, --svg, --lang
   cii version
 
 Default command only:
@@ -120,6 +122,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdRoute(ctx, args)
 	case "diff":
 		return cmdDiff(args)
+	case "show":
+		return cmdShow(args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -133,7 +137,7 @@ func run(ctx context.Context, args []string) error {
 
 type common struct {
 	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg                              string
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from                        string
 	timeout                                                                                 time.Duration
 }
 
@@ -629,20 +633,26 @@ func printReport(r *report.Report, c *common, logPath string, logErr error) erro
 	}
 	unicode := report.UnicodeTerminal()
 	style := report.Style{Color: c.color(), Unicode: unicode, Width: terminalWidth(), Lang: c.language()}
-	fmt.Println(strings.Join(r.Screen(style, screenTitle(r), footer(r, unicode, c.language(), logPath, logErr)), "\n"))
+	fmt.Println(strings.Join(r.Screen(style, screenTitle(r, c), footer(r, unicode, c.language(), logPath, logErr)), "\n"))
 	return nil
 }
 
 const logScreenWidth = 160
 
-func screenTitle(r *report.Report) string { return r.Tool.Name + " " + r.Tool.Version }
+func screenTitle(r *report.Report, c *common) string {
+	title := r.Tool.Name + " " + r.Tool.Version
+	if c.from != "" {
+		title += " · " + c.from + " · " + r.GeneratedAt.UTC().Format("2006-01-02 15:04 UTC")
+	}
+	return title
+}
 
 func writeLog(r *report.Report, c *common) (string, error) {
 	if c.noLog {
 		return "", nil
 	}
 	var text, js bytes.Buffer
-	text.WriteString(strings.Join(r.Screen(report.Style{Unicode: true, Width: logScreenWidth, Lang: c.language()}, screenTitle(r), nil), "\n") + "\n\n")
+	text.WriteString(strings.Join(r.Screen(report.Style{Unicode: true, Width: logScreenWidth, Lang: c.language()}, screenTitle(r, c), nil), "\n") + "\n\n")
 	r.WriteDetailed(&text, false)
 	if err := r.WriteJSON(&js); err != nil {
 		return "", err
@@ -694,7 +704,7 @@ func writeSVG(r *report.Report, c *common, logPath string, logErr error) error {
 	if err != nil {
 		return err
 	}
-	if err := report.WriteSVG(f, r.Screen(style, screenTitle(r), footer(r, true, c.language(), logPath, logErr))); err != nil {
+	if err := report.WriteSVG(f, r.Screen(style, screenTitle(r, c), footer(r, true, c.language(), logPath, logErr))); err != nil {
 		f.Close()
 		return err
 	}
@@ -745,6 +755,62 @@ func cmdLookup(args []string) error {
 	return output(rep, &c)
 }
 
+func loadReport(path string) (*report.Report, error) {
+	var data []byte
+	var err error
+	if path == "-" {
+		data, err = io.ReadAll(os.Stdin)
+	} else {
+		data, err = os.ReadFile(path)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var r report.Report
+	if err := json.Unmarshal(runlog.ReportJSON(data), &r); err != nil {
+		return nil, fmt.Errorf("%s: not a cii log or JSON report: %w", path, err)
+	}
+	if r.Schema != report.Schema {
+		return nil, fmt.Errorf("%s: unsupported report schema %q (want %s)", path, r.Schema, report.Schema)
+	}
+	return &r, nil
+}
+
+func cmdShow(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii show", flag.ContinueOnError)
+	c.registerSVG(fs)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	var path string
+	switch fs.NArg() {
+	case 0:
+		logs, err := runlog.List(paths.LogDir())
+		if err != nil || len(logs) == 0 {
+			return errors.New("no local logs yet; run cii first or pass a log or JSON file")
+		}
+		path = logs[len(logs)-1]
+	case 1:
+		path = fs.Arg(0)
+	default:
+		return errors.New("usage: cii show [LOG|JSON|-]")
+	}
+	r, err := loadReport(path)
+	if err != nil {
+		return err
+	}
+	if c.mask {
+		r = r.Scrubbed()
+	}
+	c.noLog = true
+	c.from = filepath.Base(path)
+	if path == "-" {
+		c.from = "stdin"
+	}
+	return output(r, &c)
+}
+
 func cmdDiff(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii diff", flag.ContinueOnError)
@@ -765,15 +831,11 @@ func cmdDiff(args []string) error {
 	}
 	var reps [2]*report.Report
 	for i, f := range files {
-		data, err := os.ReadFile(f)
+		r, err := loadReport(f)
 		if err != nil {
 			return err
 		}
-		var r report.Report
-		if err := json.Unmarshal(runlog.ReportJSON(data), &r); err != nil {
-			return fmt.Errorf("%s: not a cii log or JSON report: %w", f, err)
-		}
-		reps[i] = &r
+		reps[i] = r
 		if c.mask {
 			reps[i] = r.Scrubbed()
 		}
@@ -1131,9 +1193,6 @@ func cmdRoute(ctx context.Context, args []string) error {
 	screen := startScreen(&c, s)
 	defer screen.stop()
 	rep := route.Run(ctx, n, opts)
-	if len(dbs.DBs) == 0 {
-		rep.Note = strings.TrimPrefix(rep.Note+"; no local ASN database (cii data update): hops and destinations are not attributed", "; ")
-	}
 	s.update(func() { s.route = rep })
 	screen.stop()
 	return output(s.report(), &c)

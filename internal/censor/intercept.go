@@ -94,24 +94,7 @@ func googleChaosResult(txt []string, rcode dnsmessage.RCode, err error) probe.Re
 
 func localChecks(n *netx.Net) []probe.Result {
 	var out []probe.Result
-	route := probe.Result{Group: Local, Service: "Default route"}
-	ifc, src, ok := netx.RouteInterface(n.Options().Family)
-	if s := n.Options().Source; s.IsValid() {
-		route.Service, src = "Source interface", s
-		ifc, ok = netx.InterfaceOf(s)
-	}
-	switch {
-	case n.Proxied():
-		route.Status, route.Reason = probe.Unknown, "a proxy is in effect: the path starts at the proxy"
-	case !ok:
-		route.Status, route.Reason = probe.Unknown, "no interface for "+n.Options().Family.String()
-	case netx.IsTunnel(ifc):
-		route.Status, route.Reason = probe.Partial, "through tunnel "+ifc.Name+": results describe the tunnel exit"
-		route.Detail = src.String()
-	default:
-		route.Status, route.Reason = probe.Yes, "no tunnel on "+ifc.Name
-	}
-	out = append(out, route)
+	out = append(out, routeCheck(n))
 	if ns := netx.SystemNameservers(resolvConf); len(ns) > 0 {
 		res := probe.Result{Group: Local, Service: "System resolver", Status: probe.Yes, Reason: "no fake-IP resolver"}
 		for _, a := range ns {
@@ -124,4 +107,31 @@ func localChecks(n *netx.Net) []probe.Result {
 		out = append(out, res)
 	}
 	return out
+}
+
+func routeCheck(n *netx.Net) probe.Result {
+	route := probe.Result{Group: Local, Service: "Default route"}
+	if n.Proxied() {
+		route.Status, route.Reason = probe.Unknown, "a proxy is in effect: the path starts at the proxy"
+		return route
+	}
+	var ifc net.Interface
+	var src netip.Addr
+	var ok bool
+	if s := n.Options().Source; s.IsValid() {
+		route.Service, src = "Source interface", s
+		ifc, ok = netx.InterfaceOf(s)
+	} else {
+		ifc, src, ok = netx.RouteInterface(n.Options().Family)
+	}
+	switch {
+	case !ok:
+		route.Status, route.Reason = probe.Unknown, "no interface for "+n.Options().Family.String()
+	case netx.IsTunnel(ifc):
+		route.Status, route.Reason = probe.Partial, "through tunnel "+ifc.Name+": results describe the tunnel exit"
+		route.Detail = src.String()
+	default:
+		route.Status, route.Reason = probe.Yes, "no tunnel on "+ifc.Name
+	}
+	return route
 }

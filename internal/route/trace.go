@@ -44,12 +44,20 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	if len(paths) > 64 || o.MaxTTL > 31 || o.Rounds > 15 {
 		return errors.New("too many targets or hops")
 	}
-	conn, err := n.ListenICMP4()
+	var candidates []int
+	for i, p := range paths {
+		if p.addr.IsValid() {
+			candidates = append(candidates, i)
+		}
+	}
+	if len(candidates) == 0 {
+		return errors.New("no target resolved")
+	}
+	conn, err := n.ListenICMP4(Module)
 	if err != nil {
 		return errors.New(describe(err))
 	}
 	defer conn.Close()
-	pc := conn.IPv4PacketConn()
 	id := os.Getpid() & 0xffff
 	var mu sync.Mutex
 	sent := map[int]time.Time{}
@@ -119,23 +127,22 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 		}
 	}()
 	var active []int
-	for i, p := range paths {
-		if !p.addr.IsValid() {
-			continue
-		}
-		if err := n.AllowICMP(Module, p.Target.Host); err != nil {
-			p.Error = describe(err)
+	for _, i := range candidates {
+		if err := conn.Allow(paths[i].Target.Host, paths[i].addr); err != nil {
+			paths[i].Error = describe(err)
 			continue
 		}
 		active = append(active, i)
+	}
+	if len(active) == 0 {
+		conn.SetReadDeadline(time.Now())
+		<-done
+		return errors.New("no target may be traced")
 	}
 	sentOK := 0
 	var sendErr error
 	for round := 1; round <= o.Rounds && ctx.Err() == nil; round++ {
 		for ttl := 1; ttl <= o.MaxTTL; ttl++ {
-			if err := pc.SetTTL(ttl); err != nil {
-				return err
-			}
 			for _, i := range active {
 				mu.Lock()
 				limit := reached[i]
@@ -148,7 +155,7 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 				mu.Lock()
 				sent[seq] = time.Now()
 				mu.Unlock()
-				if _, err := conn.WriteTo(b, &net.IPAddr{IP: paths[i].addr.AsSlice()}); err != nil {
+				if err := conn.WriteTo(b, paths[i].addr, ttl); err != nil {
 					if sendErr == nil {
 						sendErr = err
 					}
@@ -234,7 +241,7 @@ func timeTCP(ctx context.Context, n *netx.Net, paths []*Path) {
 				c, err := n.DialAddr(ctx, Module, "tcp", p.Target.Host, p.addr, "443")
 				if err != nil {
 					lastErr = err
-					if errors.Is(err, netx.ErrProxyRaw) || netx.AsBlocked(err) != nil {
+					if errors.Is(err, netx.ErrProxyRaw) || errors.Is(err, netx.ErrAddrNotOfHost) || netx.AsBlocked(err) != nil {
 						break
 					}
 					continue

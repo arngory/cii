@@ -86,6 +86,9 @@ func Run(ctx context.Context, n *netx.Net, o Options) *Report {
 	if rep.OwnASN == 0 {
 		rep.OwnASN = firstHopASN(paths)
 	}
+	if !attributed(paths) {
+		rep.Note = strings.TrimPrefix(rep.Note+"; no local ASN database (cii data update): hops and destinations are not attributed", "; ")
+	}
 	rep.FloorMs = floor(paths)
 	local := answeredLocally(paths)
 	if local {
@@ -99,6 +102,22 @@ func Run(ctx context.Context, n *netx.Net, o Options) *Report {
 		rep.Paths = append(rep.Paths, *p)
 	}
 	return rep
+}
+
+func attributed(paths []*Path) bool {
+	reached := false
+	for _, p := range paths {
+		if p.ASN != 0 {
+			return true
+		}
+		for _, h := range p.Hops {
+			if h.ASN != 0 {
+				return true
+			}
+		}
+		reached = reached || p.addr.IsValid()
+	}
+	return !reached
 }
 
 func answeredLocally(paths []*Path) bool {
