@@ -44,13 +44,14 @@ type Report struct {
 }
 
 type Options struct {
-	Targets []Target
-	ASN     func(netip.Addr) (uint, string)
-	OwnASN  uint
-	Rounds  int
-	MaxTTL  int
-	Wait    time.Duration
-	TCPOnly bool
+	Targets   []Target
+	ASN       func(netip.Addr) (uint, string)
+	OwnASN    uint
+	Rounds    int
+	MaxTTL    int
+	Wait      time.Duration
+	TCPOnly   bool
+	NoASNData bool
 }
 
 func Defaults() Options {
@@ -85,6 +86,9 @@ func Run(ctx context.Context, n *netx.Net, o Options) *Report {
 	}
 	if rep.OwnASN == 0 {
 		rep.OwnASN = firstHopASN(paths)
+	}
+	if o.NoASNData || o.ASN == nil {
+		rep.Note = strings.TrimPrefix(rep.Note+"; no local ASN database (cii data update): hops and destinations are not attributed", "; ")
 	}
 	rep.FloorMs = floor(paths)
 	local := answeredLocally(paths)

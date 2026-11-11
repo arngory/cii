@@ -44,6 +44,15 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	if len(paths) > 64 || o.MaxTTL > 31 || o.Rounds > 15 {
 		return errors.New("too many targets or hops")
 	}
+	var candidates []int
+	for i, p := range paths {
+		if p.addr.IsValid() {
+			candidates = append(candidates, i)
+		}
+	}
+	if len(candidates) == 0 {
+		return errors.New("no target resolved")
+	}
 	conn, err := n.ListenICMP4()
 	if err != nil {
 		return errors.New(describe(err))
@@ -119,15 +128,17 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 		}
 	}()
 	var active []int
-	for i, p := range paths {
-		if !p.addr.IsValid() {
-			continue
-		}
-		if err := n.AllowICMP(Module, p.Target.Host); err != nil {
-			p.Error = describe(err)
+	for _, i := range candidates {
+		if err := n.AllowICMP(Module, paths[i].Target.Host); err != nil {
+			paths[i].Error = describe(err)
 			continue
 		}
 		active = append(active, i)
+	}
+	if len(active) == 0 {
+		conn.SetReadDeadline(time.Now())
+		<-done
+		return errors.New("no target may be traced")
 	}
 	sentOK := 0
 	var sendErr error

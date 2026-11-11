@@ -446,6 +446,7 @@ func cmdIP(ctx context.Context, args []string) error {
 			ro := route.Defaults()
 			ro.ASN = asnLookup(dbs)
 			ro.OwnASN = s.ownASN(routeNet.Options().Family)
+			ro.NoASNData = !hasASNData(dbs)
 			rep := route.Run(ctx, routeNet, ro)
 			s.update(func() { s.route = rep })
 		}
@@ -1069,6 +1070,15 @@ func cmdBench(ctx context.Context, args []string) error {
 	return output(s.report(), &c)
 }
 
+func hasASNData(dbs *geodb.Set) bool {
+	for _, d := range dbs.DBs {
+		if strings.Contains(strings.ToLower(d.ID), "asn") || strings.HasPrefix(d.ID, "ipinfo") {
+			return true
+		}
+	}
+	return false
+}
+
 func asnLookup(dbs *geodb.Set) func(netip.Addr) (uint, string) {
 	return func(a netip.Addr) (uint, string) {
 		for _, r := range dbs.Lookup(a) {
@@ -1130,10 +1140,8 @@ func cmdRoute(ctx context.Context, args []string) error {
 	s := &session{mode: "route", mask: c.mask, dbs: dbs, led: led}
 	screen := startScreen(&c, s)
 	defer screen.stop()
+	opts.NoASNData = !hasASNData(dbs)
 	rep := route.Run(ctx, n, opts)
-	if len(dbs.DBs) == 0 {
-		rep.Note = strings.TrimPrefix(rep.Note+"; no local ASN database (cii data update): hops and destinations are not attributed", "; ")
-	}
 	s.update(func() { s.route = rep })
 	screen.stop()
 	return output(s.report(), &c)
