@@ -104,6 +104,7 @@ iwr https://github.com/arngory/cii/releases/latest/download/cii-windows-amd64.ex
 | `cii censor` | только цензура, все режимы и полная сетка ([docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md)) |
 | `cii route` | только маршруты ([docs/ROUTE.md](docs/ROUTE.md)) |
 | `cii bench` | только бенчмарк, со своими настройками ([docs/BENCH.md](docs/BENCH.md)) |
+| `cii show [ЛОГ\|JSON\|-]` | показать прошлый запуск заново: без аргумента — последний локальный лог, можно файл лога, JSON от `--json` или `-` (стандартный ввод). Работают `--mask`, `--json`, `--debug`, `--svg`, `--lang`; в заголовке видно, из какого файла отчёт и когда он снят |
 | `cii diff [OLD NEW]` | что изменилось между двумя запусками; без аргументов — два последних лога |
 | `cii data update [ID…]` | скачать офлайн-базы у издателей; `status` — что скачано, `sources` — какие есть |
 | `cii version` | версия |
@@ -135,7 +136,7 @@ iwr https://github.com/arngory/cii/releases/latest/download/cii-windows-amd64.ex
 
 Свои ключи (ipinfo, IPQS, AbuseIPDB, Gemini и др.) включают дополнительные проверки — см. [docs/CONFIG.md](docs/CONFIG.md). Без них всё работает.
 
-**Лог.** Каждый запуск сохраняет кадр, подробный отчёт и JSON в локальный лог: `~/.local/state/cii/logs` на Linux, `~/Library/Logs/cii` на macOS, `%LOCALAPPDATA%\cii\logs` на Windows. Права — 0600, хранятся последние 20 запусков, никуда не отправляется. По логам работает `cii diff`.
+**Лог.** Каждый запуск сохраняет кадр, подробный отчёт и JSON в локальный лог: `~/.local/state/cii/logs` на Linux, `~/Library/Logs/cii` на macOS, `%LOCALAPPDATA%\cii\logs` на Windows. Права — 0600, хранятся последние 20 запусков, никуда не отправляется. По логам работают `cii show` и `cii diff`: например, `cii show --mask` выведет последний запуск без адресов и провайдера, даже если он проходил без `--mask`.
 
 **`--mask`** заменяет на `•••` всё, по чему можно узнать адрес или сеть: адреса и подсети в любом виде, номера и владельцев AS, PTR, адреса хопов, имена узлов CDN (кэш у провайдера часто назван по провайдеру), названия VPN и дата-центров в ответах. Страна, город и все результаты проверок остаются.
 
