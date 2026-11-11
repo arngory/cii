@@ -18,14 +18,15 @@ const Hidden = "•••"
 var (
 	addrLike   = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*(?:/\d{1,3})?`)
 	asnLike    = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
+	asnPrefix  = regexp.MustCompile(`^AS\d+\s*`)
 	nibbleLike = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
 	prefixType = reflect.TypeFor[netip.Prefix]()
 	orgFields  = []string{"ASOrg", "ASDomain", "Org", "Node"}
 	asnFields  = []string{"ASN", "OwnASN"}
-	freeText   = []string{"Detail", "Reason", "Error", "Notes", "Note"}
-	addrText   = []string{"Address", "Interface", "Query", "Via", "Disagree", "Addr", "Transit"}
+	freeText   = []string{"Detail", "Reason", "Error", "Notes", "Note", "Transit"}
+	addrText   = []string{"Address", "Interface", "Query", "Via", "Disagree", "Addr"}
 	genericOrg = map[string]bool{
 		"limited": true, "company": true, "corporation": true, "online": true, "internet": true,
 		"network": true, "networks": true, "telecom": true, "telecommunications": true,
@@ -121,14 +122,28 @@ func orgNames(r *Report) []string {
 			seen[s] = true
 		}
 	}
+	addOrg := func(org string) {
+		add(org)
+		for _, w := range strings.FieldsFunc(org, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' }) {
+			if len([]rune(w)) >= 4 {
+				add(w)
+			}
+		}
+	}
 	for _, h := range r.hosts() {
 		for _, g := range h.Geo {
-			for _, org := range []string{g.ASOrg, strings.SplitN(g.ASDomain, ".", 2)[0]} {
-				add(org)
-				for _, w := range strings.FieldsFunc(org, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' }) {
-					if len([]rune(w)) >= 4 {
-						add(w)
-					}
+			addOrg(g.ASOrg)
+			addOrg(strings.SplitN(g.ASDomain, ".", 2)[0])
+		}
+	}
+	if r.Route != nil {
+		for _, p := range r.Route.Paths {
+			for _, t := range p.Transit {
+				addOrg(asnPrefix.ReplaceAllString(t, ""))
+			}
+			for _, h := range p.Hops {
+				if h.ASN != 0 && h.ASN != p.ASN && h.ASN != p.Target.Expect {
+					addOrg(h.Org)
 				}
 			}
 		}
