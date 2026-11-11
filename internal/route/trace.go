@@ -3,6 +3,7 @@ package route
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"os"
@@ -128,6 +129,8 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 		}
 		active = append(active, i)
 	}
+	sentOK := 0
+	var sendErr error
 	for round := 1; round <= o.Rounds && ctx.Err() == nil; round++ {
 		for ttl := 1; ttl <= o.MaxTTL; ttl++ {
 			if err := pc.SetTTL(ttl); err != nil {
@@ -145,14 +148,28 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 				mu.Lock()
 				sent[seq] = time.Now()
 				mu.Unlock()
-				conn.WriteTo(b, &net.IPAddr{IP: paths[i].addr.AsSlice()})
+				if _, err := conn.WriteTo(b, &net.IPAddr{IP: paths[i].addr.AsSlice()}); err != nil {
+					if sendErr == nil {
+						sendErr = err
+					}
+				} else {
+					sentOK++
+				}
 			}
 			time.Sleep(2 * time.Millisecond)
+		}
+		if sentOK == 0 && sendErr != nil {
+			break
 		}
 		select {
 		case <-ctx.Done():
 		case <-time.After(o.Wait / time.Duration(max(o.Rounds, 1))):
 		}
+	}
+	if sentOK == 0 && sendErr != nil {
+		conn.SetReadDeadline(time.Now())
+		<-done
+		return fmt.Errorf("send: %s", describe(sendErr))
 	}
 	select {
 	case <-ctx.Done():

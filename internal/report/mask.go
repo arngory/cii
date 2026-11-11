@@ -22,7 +22,7 @@ var (
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
 	prefixType = reflect.TypeFor[netip.Prefix]()
-	orgFields  = []string{"ASOrg", "ASDomain", "Org"}
+	orgFields  = []string{"ASOrg", "ASDomain", "Org", "Node"}
 	asnFields  = []string{"ASN", "OwnASN"}
 	freeText   = []string{"Detail", "Reason", "Error", "Notes", "Note"}
 	addrText   = []string{"Address", "Interface", "Query", "Via", "Disagree", "Addr", "Transit"}

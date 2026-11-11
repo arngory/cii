@@ -42,6 +42,7 @@ func maskedSample() *Report {
 		{Group: "dpi", Service: "instagram.com", Status: probe.IPBlock, Detail: "31.13.66.174"},
 		{Group: "dns", Service: "Cloudflare 1.1.1.1", Status: probe.Yes},
 		{Group: "dns", Service: "Cloudflare 1.0.0.1", Status: probe.Yes},
+		{Group: "streaming", Service: "Netflix CDN", Status: probe.OK, IATA: "BER", Node: "c012-ber001-dtag-isp"},
 	})
 	r.Route = &route.Report{Method: "tcp", Note: "no hop data: listen ip4:icmp 203.0.113.7: bind: permission denied", OwnASN: 3320,
 		Paths: []route.Path{{Target: route.Target{Name: "Google", Host: "www.google.com"}, Addr: "192.0.2.80", ASN: 15169, Org: "Google LLC",
@@ -64,7 +65,7 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 	m.WriteDetailed(&det, false)
 	screen := strings.Join(m.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
 	for name, out := range map[string]string{"json": js.String(), "detailed": det.String(), "screen": screen} {
-		for _, leak := range []string{"203.0.113", "203-0-113", "2001:db8", "3320", "Telekom", "telekom", "Deutsche", "DTAG", "t-ipconnect", "ExampleVPN", "31.13.66", "127.255"} {
+		for _, leak := range []string{"203.0.113", "203-0-113", "2001:db8", "3320", "Telekom", "telekom", "Deutsche", "DTAG", "dtag", "t-ipconnect", "ExampleVPN", "31.13.66", "127.255"} {
 			if strings.Contains(strings.NewReplacer("www.telekom.de", "", "Telekom check", "").Replace(out), leak) {
 				t.Errorf("%s leaks %q", name, leak)
 			}
@@ -78,7 +79,7 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 	if e := m.Network[1]; e.Host != "www.telekom.de" || e.Purpose != "Telekom check" || m.Network[0].Host != "1.1.1.1" {
 		t.Errorf("ledger rewritten: %+v", m.Network)
 	}
-	if m.Censor[1].Service != "Cloudflare 1.1.1.1" || m.Censor[2].Service != "Cloudflare 1.0.0.1" {
+	if m.Censor[1].Service != "Cloudflare 1.1.1.1" || m.Censor[2].Service != "Cloudflare 1.0.0.1" || m.Censor[3].Node != "" || m.Censor[3].IATA != "BER" {
 		t.Errorf("check names rewritten: %+v", m.Censor)
 	}
 	if !m.Masked || orig.Masked {
