@@ -171,3 +171,24 @@ func TestWatchStep(t *testing.T) {
 		t.Errorf("logs written = %d, want 2", len(logs))
 	}
 }
+
+func TestMenuFitsNarrowTerminals(t *testing.T) {
+	for _, lang := range []string{"en", "ru"} {
+		for _, width := range []int{40, 50, 60} {
+			for _, l := range menuLines(lang, width) {
+				if n := len([]rune(l)); n > width {
+					t.Errorf("%s width %d: menu line is %d wide: %q", lang, width, n, l)
+				}
+			}
+			if n := len([]rune(menuPrompt(lang, width))); n >= width {
+				t.Errorf("%s width %d: prompt is %d wide", lang, width, n)
+			}
+		}
+		if wide := menuLines(lang, 140); !strings.Contains(wide[0], menu[0].hint[lang]) {
+			t.Errorf("%s: hints missing on a wide terminal: %q", lang, wide[0])
+		}
+	}
+	if got := wrapWords("one two three four", 10); len(got) != 2 || got[0] != "one two" || got[1] != "three four" {
+		t.Errorf("wrapWords = %q", got)
+	}
+}

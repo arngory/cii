@@ -74,7 +74,14 @@ var factorHeads = map[probe.Flag]string{
 	probe.Proxy: "proxy", probe.VPN: "VPN", probe.Tor: "Tor", probe.Hosting: "host", probe.Abuser: "abuse", probe.Bot: "bot",
 }
 
-const factorCell = 6
+const (
+	factorCell   = 6
+	factorNarrow = 4
+)
+
+var factorShort = map[probe.Flag]string{
+	probe.Proxy: "prx", probe.VPN: "VPN", probe.Tor: "Tor", probe.Hosting: "hst", probe.Abuser: "abu", probe.Bot: "bot",
+}
 
 func sectionRule(c paint, m marks, title string, iw int) string {
 	return c.bold(title) + " " + c.dim(strings.Repeat(m.rule, max(0, iw-utf8.RuneCountInString(title)-1)))
@@ -132,8 +139,14 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 			nameW = max(nameW, utf8.RuneCountInString(serviceName(r)))
 		}
 	}
-	nameW = min(nameW, max(8, iw-4-factorCell*len(probe.Flags)))
+	cellW := factorCell
+	if nameW+4+factorCell*len(probe.Flags) > iw {
+		cellW = factorNarrow
+	}
+	factorW := min(nameW, max(8, iw-4-cellW*len(probe.Flags)))
+	nameW = min(nameW, max(8, iw-24))
 	name := func(r probe.Result) string { return padVisible(serviceName(r), nameW) }
+	factorName := func(r probe.Result) string { return padVisible(serviceName(r), factorW) }
 
 	if t := typeLines(c, m, sources, name, nameW); len(t) > 0 {
 		lines = append(append(lines, "", sectionRule(c, m, m.tr("Type"), iw)), t...)
@@ -145,7 +158,7 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	if h.Region != nil {
 		verdict = h.Region.Verdict
 	}
-	if f := factorLines(c, m, sources, name, nameW, verdict); len(f) > 0 {
+	if f := factorLines(c, m, sources, factorName, factorW, cellW, verdict); len(f) > 0 {
 		lines = append(append(lines, "", sectionRule(c, m, m.tr("Factors"), iw)), f...)
 	}
 	return append(lines, reputationNotes(c, m, h)...)
@@ -181,7 +194,7 @@ func scoreLines(c paint, m marks, sources []probe.Result, name func(probe.Result
 	return out
 }
 
-func factorLines(c paint, m marks, sources []probe.Result, name func(probe.Result) string, nameW int, verdict []string) []string {
+func factorLines(c paint, m marks, sources []probe.Result, name func(probe.Result) string, nameW, cellW int, verdict []string) []string {
 	var rows []probe.Result
 	for _, r := range sources {
 		if len(r.Facts.Flags) > 0 {
@@ -192,11 +205,15 @@ func factorLines(c paint, m marks, sources []probe.Result, name func(probe.Resul
 		return nil
 	}
 	cell := func(text string, style func(string) string) string {
-		return strings.Repeat(" ", max(0, factorCell-utf8.RuneCountInString(text))) + style(text)
+		return strings.Repeat(" ", max(0, cellW-utf8.RuneCountInString(text))) + style(text)
 	}
 	head := pad("", nameW) + "  cc"
+	heads := factorHeads
+	if cellW < factorCell {
+		heads = factorShort
+	}
 	for _, f := range probe.Flags {
-		head += fmt.Sprintf("%*s", factorCell, factorHeads[f])
+		head += fmt.Sprintf("%*s", cellW, heads[f])
 	}
 	out := []string{c.dim(head)}
 	for _, r := range rows {

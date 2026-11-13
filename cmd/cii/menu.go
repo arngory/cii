@@ -61,12 +61,14 @@ var menu = []menuItem{
 var menuTexts = map[string]map[string]string{
 	"en": {
 		"prompt":  "Number (add m to hide addresses and provider, e.g. 2m; 0 exits) [1]: ",
+		"short":   "Number (2m masks, 0 exits) [1]: ",
 		"bad":     "Enter a number from 0 to %d, optionally followed by m.",
 		"nodata":  "No local databases yet: %d downloads them (country and ASN without asking services).",
 		"tagline": "complete information about current IP",
 	},
 	"ru": {
 		"prompt":  "Номер (добавьте m, чтобы скрыть адреса и провайдера, например 2m; 0 — выход) [1]: ",
+		"short":   "Номер (2m — маска, 0 — выход) [1]: ",
 		"bad":     "Введите число от 0 до %d, при желании с буквой m.",
 		"nodata":  "Локальных баз пока нет: пункт %d скачает их (страна и ASN без обращений к сервисам).",
 		"tagline": "полная информация о текущем IP",
@@ -105,8 +107,42 @@ func interactive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 }
 
+func menuWidth() int {
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		return w
+	}
+	return 80
+}
+
+func menuPrompt(lang string, width int) string {
+	t := menuTexts[lang]
+	if len([]rune(t["prompt"])) >= width {
+		return t["short"]
+	}
+	return t["prompt"]
+}
+
+func menuLines(lang string, width int) []string {
+	titleW, hintW := 0, 0
+	for _, it := range menu {
+		titleW = max(titleW, len([]rune(it.title[lang])))
+		hintW = max(hintW, len([]rune(it.hint[lang])))
+	}
+	hints := 6+titleW+2+hintW <= width
+	var out []string
+	for i, it := range menu {
+		line := fmt.Sprintf("  %2d  %s", i+1, it.title[lang])
+		if hints {
+			line += strings.Repeat(" ", titleW-len([]rune(it.title[lang]))) + "  " + it.hint[lang]
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
 func printMenu(lang string) {
 	t := menuTexts[lang]
+	width := menuWidth()
 	c := func(code, s string) string {
 		if !report.ColorEnabled() {
 			return s
@@ -114,21 +150,18 @@ func printMenu(lang string) {
 		return "\x1b[" + code + "m" + s + "\x1b[0m"
 	}
 	fmt.Printf("%s %s — %s\n\n", c("1", version.Name), version.Version, t["tagline"])
-	width := 0
-	for _, it := range menu {
-		width = max(width, len([]rune(it.title[lang])))
-	}
-	for i, it := range menu {
-		title := it.title[lang]
-		pad := strings.Repeat(" ", width-len([]rune(title)))
-		fmt.Printf("  %s  %s%s  %s\n", c("1", fmt.Sprintf("%2d", i+1)), title, pad, c("2", it.hint[lang]))
+	for i, line := range menuLines(lang, width) {
+		title := "  " + fmt.Sprintf("%2d", i+1) + "  " + menu[i].title[lang]
+		fmt.Println(c("1", line[:6]) + line[6:len(title)] + c("2", line[len(title):]))
 	}
 	fmt.Println()
 	if dbs, err := geodb.Open(paths.DataDir()); err == nil {
 		empty := len(dbs.DBs) == 0
 		dbs.Close()
 		if empty {
-			fmt.Println(c("33", fmt.Sprintf(t["nodata"], len(menu))))
+			for _, l := range wrapWords(fmt.Sprintf(t["nodata"], len(menu)), width) {
+				fmt.Println(c("33", l))
+			}
 		}
 	}
 }
@@ -145,7 +178,7 @@ func runMenu(ctx context.Context) error {
 		}
 	}()
 	for range 3 {
-		fmt.Print(menuTexts[lang]["prompt"])
+		fmt.Print(menuPrompt(lang, menuWidth()))
 		var line string
 		var ok bool
 		select {
@@ -170,4 +203,23 @@ func runMenu(ctx context.Context) error {
 		return run(ctx, args)
 	}
 	return errors.New("no valid choice")
+}
+
+func wrapWords(s string, width int) []string {
+	var out []string
+	line := ""
+	for _, w := range strings.Fields(s) {
+		if line != "" && len([]rune(line))+1+len([]rune(w)) > width {
+			out = append(out, line)
+			line = ""
+		}
+		if line != "" {
+			line += " "
+		}
+		line += w
+	}
+	if line != "" {
+		out = append(out, line)
+	}
+	return out
 }
