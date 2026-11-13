@@ -61,6 +61,7 @@ Usage:
   cii analyze [LOG|JSON|-]    conclusions drawn from a run (default: the latest local log); nothing is checked again
   cii stats [LOG...]          which checks did not always answer across local logs
   cii compare A B [C...]      reports from different machines side by side, plus the list of differences for two
+  cii watch [flags]           repeat the check every --every (default 30m, minimum 5m) and print what changed; --count N stops after N runs
   cii version
 
 Default command only:
@@ -150,6 +151,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdStats(args)
 	case "compare":
 		return cmdCompare(args)
+	case "watch":
+		return cmdWatch(ctx, args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -162,9 +165,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo, prom bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from, promFile                    string
-	timeout                                                                                       time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo, prom, quiet bool
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from, promFile                           string
+	timeout                                                                                              time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -288,11 +291,9 @@ func (c *common) check() error {
 
 func cmdIP(ctx context.Context, args []string) error {
 	var c common
-	var withBench, noCensor, withRoute bool
+	var f ipFlags
 	fs := flag.NewFlagSet("cii", flag.ContinueOnError)
-	fs.BoolVar(&withBench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
-	fs.BoolVar(&noCensor, "no-censor", false, "skip censorship checks")
-	fs.BoolVar(&withRoute, "route", false, "also analyse paths to major networks (see cii route)")
+	f.register(fs)
 	fs.BoolVar(&c.demo, "demo", false, "render invented sample data, no network")
 	c.registerExports(fs)
 	if err := c.parse(fs, args); err != nil {
@@ -309,30 +310,140 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		return output(rep, &c)
 	}
+	rep, err := collectIP(ctx, &c, f)
+	if err != nil || rep == nil {
+		return err
+	}
+	return output(rep, &c)
+}
+
+const (
+	watchDefault = 30 * time.Minute
+	watchMinimum = 5 * time.Minute
+)
+
+func cmdWatch(ctx context.Context, args []string) error {
+	var c common
+	var f ipFlags
+	every, count := watchDefault, 0
+	fs := flag.NewFlagSet("cii watch", flag.ContinueOnError)
+	f.register(fs)
+	c.registerExports(fs)
+	fs.DurationVar(&every, "every", every, "pause between runs, 5m or more")
+	fs.IntVar(&count, "count", count, "stop after this many runs (0: until interrupted)")
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	switch {
+	case fs.NArg() > 0:
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	case every < watchMinimum:
+		return fmt.Errorf("--every %s is too often: the checks query other people's services, the minimum is %s", every, watchMinimum)
+	case count < 0:
+		return errors.New("--count must not be negative")
+	case c.prom:
+		return errors.New("--prom prints a single report; with watch use --prom-file")
+	}
+	var prev *report.Report
+	for n := 1; ; n++ {
+		rc := c
+		rc.quiet = prev != nil
+		rep, err := collectIP(ctx, &rc, f)
+		switch {
+		case err != nil && prev == nil:
+			return err
+		case err != nil:
+			fmt.Printf("%s  run %d failed: %v\n", time.Now().Format("15:04"), n, err)
+		case rep == nil:
+			return nil
+		case prev == nil:
+			if err := output(rep, &rc); err != nil {
+				return err
+			}
+			prev = rep
+		default:
+			if err := watchStep(&rc, n, prev, rep); err != nil {
+				return err
+			}
+			prev = rep
+		}
+		if ctx.Err() != nil || count > 0 && n >= count {
+			return nil
+		}
+		timer := time.NewTimer(every)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+	}
+}
+
+func watchStep(c *common, n int, prev, cur *report.Report) error {
+	_, logErr := writeLog(cur, c)
+	if logErr != nil {
+		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
+	}
+	if c.promFile != "" {
+		if err := writeMetricsFile(cur, c.promFile); err != nil {
+			return fmt.Errorf("--prom-file: %w", err)
+		}
+	}
+	changes := report.Diff(prev, cur)
+	stamp := cur.GeneratedAt.Local().Format("15:04")
+	if c.json {
+		return json.NewEncoder(os.Stdout).Encode(struct {
+			Run     int             `json:"run"`
+			Taken   time.Time       `json:"generated_at"`
+			Changes []report.Change `json:"changes"`
+		}{n, cur.GeneratedAt, append([]report.Change{}, changes...)})
+	}
+	if len(changes) == 0 {
+		fmt.Printf("%s  run %d: %s\n", stamp, n, report.Translate(c.language(), "no changes"))
+		return nil
+	}
+	fmt.Println()
+	report.WriteDiff(os.Stdout, c.color(), prev.GeneratedAt.Local().Format("15:04"), stamp, changes)
+	return nil
+}
+
+type ipFlags struct{ bench, noCensor, route bool }
+
+func (f *ipFlags) register(fs *flag.FlagSet) {
+	fs.BoolVar(&f.bench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
+	fs.BoolVar(&f.noCensor, "no-censor", false, "skip censorship checks")
+	fs.BoolVar(&f.route, "route", false, "also analyse paths to major networks (see cii route)")
+}
+
+func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, error) {
+	c := *cp
+	defer func() { *cp = c }()
+	withBench, noCensor, withRoute := f.bench, f.noCensor, f.route
 	cfg, err := config.Load(c.cfgPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	exits := c.exits()
 	for _, e := range exits {
 		if _, err := e.c.baseOptions(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if len(exits) == 1 {
 		c = exits[0].c
 	}
 	if len(exits) > 1 && c.offline {
-		return errors.New("--offline cannot check several proxies: exits are only known online")
+		return nil, errors.New("--offline cannot check several proxies: exits are only known online")
 	}
 	if len(exits) > 1 && withBench {
-		return errors.New("--bench measures one path; run it without a list of proxies")
+		return nil, errors.New("--bench measures one path; run it without a list of proxies")
 	}
 	if len(exits) > 1 && withRoute {
-		return errors.New("--route measures one path; run it without a list of proxies")
+		return nil, errors.New("--route measures one path; run it without a list of proxies")
 	}
 	if withRoute && c.offline {
-		return errors.New("--route needs the network; drop --offline")
+		return nil, errors.New("--route needs the network; drop --offline")
 	}
 
 	providers := cfg.IPEcho
@@ -340,7 +451,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		providers = ipdetect.DefaultProviders
 	}
 	if c.quick && c.extended {
-		return errors.New("--quick and --extended are mutually exclusive")
+		return nil, errors.New("--quick and --extended are mutually exclusive")
 	}
 	var checks []probe.Check
 	var catalogs []string
@@ -348,7 +459,7 @@ func cmdIP(ctx context.Context, args []string) error {
 	if !c.quick {
 		checks = append(region.Select(cfg.Keys, c.extended), services.Select(cfg.Keys, c.extended)...)
 		if catalogs, err = c.catalogs(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if riskOn {
@@ -378,21 +489,21 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		if withRoute {
 			if routeList, err = routeTargets(cfg, ""); err != nil {
-				return err
+				return nil, err
 			}
 			policy.Add(route.Rules(routeList)...)
 		}
 	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
-		return nil
+		return nil, nil
 	}
 
 	led := ledger.New()
 
 	dbs, err := geodb.Open(c.dir())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer dbs.Close()
 
@@ -506,7 +617,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		s.update(func() { s.bench = &b })
 	}
 	screen.stop()
-	return output(s.report(), &c)
+	return s.report(), nil
 }
 
 type target struct {

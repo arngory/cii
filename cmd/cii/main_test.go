@@ -137,3 +137,34 @@ func TestParseChoice(t *testing.T) {
 		}
 	}
 }
+
+func TestWatchStep(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CII_LOG_DIR", filepath.Join(dir, "logs"))
+	prev, cur := report.Demo("online"), report.Demo("online")
+	cur.GeneratedAt = cur.GeneratedAt.Add(30 * time.Minute)
+	cur.IPv4.Services[0].Status = "no"
+	c := &common{noColor: true, lang: "en", promFile: filepath.Join(dir, "cii.prom")}
+	old := os.Stdout
+	rd, wr, _ := os.Pipe()
+	os.Stdout = wr
+	err1 := watchStep(c, 2, prev, cur)
+	err2 := watchStep(c, 3, cur, cur)
+	wr.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(rd)
+	out := buf.String()
+	if err1 != nil || err2 != nil {
+		t.Fatalf("watchStep: %v %v", err1, err2)
+	}
+	if !strings.Contains(out, "Streaming: Netflix") || !strings.Contains(out, "run 3: no changes") {
+		t.Errorf("watch output:\n%s", out)
+	}
+	if prom, err := os.ReadFile(c.promFile); err != nil || !strings.Contains(string(prom), "cii_check_available") {
+		t.Errorf("metrics file: %v", err)
+	}
+	if logs, _ := runlog.List(filepath.Join(dir, "logs")); len(logs) != 2 {
+		t.Errorf("logs written = %d, want 2", len(logs))
+	}
+}

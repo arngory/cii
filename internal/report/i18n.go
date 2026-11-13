@@ -15,6 +15,7 @@ var translations = map[string]map[string]string{
 		"Runs analysed:":                     "Разобрано запусков:",
 		"Every check answered in every run.": "Все проверки ответили во всех запусках.",
 		"Checks that did not always answer (answered / runs; ? no answer, ! error):": "Проверки, которые отвечали не всегда (ответили / запусков; ? нет ответа, ! ошибка):",
+		"no changes":                        "без изменений",
 		"analysis":                          "выводы",
 		"method":                            "метод",
 		"fastest":                           "быстрейший",

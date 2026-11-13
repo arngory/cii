@@ -128,6 +128,7 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 | `cii stats [LOG…]` | which checks did not always answer, across all local logs: this shows a check that broke because the service changed |
 | `cii diff [OLD NEW]` | what changed between two runs; without arguments, the last two logs |
 | `cii compare A B [C…]` | reports from different machines side by side (two to six logs or JSON files): an IP quality panel per point and one service grid with a mark for each; for two points the list of differences follows. `--mask`, `--json` and `--svg` apply |
+| `cii watch` | repeat the check every `--every` (30 minutes by default, no more often than 5) and print what changed: address, verdict, service access, blocking, scores. The first run shows the full report. `--count N` stops after N runs, `--prom-file` refreshes a metrics file. Takes the flags of `cii` (`--extended`, `--route`, `--mask`…); with `--mask` an address change is not visible |
 | `cii data update [ID…]` | fetch offline databases from their publishers; `status` shows what is installed, `sources` what is available |
 | `cii version` | version |
 
@@ -151,6 +152,7 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 | `--debug` | full tables, failure reasons and the log of every connection |
 | `--mask` | hide addresses, prefixes, AS numbers and holders, PTR — for screenshots |
 | `--svg FILE` | save the final screen as an SVG image |
+| `--prom`, `--prom-file FILE` | print the report as Prometheus metrics instead of the screen; write them to a file (for example for the node_exporter textfile collector) |
 | `--demo` | show the report on invented data, no network |
 | `--lang auto\|en\|ru` | screen language; `--debug` and JSON stay in English |
 | `--no-color`, `--no-log` | no colours; no local log |
