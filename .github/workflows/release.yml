@@ -95,6 +95,7 @@ jobs:
           ACTOR: ${{ github.actor }}
           IMAGE: ghcr.io/${{ github.repository }}
           SOURCE: https://github.com/${{ github.repository }}
+          DESCRIPTION: "cii: complete information about current IP (region, IP quality, services, censorship, routes, benchmark)"
         run: |
           set -euo pipefail
           ctx=$(mktemp -d)
@@ -111,7 +112,8 @@ jobs:
             --label "org.opencontainers.image.source=$SOURCE" \
             --label "org.opencontainers.image.version=${TAG#v}" \
             --label "org.opencontainers.image.licenses=AGPL-3.0-only" \
-            --label "org.opencontainers.image.description=cii: complete information about current IP (region, IP quality, services, censorship, routes, benchmark)" \
+            --label "org.opencontainers.image.description=$DESCRIPTION" \
+            --annotation "index:org.opencontainers.image.description=$DESCRIPTION" \
             --push "$ctx"
 
       - name: Update the Homebrew formula and Scoop manifest in the repository
