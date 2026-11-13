@@ -59,14 +59,14 @@ func TestDemoUsesDocumentationData(t *testing.T) {
 }
 
 func TestDemoImagesAreCurrent(t *testing.T) {
-	for name, spec := range DemoImages() {
-		want, err := DemoSVG(spec[0].(string), spec[1].(int))
+	for _, img := range DemoImages() {
+		want, err := DemoSVG(img.Lang, img.Width)
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := os.ReadFile(filepath.Join("..", "..", "docs", "img", name))
+		got, err := os.ReadFile(filepath.Join("..", "..", "docs", "img", img.File))
 		if err != nil || !bytes.Equal(got, want) {
-			t.Errorf("docs/img/%s is out of date: run `make demo` (%v)", name, err)
+			t.Errorf("docs/img/%s is out of date: run `make demo` (%v)", img.File, err)
 		}
 	}
 }

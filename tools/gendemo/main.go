@@ -9,10 +9,10 @@ import (
 )
 
 func main() {
-	for name, spec := range report.DemoImages() {
-		svg, err := report.DemoSVG(spec[0].(string), spec[1].(int))
+	for _, img := range report.DemoImages() {
+		svg, err := report.DemoSVG(img.Lang, img.Width)
 		if err == nil {
-			err = os.WriteFile(filepath.Join("docs", "img", name), svg, 0o644)
+			err = os.WriteFile(filepath.Join("docs", "img", img.File), svg, 0o644)
 		}
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "gendemo:", err)

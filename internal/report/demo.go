@@ -95,9 +95,14 @@ func Demo(mode string) *Report {
 }
 
 const (
-	DemoWide   = 118
-	DemoNarrow = 60
+	demoWide   = 118
+	demoNarrow = 60
 )
+
+type DemoImage struct {
+	File, Lang string
+	Width      int
+}
 
 func DemoSVG(lang string, width int) ([]byte, error) {
 	r := Demo("online")
@@ -108,11 +113,11 @@ func DemoSVG(lang string, width int) ([]byte, error) {
 	return b.Bytes(), err
 }
 
-func DemoImages() map[string][2]any {
-	return map[string][2]any{
-		"demo-en.svg":        {"en", DemoWide},
-		"demo-ru.svg":        {"ru", DemoWide},
-		"demo-en-narrow.svg": {"en", DemoNarrow},
-		"demo-ru-narrow.svg": {"ru", DemoNarrow},
+func DemoImages() []DemoImage {
+	return []DemoImage{
+		{"demo-en.svg", "en", demoWide},
+		{"demo-ru.svg", "ru", demoWide},
+		{"demo-en-narrow.svg", "en", demoNarrow},
+		{"demo-ru-narrow.svg", "ru", demoNarrow},
 	}
 }
