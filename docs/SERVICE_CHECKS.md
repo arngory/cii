@@ -1,5 +1,7 @@
 # Проверки доступности сервисов
 
+[English version](en/SERVICE_CHECKS.md)
+
 Модуль `services` проверяет, доступны ли сервисы с вашего адреса. Источники идей: [RegionRestrictionCheck](https://github.com/lmc999/RegionRestrictionCheck) (мультирегиональный блок), [IPQuality](https://github.com/xykt/IPQuality) и [ipregion](https://github.com/vernette/ipregion); пересечения между ними сведены в одну проверку. Реализация своя, один-два запроса на сервис за запуск, честный User-Agent. `--quick` отключает модуль, `--plan` показывает его хосты.
 
 Статусы: `yes` (доступно, при возможности со страной, которую определил сервис), `no` (недоступно в этом регионе), `partial` (например, Netflix — только собственные сериалы), `blocked` (сервис отказал именно этому адресу), `?` (ответ без признаков), `error` (сбой, лимит, HTTP-ошибка; причина — в «Failed checks»).

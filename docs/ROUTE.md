@@ -1,5 +1,7 @@
 # Маршруты: `cii route`
 
+[English version](en/ROUTE.md)
+
 Модуль показывает, как трафик доходит до крупных сетей: напрямую, через пиринг, через транзит или с крюком. Идея и пороги — из [remnawave/geocheck](https://github.com/remnawave/geocheck), реализация своя.
 
 ```

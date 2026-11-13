@@ -4,7 +4,7 @@
 
 **cii — complete information about current IP.** One static binary that puts into a single report what usually takes several scripts: where databases and services think your IP is, who owns the network, how clean the address is, which services work from here, whether there is censorship, DPI or DNS tampering, how traffic is routed and how fast the link is.
 
-cii only contacts destinations its modules declare up front (`cii --plan` prints all of them). It sends no reports to anyone, keeps no counters or telemetry, downloads and runs no code, and uses no one else's proxies or keys. See [docs/NETWORK_POLICY.md](docs/NETWORK_POLICY.md).
+cii only contacts destinations its modules declare up front (`cii --plan` prints all of them). It sends no reports to anyone, keeps no counters or telemetry, downloads and runs no code, and uses no one else's proxies or keys. See [docs/NETWORK_POLICY.md](docs/en/NETWORK_POLICY.md).
 
 ## Run in one line
 
@@ -120,9 +120,9 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 |---|---|
 | `cii` | the full check: address, IP quality, region, services, reputation, censorship (DNS, Telegram, connectivity checks) |
 | `cii lookup IP…` | describe given addresses from local databases, no network |
-| `cii censor` | censorship only, every mode and the full grid ([docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md)) |
-| `cii route` | routes only ([docs/ROUTE.md](docs/ROUTE.md)) |
-| `cii bench` | the benchmark only, with its own options ([docs/BENCH.md](docs/BENCH.md)) |
+| `cii censor` | censorship only, every mode and the full grid ([docs/CENSOR_CHECKS.md](docs/en/CENSOR_CHECKS.md)) |
+| `cii route` | routes only ([docs/ROUTE.md](docs/en/ROUTE.md)) |
+| `cii bench` | the benchmark only, with its own options ([docs/BENCH.md](docs/en/BENCH.md)) |
 | `cii show [LOG\|JSON\|-]` | print a past run again: the latest local log by default, or a log file, a `--json` file or `-` for standard input. `--mask`, `--json`, `--debug`, `--svg` and `--lang` apply; the title names the file and when the run was taken |
 | `cii analyze [LOG\|JSON\|-]` | conclusions from a finished run, checking nothing again: DNS interception and what follows from it, blocking, altered HTTP or TLS, a tunnel, address type and risk flags, blocklists, route detours. The latest log by default; `--mask`, `--json` and `--lang` apply. The `cii` report itself stays as is, without interpretation |
 | `cii stats [LOG…]` | which checks did not always answer, across all local logs: this shows a check that broke because the service changed |
@@ -155,7 +155,7 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 | `--no-color`, `--no-log` | no colours; no local log |
 | `--config FILE`, `--data-dir DIR` | your config (keys, your own echo service) and database directory |
 
-Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks — see [docs/CONFIG.md](docs/CONFIG.md). Everything works without them.
+Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks — see [docs/CONFIG.md](docs/en/CONFIG.md). Everything works without them.
 
 **Log.** Every run saves the frame, the detailed report and JSON to a local log: `~/.local/state/cii/logs` on Linux, `~/Library/Logs/cii` on macOS, `%LOCALAPPDATA%\cii\logs` on Windows. Mode 0600, the last 20 runs are kept, nothing is sent anywhere. `cii show` and `cii diff` work from these logs: `cii show --mask`, for example, prints the latest run without addresses or provider even if it ran without `--mask`.
 
@@ -195,21 +195,21 @@ From source: `make build` (needs the Go version from `go.mod`).
 
 ## Documentation
 
-The detailed documentation is in Russian.
+The user documentation is available in English under `docs/en/`; the developer documents (architecture, development, roadmap) are in Russian.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design, modules, report format
-- [docs/NETWORK_POLICY.md](docs/NETWORK_POLICY.md) — network policy and ToS/FUP rules
-- [docs/CONFIG.md](docs/CONFIG.md) — configuration and your own keys
-- [docs/REGION_CHECKS.md](docs/REGION_CHECKS.md), [docs/SERVICE_CHECKS.md](docs/SERVICE_CHECKS.md), [docs/catalogs/](docs/catalogs/) — region and services
-- [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md) — reputation, DNSBL, mail, known ranges
-- [docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md) — DNS, connectivity checks, DPI, geoblocking, Telegram
-- [docs/ROUTE.md](docs/ROUTE.md) — routes
-- [docs/BENCH.md](docs/BENCH.md) — benchmark
-- [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) — offline databases and licences
+- [docs/NETWORK_POLICY.md](docs/en/NETWORK_POLICY.md) — network policy and ToS/FUP rules
+- [docs/CONFIG.md](docs/en/CONFIG.md) — configuration and your own keys
+- [docs/REGION_CHECKS.md](docs/en/REGION_CHECKS.md), [docs/SERVICE_CHECKS.md](docs/en/SERVICE_CHECKS.md), [docs/catalogs/](docs/catalogs/) — region and services
+- [docs/RISK_CHECKS.md](docs/en/RISK_CHECKS.md) — reputation, DNSBL, mail, known ranges
+- [docs/CENSOR_CHECKS.md](docs/en/CENSOR_CHECKS.md) — DNS, connectivity checks, DPI, geoblocking, Telegram
+- [docs/ROUTE.md](docs/en/ROUTE.md) — routes
+- [docs/BENCH.md](docs/en/BENCH.md) — benchmark
+- [docs/DATA_SOURCES.md](docs/en/DATA_SOURCES.md) — offline databases and licences
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — build, tests, releases
 - [docs/ROADMAP.md](docs/ROADMAP.md) — roadmap
 - [CREDITS.md](CREDITS.md) — credits and the origin of ideas
 
 ## Licence
 
-[AGPL-3.0](LICENSE). DB-IP data is CC BY 4.0, IPinfo Lite is CC BY-SA 4.0 (see [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)).
+[AGPL-3.0](LICENSE). DB-IP data is CC BY 4.0, IPinfo Lite is CC BY-SA 4.0 (see [docs/DATA_SOURCES.md](docs/en/DATA_SOURCES.md)).

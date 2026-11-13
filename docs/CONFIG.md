@@ -1,5 +1,7 @@
 # Конфигурация
 
+[English version](en/CONFIG.md)
+
 Конфиг необязателен. По умолчанию он ищется в `<каталог конфига>/cii/config.yaml`: на Linux это `~/.config/cii/config.yaml`; путь можно переопределить через `CII_CONFIG_DIR` или `--config`. Каталог данных: `~/.local/share/cii` на Linux, `~/Library/Application Support/cii` на macOS, `%LOCALAPPDATA%\cii` на Windows; переопределяется через `CII_DATA_DIR` или `--data-dir`.
 
 ```yaml

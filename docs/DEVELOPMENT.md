@@ -45,6 +45,10 @@ go generate ./internal/refdata
 
 Секрет добавляется в Settings → Secrets and variables → Actions → New repository secret. Имя: `IPINFO_TOKEN`, значение: токен с https://ipinfo.io/dashboard. Внутри workflow токен передаётся в `CII_IPINFO_TOKEN` и не попадает в манифест.
 
+## Перевод документации
+
+Источник — русские документы в `docs/`. Английские версии пользовательских документов лежат в `docs/en/` под теми же именами: CONFIG, NETWORK_POLICY, REGION_CHECKS, SERVICE_CHECKS, RISK_CHECKS, CENSOR_CHECKS, ROUTE, BENCH, DATA_SOURCES. При правке русского документа тот же абзац правится в английском. Структура (заголовки, таблицы, списки) в обеих версиях одинаковая, чтобы их можно было сверять построчно. Документы для разработчиков и каталоги сервисов не переводятся.
+
 ## Цикл ревью (Stop-хук Claude Code)
 
 В `.claude/settings.json` зарегистрирован Stop-хук `.claude/hooks/review-on-stop.sh`. Когда Claude Code пытается завершить ответ, хук:
