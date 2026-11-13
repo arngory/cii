@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"io"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -75,8 +74,6 @@ var analysisRU = map[string]string{
 	"See them with --debug; `cii stats` shows which ones never answer.": "Они видны с --debug; `cii stats` покажет, какие не отвечают никогда.",
 	"Nothing unusual found": "Ничего необычного не найдено",
 }
-
-var smtpReply = regexp.MustCompile(`^\d{3}[ -]`)
 
 type analysis struct {
 	lang string
@@ -237,10 +234,10 @@ func (a *analysis) host(label string, h *Host) {
 	}
 	for _, res := range h.Services {
 		switch {
-		case res.Group == risk.Mail && res.Status == probe.No && (strings.HasPrefix(res.Detail, "connected to ") || smtpReply.MatchString(res.Detail)):
-			a.add(Warn, a.t("Port 25 is open, but the mail server did not accept this address"), res.Detail)
-		case res.Group == risk.Mail && res.Status == probe.No:
+		case res.Group == risk.Mail && res.Status == probe.No && strings.HasPrefix(res.Detail, "connection "):
 			a.add(Info, a.t("Outbound port 25 is closed: mail cannot be sent directly from this address"), "")
+		case res.Group == risk.Mail && res.Status == probe.No:
+			a.add(Warn, a.t("Port 25 is open, but the mail server did not accept this address"), res.Detail)
 		case res.Group == risk.Network && res.Service == "Known ranges" && (res.Status == probe.No || res.Status == probe.Partial):
 			level := Info
 			if res.Status == probe.No {

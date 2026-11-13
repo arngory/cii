@@ -30,7 +30,7 @@ func TestAnalyzeFindings(t *testing.T) {
 		{Group: services.AI, Service: "ChatGPT app", Status: probe.IPBlock},
 		{Group: risk.DNSBL, Service: "zen.spamhaus.org", Status: probe.Unknown, Reason: "refused: query via public/open resolver"},
 		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.No},
-		{Group: risk.Mail, Service: "Outbound SMTP (25)", Status: probe.No},
+		{Group: risk.Mail, Service: "Outbound SMTP (25)", Status: probe.No, Detail: "connection timed out, port 25 likely filtered (mx.example)"},
 		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.No, Facts: demoFacts("hosting", "", 80, 3, map[probe.Flag]bool{probe.VPN: true, probe.Hosting: true})},
 	})
 	h.SetRegion(region.Summarize([]probe.Result{
@@ -92,10 +92,11 @@ func TestAnalyzeFindings(t *testing.T) {
 	if strings.Contains(out, "Nothing unusual") || strings.Index(out, "alert") > strings.Index(out, "warn") {
 		t.Errorf("order or summary wrong:\n%s", out)
 	}
-	h.Services[4].Detail = "554 5.7.1 Client host blocked"
-	h.refreshProfile()
-	if refused := analysed(t, r, "en"); strings.Contains(refused, "port 25 is closed") || !strings.Contains(refused, "warn | Port 25 is open, but the mail server did not accept this address | 554 5.7.1") {
-		t.Errorf("an SMTP rejection was reported as a closed port:\n%s", refused)
+	for _, detail := range []string{"554 5.7.1 Client host blocked", "554", "", "connected to mx.example, closed without banner"} {
+		h.Services[4].Detail = detail
+		if refused := analysed(t, r, "en"); strings.Contains(refused, "port 25 is closed") || !strings.Contains(refused, "warn | Port 25 is open, but the mail server did not accept this address | "+detail) {
+			t.Errorf("detail %q: an open port was reported as closed:\n%s", detail, refused)
+		}
 	}
 	r.Censor = r.Censor[:1]
 	if alone := analysed(t, r, "en"); strings.Contains(alone, "transparent forwarder") || !strings.Contains(alone, "| OpenDNS: I am not an OpenDNS resolver.\n") {
