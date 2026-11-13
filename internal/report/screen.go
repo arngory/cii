@@ -408,6 +408,11 @@ func Progress(r *Report) (done, total int) {
 
 const maxFindings = 8
 
+func extends(long, short string) bool {
+	rest, ok := strings.CutPrefix(long, short)
+	return ok && (rest == "" || strings.ContainsAny(rest[:1], " ,;"))
+}
+
 func resolverExits(rs []probe.Result) []string {
 	var out []string
 	for _, r := range rs {
@@ -415,7 +420,7 @@ func resolverExits(rs []probe.Result) []string {
 			continue
 		}
 		exit := strings.TrimSpace(r.Country + " " + r.Detail)
-		if exit != "" && !slices.ContainsFunc(out, func(have string) bool { return strings.HasPrefix(have, exit) || strings.HasPrefix(exit, have) }) {
+		if exit != "" && !slices.ContainsFunc(out, func(have string) bool { return extends(have, exit) || extends(exit, have) }) {
 			out = append(out, exit)
 		}
 	}

@@ -45,7 +45,7 @@ func customTitle(g probe.Group) string {
 	if g == Custom {
 		return "Custom"
 	}
-	if t, ok := strings.CutPrefix(string(g), customPrefix); ok {
+	if t, ok := OwnGroup(g); ok {
 		return t
 	}
 	return ""

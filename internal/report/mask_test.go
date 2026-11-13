@@ -184,6 +184,7 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 		own(services.Custom, "intra.corp.example", "198.51.100.5", probe.Yes, ""),
 		own(services.Custom, "xn--b1aajm.example", "xn--b1aajm.example", probe.Failed, "lookup xn--b1aajm.example: no such host"),
 		own(services.Custom, "Films", "www.netflix.com", probe.Yes, ""),
+		own(services.Custom, "Cert", "wiki.example.org", probe.Failed, "tls: failed to verify certificate: x509: certificate is valid for *.Corp.Example, corp.example, not wiki.example.org"),
 		own("custom:files.corp.example", "Files", "files.corp.example", probe.Yes, ""),
 		own("custom:Shop.Example.org mirrors", "Mirror", "shop.example.org", probe.Yes, ""),
 		{Group: services.Streaming, Service: "Netflix", Status: probe.Yes},
@@ -215,7 +216,7 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 		}
 	}
 	for _, keep := range []string{`"service": "check 1"`, `"service": "check 2"`, `"service": "check 3"`, `"service": "check 4"`, `"service": "check 5"`,
-		`"service": "Shop"`, `"service": "Films"`, `"service": "Files"`, `"service": "Mirror"`, `"group": "custom:Work"`, `"service": "Netflix"`, `"reason": "HTTP 403"`, `"reason": "dial tcp: lookup •••: no such host"`,
+		`"service": "Shop"`, `"service": "Films"`, `"service": "Files"`, `"service": "Mirror"`, `"group": "custom:Work"`, `"service": "Netflix"`, `"reason": "HTTP 403"`, `"reason": "tls: failed to verify certificate: x509: certificate is valid for •••, •••, not •••"`, `"reason": "dial tcp: lookup •••: no such host"`,
 		"www.primevideo.com", `"purpose": "services: Shop; services: check 3"`, `"purpose": "services: check 4"`, `"purpose": "region: other"`} {
 		if !strings.Contains(out, keep) {
 			t.Errorf("masked report lost %s:\n%s", keep, out)

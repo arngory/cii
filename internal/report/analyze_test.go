@@ -257,3 +257,23 @@ func TestAnalyzeResolverExit(t *testing.T) {
 		t.Errorf("masked screen lost the resolver country:\n%s", masked)
 	}
 }
+
+func TestResolverExitLines(t *testing.T) {
+	exit := func(service, country, detail string) probe.Result {
+		return probe.Result{Group: censor.DNS, Service: censor.EgressPrefix + service, Status: probe.Yes, Country: country, Detail: detail}
+	}
+	for name, c := range map[string]struct {
+		rs   []probe.Result
+		want []string
+	}{
+		"bare addresses": {[]probe.Result{exit(" (Akamai)", "", "203.0.113.53"), exit(" (Google)", "", "203.0.113.5")}, []string{"203.0.113.53", "203.0.113.5"}},
+		"same resolver":  {[]probe.Result{exit(" (Akamai)", "DE", "203.0.113.53 AS64500 Example"), exit(" (Google)", "DE", "203.0.113.53 AS64500 Example")}, []string{"DE 203.0.113.53 AS64500 Example"}},
+		"client subnet": {[]probe.Result{exit(" (Akamai)", "", "203.0.113.53"), exit(" (Google)", "", "203.0.113.53; client subnet 192.0.2.0/24")},
+			[]string{"203.0.113.53"}},
+		"not answered": {[]probe.Result{{Group: censor.DNS, Service: censor.EgressPrefix + " (Akamai)", Status: probe.Unknown, Detail: "198.18.0.7"}}, nil},
+	} {
+		if got := resolverExits(c.rs); !slices.Equal(got, c.want) {
+			t.Errorf("%s = %q, want %q", name, got, c.want)
+		}
+	}
+}

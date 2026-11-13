@@ -24,6 +24,7 @@ var (
 	asnLike    = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
 	asnPrefix  = regexp.MustCompile(`^AS\d+\s*`)
 	legacyMask = regexp.MustCompile(`(?i)\b(?:\d{1,3}\.\d{1,3}\.\*\.\*|[0-9a-f]{1,4}:[0-9a-f]{1,4}:\*:\*)`)
+	domainLike = regexp.MustCompile(`(?i)(?:\*\.)?(?:[a-z0-9_-]+\.)+[a-z][a-z0-9-]+`)
 	nibbleLike = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
@@ -181,7 +182,8 @@ func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
 				}
 				res.Service = renamed[orig.Service]
 			}
-			res.Reason, res.Detail = sc.text(hide(orig.Reason), answerText), sc.text(hide(orig.Detail), answerText)
+			res.Reason = sc.text(domainLike.ReplaceAllLiteralString(hide(orig.Reason), Hidden), answerText)
+			res.Detail = sc.text(domainLike.ReplaceAllLiteralString(hide(orig.Detail), Hidden), answerText)
 			if title, ok := services.OwnGroup(orig.Group); ok && (hostLike(title) || hide(title) != title) {
 				res.Group = services.Custom
 			}
