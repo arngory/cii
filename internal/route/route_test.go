@@ -54,7 +54,10 @@ func TestJudge(t *testing.T) {
 		{path("c", 15169, 50, 15169), Regional, "+46 ms"},
 		{path("d", 15169, 120, 15169), Detour, "+116 ms"},
 		{path("e", 15169, 30, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1, ASN: 64500}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 5, ASN: 1299}, Hop{TTL: 3, Addr: "203.0.113.1", RTTms: 30, ASN: 15169}), Transit, "via AS1299 Arelion"},
-		{path("f", 15169, 30, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 55}), Detour, "one hop adds 54 ms"},
+		{path("f", 15169, 60, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 55}), Detour, "one hop adds 54 ms"},
+		{path("f2", 15169, 5, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 95}, Hop{TTL: 3, Addr: "198.51.100.2", RTTms: 4}), Direct, ""},
+		{&Path{Target: Target{Name: "u", Expect: 62041, Unicast: true}, RTTms: 180, ASN: 62041, Hops: []Hop{{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, {TTL: 2, Addr: "198.51.100.1", RTTms: 150}}}, Distant, "single-location service, +176 ms away"},
+		{&Path{Target: Target{Name: "u2", Expect: 62041, Unicast: true}, RTTms: 8, ASN: 62041}, Direct, ""},
 		{path("g", 13335, 0.4, 13335, Hop{TTL: 1}, Hop{TTL: 2, Addr: "1.1.1.1", RTTms: 0.4}), Intercepted, "local proxy"},
 		{path("h", 15169, 4, 64500), Direct, "cache inside your network"},
 		{path("i", 15169, 4, 20940), Direct, "served from AS20940, not AS15169"},
@@ -149,5 +152,17 @@ func TestAttributed(t *testing.T) {
 	}
 	if !attributed([]*Path{{addr: netip.MustParseAddr("198.18.0.7")}}) {
 		t.Error("fake-IP answers should not claim missing ASN data")
+	}
+}
+
+func TestRealHopsAreNotLocal(t *testing.T) {
+	var ps []*Path
+	for i, asn := range []uint{15169, 32934, 13335, 36459, 62041, 19281} {
+		p := path(string(rune('a'+i)), asn, 0.9, asn, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 0.4}, Hop{TTL: 2, Addr: "192.0.2.2", RTTms: 0.5}, Hop{TTL: 3, Addr: "192.0.2.3", RTTms: 0.8})
+		p.Timing = "icmp"
+		ps = append(ps, p)
+	}
+	if answeredLocally(ps) {
+		t.Error("a well-peered datacentre with real hops was flagged as answered locally")
 	}
 }

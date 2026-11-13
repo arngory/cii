@@ -120,12 +120,25 @@ func attributed(paths []*Path) bool {
 	return !reached
 }
 
+func respondingHops(p *Path) int {
+	seen := map[string]bool{}
+	for _, h := range p.Hops {
+		if h.Addr != "" {
+			seen[h.Addr] = true
+		}
+	}
+	return len(seen)
+}
+
 func answeredLocally(paths []*Path) bool {
 	expects := map[uint]bool{}
 	answered := 0
 	for _, p := range paths {
 		if p.RTTms <= 0 {
 			continue
+		}
+		if p.Timing == "icmp" && respondingHops(p) >= 3 {
+			return false
 		}
 		if p.RTTms >= localLimitMs {
 			return false

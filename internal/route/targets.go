@@ -22,32 +22,33 @@ var Groups = map[probe.Group]string{
 }
 
 type Target struct {
-	Name   string      `json:"name"`
-	Host   string      `json:"host"`
-	Expect uint        `json:"expect_asn,omitempty"`
-	Group  probe.Group `json:"group"`
+	Name    string      `json:"name"`
+	Host    string      `json:"host"`
+	Expect  uint        `json:"expect_asn,omitempty"`
+	Group   probe.Group `json:"group"`
+	Unicast bool        `json:"unicast,omitempty"`
 }
 
 var Targets = []Target{
-	{"Google", "www.google.com", 15169, Search},
-	{"YouTube", "www.youtube.com", 15169, Search},
-	{"Facebook", "www.facebook.com", 32934, Social},
-	{"Instagram", "www.instagram.com", 32934, Social},
-	{"WhatsApp", "web.whatsapp.com", 32934, Social},
-	{"X", "x.com", 13414, Social},
-	{"Telegram DC2", "149.154.167.51", 62041, Messaging},
-	{"Telegram DC4", "149.154.167.91", 62041, Messaging},
-	{"Discord", "discord.com", 13335, Messaging},
-	{"Cloudflare", "www.cloudflare.com", 13335, CDN},
-	{"Fastly", "www.fastly.com", 54113, CDN},
-	{"Akamai", "www.akamai.com", 0, CDN},
-	{"Amazon CloudFront", "d1.awsstatic.com", 16509, CDN},
-	{"OpenAI API", "api.openai.com", 13335, AI},
-	{"Claude", "claude.ai", 0, AI},
-	{"GitHub", "github.com", 36459, Dev},
-	{"Cloudflare DNS", "1.1.1.1", 13335, Resolver},
-	{"Google DNS", "8.8.8.8", 15169, Resolver},
-	{"Quad9", "9.9.9.9", 19281, Resolver},
+	{Name: "Google", Host: "www.google.com", Expect: 15169, Group: Search},
+	{Name: "YouTube", Host: "www.youtube.com", Expect: 15169, Group: Search},
+	{Name: "Facebook", Host: "www.facebook.com", Expect: 32934, Group: Social},
+	{Name: "Instagram", Host: "www.instagram.com", Expect: 32934, Group: Social},
+	{Name: "WhatsApp", Host: "web.whatsapp.com", Expect: 32934, Group: Social},
+	{Name: "X", Host: "x.com", Expect: 13335, Group: Social},
+	{Name: "Telegram DC2", Host: "149.154.167.51", Expect: 62041, Group: Messaging, Unicast: true},
+	{Name: "Telegram DC4", Host: "149.154.167.91", Expect: 62041, Group: Messaging, Unicast: true},
+	{Name: "Discord", Host: "discord.com", Expect: 13335, Group: Messaging},
+	{Name: "Cloudflare", Host: "www.cloudflare.com", Expect: 13335, Group: CDN},
+	{Name: "Fastly", Host: "www.fastly.com", Expect: 54113, Group: CDN},
+	{Name: "Akamai", Host: "www.akamai.com", Expect: 0, Group: CDN},
+	{Name: "Amazon CloudFront", Host: "d1.awsstatic.com", Expect: 16509, Group: CDN},
+	{Name: "OpenAI API", Host: "api.openai.com", Expect: 13335, Group: AI},
+	{Name: "Claude", Host: "claude.ai", Expect: 0, Group: AI},
+	{Name: "GitHub", Host: "github.com", Expect: 36459, Group: Dev, Unicast: true},
+	{Name: "Cloudflare DNS", Host: "1.1.1.1", Expect: 13335, Group: Resolver},
+	{Name: "Google DNS", Host: "8.8.8.8", Expect: 15169, Group: Resolver},
+	{Name: "Quad9", Host: "9.9.9.9", Expect: 19281, Group: Resolver},
 }
 
 func Rules(targets []Target) []netx.Rule {

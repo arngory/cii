@@ -1057,6 +1057,9 @@
         },
         "name": {
           "type": "string"
+        },
+        "unicast": {
+          "type": "boolean"
         }
       },
       "required": [
