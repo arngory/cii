@@ -80,7 +80,8 @@ func trimEdge(s string) string {
 }
 
 func (r *Report) Scrubbed() *Report {
-	out := newScrubber(orgNames(r)).copy(reflect.ValueOf(r), keepText).Interface().(*Report)
+	sc := newScrubber(orgNames(r))
+	out := sc.copy(reflect.ValueOf(r), keepText).Interface().(*Report)
 	out.Masked = true
 	for _, h := range out.hosts() {
 		if h.Region != nil {
@@ -110,8 +111,8 @@ func (r *Report) Scrubbed() *Report {
 			if t.Name == t.Host {
 				t.Name = fmt.Sprintf("target %d", n)
 			}
-			path.Reason = strings.ReplaceAll(path.Reason, t.Host, Hidden)
-			path.Error = strings.ReplaceAll(path.Error, t.Host, Hidden)
+			path.Reason = sc.text(strings.ReplaceAll(r.Route.Paths[i].Reason, t.Host, Hidden), answerText)
+			path.Error = sc.text(strings.ReplaceAll(r.Route.Paths[i].Error, t.Host, Hidden), answerText)
 			t.Host, t.Expect = Hidden, 0
 		}
 		slices.SortFunc(own, func(a, b string) int { return len(b) - len(a) })

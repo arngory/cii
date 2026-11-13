@@ -798,7 +798,7 @@ func writeMetricsFile(r *report.Report, path string) error {
 }
 
 func printReport(r *report.Report, c *common, logPath string, logErr error) error {
-	if logErr != nil && (c.json || c.debug) {
+	if logErr != nil && (c.json || c.debug || c.prom) {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}
 	switch {
