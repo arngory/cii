@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -57,6 +58,8 @@ var analysisRU = map[string]string{
 	"Blocked on the path (DPI): %s":                                                               "Блокируются по пути (DPI): %s",
 	"Refuse this country or network: %s":                                                          "Отказывают этой стране или сети: %s",
 	"Plain HTTP or TLS is altered on the path":                                                    "HTTP или TLS изменяется по пути",
+	"Connectivity check endpoints did not answer: %d":                                             "Адреса проверки связи не ответили: %d",
+	"Port 25 is open, but the mail server did not accept this address":                            "Порт 25 открыт, но почтовый сервер не принял этот адрес",
 	"Traffic leaves through a tunnel":                                                             "Трафик уходит через туннель",
 	"Every result describes the tunnel exit, not this machine's own connection.":                  "Все результаты описывают выход туннеля, а не собственное подключение этой машины.",
 	"DNS is answered by a local fake-IP proxy":                                                    "DNS отвечает локальный прокси в режиме fake-IP",
@@ -72,6 +75,8 @@ var analysisRU = map[string]string{
 	"See them with --debug; `cii stats` shows which ones never answer.": "Они видны с --debug; `cii stats` покажет, какие не отвечают никогда.",
 	"Nothing unusual found": "Ничего необычного не найдено",
 }
+
+var smtpReply = regexp.MustCompile(`^\d{3}[ -]`)
 
 type analysis struct {
 	lang string
@@ -232,6 +237,8 @@ func (a *analysis) host(label string, h *Host) {
 	}
 	for _, res := range h.Services {
 		switch {
+		case res.Group == risk.Mail && res.Status == probe.No && (strings.HasPrefix(res.Detail, "connected to ") || smtpReply.MatchString(res.Detail)):
+			a.add(Warn, a.t("Port 25 is open, but the mail server did not accept this address"), res.Detail)
 		case res.Group == risk.Mail && res.Status == probe.No:
 			a.add(Info, a.t("Outbound port 25 is closed: mail cannot be sent directly from this address"), "")
 		case res.Group == risk.Network && res.Service == "Known ranges" && (res.Status == probe.No || res.Status == probe.Partial):
@@ -281,10 +288,9 @@ func (a *analysis) censor(rs []probe.Result) {
 	}); len(enc) > 0 {
 		a.add(Warn, a.t("Encrypted DNS is blocked: %s", names(enc)), "")
 	}
-	if tg := byGroup(censor.Telegram); len(tg) > 0 {
-		if down := pick(tg, failed); len(down) > 0 {
-			a.add(Warn, a.t("Telegram data centres unreachable: %d of %d", len(down), len(tg)), names(down))
-		}
+	tg := byGroup(censor.Telegram)
+	if down := pick(tg, failed); len(down) > 0 {
+		a.add(Warn, a.t("Telegram data centres unreachable: %d of %d", len(down), len(tg)), names(down))
 	}
 	site := func(rs []probe.Result) string {
 		var out []string
@@ -302,12 +308,19 @@ func (a *analysis) censor(rs []probe.Result) {
 	if geo := pick(byGroup(censor.Geoblock), failed); len(geo) > 0 {
 		a.add(Info, a.t("Refuse this country or network: %s", site(geo)), "")
 	}
-	if portal := pick(byGroup(censor.Portal), failed); len(portal) > 0 {
-		var ev []string
-		for _, res := range portal {
-			ev = append(ev, res.Service+": "+res.Reason)
+	var altered, down []string
+	for _, res := range pick(byGroup(censor.Portal), failed) {
+		if strings.HasPrefix(res.Reason, "altered") || strings.HasPrefix(res.Reason, "redirected") || strings.HasPrefix(res.Reason, "TLS interception") {
+			altered = append(altered, res.Service+": "+res.Reason)
+		} else {
+			down = append(down, res.Service+": "+res.Reason)
 		}
-		a.add(Alert, a.t("Plain HTTP or TLS is altered on the path"), strings.Join(ev, "; "))
+	}
+	if len(altered) > 0 {
+		a.add(Alert, a.t("Plain HTTP or TLS is altered on the path"), strings.Join(altered, "; "))
+	}
+	if len(down) > 0 {
+		a.add(Warn, a.t("Connectivity check endpoints did not answer: %d", len(down)), strings.Join(down, "; "))
 	}
 	for _, res := range byGroup(censor.Local) {
 		if res.Status != probe.Partial {
@@ -396,17 +409,41 @@ type CheckStat struct {
 func Stats(reps []*Report) []CheckStat {
 	idx := map[string]int{}
 	var out []CheckStat
+	rank := func(st probe.Status) int {
+		switch st {
+		case probe.Failed:
+			return 2
+		case probe.Unknown:
+			return 1
+		}
+		return 0
+	}
 	for _, r := range reps {
-		seen := map[string]bool{}
-		count := func(res probe.Result) {
+		worst := map[string]probe.Result{}
+		var order []string
+		note := func(res probe.Result) {
 			if res.Status == probe.Pending || res.Service == "" {
 				return
 			}
 			key := string(res.Group) + "\x00" + res.Service
-			if seen[key] {
-				return
+			prev, seen := worst[key]
+			if !seen {
+				order = append(order, key)
 			}
-			seen[key] = true
+			if !seen || rank(res.Status) > rank(prev.Status) {
+				worst[key] = res
+			}
+		}
+		for _, f := range r.families() {
+			for _, res := range f.host.factResults() {
+				note(res)
+			}
+		}
+		for _, res := range r.Censor {
+			note(res)
+		}
+		for _, key := range order {
+			res := worst[key]
 			i, ok := idx[key]
 			if !ok {
 				i = len(out)
@@ -414,22 +451,14 @@ func Stats(reps []*Report) []CheckStat {
 				out = append(out, CheckStat{Group: groupTitle(res.Group), Service: res.Service})
 			}
 			out[i].Runs++
-			switch res.Status {
-			case probe.Unknown:
-				out[i].Unknown++
-			case probe.Failed:
+			switch rank(res.Status) {
+			case 2:
 				out[i].Failed++
+			case 1:
+				out[i].Unknown++
 			default:
 				out[i].Answered++
 			}
-		}
-		for _, f := range r.families() {
-			for _, res := range f.host.factResults() {
-				count(res)
-			}
-		}
-		for _, res := range r.Censor {
-			count(res)
 		}
 	}
 	out = slices.DeleteFunc(out, func(s CheckStat) bool { return s.Answered == s.Runs })

@@ -135,9 +135,6 @@ func printMenu(lang string) {
 
 func runMenu(ctx context.Context) error {
 	lang := report.DetectLang()
-	if _, ok := menuTexts[lang]; !ok {
-		lang = "en"
-	}
 	printMenu(lang)
 	lines := make(chan string)
 	go func() {

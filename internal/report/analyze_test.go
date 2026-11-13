@@ -1,6 +1,7 @@
 package report
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -54,6 +55,7 @@ func TestAnalyzeFindings(t *testing.T) {
 		{Group: censor.Telegram, Service: "DC2", Status: probe.No},
 		{Group: censor.Telegram, Service: "DC4", Status: probe.Yes},
 		{Group: censor.Portal, Service: "Google", Status: probe.No, Reason: "redirected (HTTP 302): captive portal or filter page"},
+		{Group: censor.Portal, Service: "Ubuntu", Status: probe.No, Reason: "timeout"},
 		{Group: censor.Local, Service: "Default route", Status: probe.Partial},
 	})
 	r.Route = &route.Report{Method: "icmp", Paths: []route.Path{
@@ -63,7 +65,8 @@ func TestAnalyzeFindings(t *testing.T) {
 	for _, want := range []string{
 		"alert | Port 53 DNS is intercepted on the path | OpenDNS: I am not an OpenDNS resolver.. Answers match the reference",
 		"alert | Listed in 1 DNSBL: bl.spamcop.net",
-		"alert | Plain HTTP or TLS is altered on the path | Google: redirected",
+		"alert | Plain HTTP or TLS is altered on the path | Google: redirected (HTTP 302): captive portal or filter page\n",
+		"warn | Connectivity check endpoints did not answer: 1 | Ubuntu: timeout",
 		"warn | Address is classed as hosting (proxycheck.io)",
 		"warn | VPN flagged by 1 of 1 sources: proxycheck.io",
 		"warn | High risk score: proxycheck.io 80",
@@ -88,6 +91,11 @@ func TestAnalyzeFindings(t *testing.T) {
 	}
 	if strings.Contains(out, "Nothing unusual") || strings.Index(out, "alert") > strings.Index(out, "warn") {
 		t.Errorf("order or summary wrong:\n%s", out)
+	}
+	h.Services[4].Detail = "554 5.7.1 Client host blocked"
+	h.refreshProfile()
+	if refused := analysed(t, r, "en"); strings.Contains(refused, "port 25 is closed") || !strings.Contains(refused, "warn | Port 25 is open, but the mail server did not accept this address | 554 5.7.1") {
+		t.Errorf("an SMTP rejection was reported as a closed port:\n%s", refused)
 	}
 	r.Censor = r.Censor[:1]
 	if alone := analysed(t, r, "en"); strings.Contains(alone, "transparent forwarder") || !strings.Contains(alone, "| OpenDNS: I am not an OpenDNS resolver.\n") {
@@ -118,6 +126,11 @@ func TestStats(t *testing.T) {
 		})
 		r.IPv4 = h
 		return r
+	}
+	dual := mk(probe.Yes)
+	dual.IPv6 = &Host{Address: "2001:db8::7", Services: []probe.Result{{Group: services.AI, Service: "Fine API", Status: probe.Failed}}}
+	if st := Stats([]*Report{dual}); !slices.ContainsFunc(st, func(s CheckStat) bool { return s.Service == "Fine API" && s.Failed == 1 }) {
+		t.Errorf("a check failing only on IPv6 is hidden: %+v", st)
 	}
 	st := Stats([]*Report{mk(probe.Yes), mk(probe.Unknown), mk(probe.Yes)})
 	if len(st) != 2 || st[0].Service != "Dead API" || st[0].Answered != 0 || st[0].Failed != 3 || st[1].Service != "Flaky API" || st[1].Answered != 2 || st[1].Unknown != 1 {
