@@ -26,11 +26,23 @@ Flags: `--tcp` — do not trace with ICMP; `--rounds N` — the number of ICMP r
 
 All hosts are declared in the policy of the `route` module (`cii route --plan`). Names are resolved by the system resolver through netx.
 
+**Your own targets.** `--targets LIST` replaces the built-in list, and with a leading plus (`--targets +…`) extends it. An entry is `[name=]host[@asn]`, comma-separated: `cii route --targets +home=vps.example.org@64500,192.0.2.9`. The host is a name or an IP address, `@asn` is the expected AS (optional). The same can go into the config, and then the targets are added to `cii --route` as well:
+
+```yaml
+route:
+  targets:
+    - home=vps.example.org@64500
+```
+
+Own targets go into the `Custom` group and count as single-location targets. There can be at most 64 targets in total. With `--mask` the host of an own target is hidden both in the report and in the network ledger; a name you gave yourself stays, and a target without a name is called `target N`.
+
 ## How it is measured
 
-**ICMP.** If raw socket privileges are available (root or `CAP_NET_RAW`, IPv4 only), cii sends echo requests with all TTLs from 1 to `--max-hops` at once to all targets, in several rounds. "TTL exceeded" replies give the hops, the echo reply gives the distance to the target. For each hop the minimum time across the rounds is taken. Sending to a target stops at the TTL at which it replied.
+**ICMP.** If raw socket privileges are available (root or `CAP_NET_RAW`), cii sends echo requests with all TTLs from 1 to `--max-hops` at once to all targets, in several rounds. "TTL exceeded" replies give the hops, the echo reply gives the distance to the target. For each hop the minimum time across the rounds is taken. Sending to a target stops at the TTL at which it replied.
 
-**TCP.** Targets that did not answer ICMP (many CDNs stay silent), and all targets when there are no raw socket privileges or over IPv6, are measured by the time of a TCP connection to port 443: four attempts with a 50 ms pause, the minimum is taken. There are no hops in this case.
+**TCP.** Targets that did not answer ICMP (many CDNs stay silent), and all targets when there are no raw socket privileges, are measured by the time of a TCP connection to port 443: four attempts with a 50 ms pause, the minimum is taken. There are no hops in this case.
+
+**IPv6.** With `-6` tracing runs over ICMPv6 in the same way. Targets given as IPv4 addresses (resolvers, Telegram) have their IPv6 addresses recorded for this.
 
 The ASNs of the hops and of the target are taken from the local DB-IP ASN Lite database (`cii data update`). cii does not go to the network for this. Without the database the hops are not labelled, and transit is not detected. Your own AS is taken from the main report, and in `cii route` — from the first public hop.
 

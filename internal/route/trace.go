@@ -14,6 +14,7 @@ import (
 
 	"golang.org/x/net/icmp"
 	"golang.org/x/net/ipv4"
+	"golang.org/x/net/ipv6"
 
 	"github.com/arngory/cii/internal/netx"
 )
@@ -55,7 +56,12 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	if len(candidates) == 0 {
 		return errors.New("no target resolved")
 	}
-	conn, err := n.ListenICMP4(Module)
+	v6 := n.Options().Family == netx.IPv6
+	proto, echoType, replyType := 1, icmp.Type(ipv4.ICMPTypeEcho), icmp.Type(ipv4.ICMPTypeEchoReply)
+	if v6 {
+		proto, echoType, replyType = 58, ipv6.ICMPTypeEchoRequest, ipv6.ICMPTypeEchoReply
+	}
+	conn, err := n.ListenICMP(Module, v6)
 	if err != nil {
 		return errors.New(describe(err))
 	}
@@ -100,7 +106,7 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	}
 	var active []int
 	for _, i := range candidates {
-		if err := conn.Allow(paths[i].Target.Host, paths[i].addr); err != nil {
+		if err := conn.Allow(paths[i].host, paths[i].addr); err != nil {
 			paths[i].Error = describe(err)
 			continue
 		}
@@ -119,21 +125,21 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 			if err != nil {
 				return
 			}
-			msg, err := icmp.ParseMessage(1, buf[:k])
+			msg, err := icmp.ParseMessage(proto, buf[:k])
 			if err != nil {
 				continue
 			}
 			switch body := msg.Body.(type) {
 			case *icmp.Echo:
-				if msg.Type == ipv4.ICMPTypeEchoReply && body.ID == id {
+				if msg.Type == replyType && body.ID == id {
 					record(body.Seq, from, now, true)
 				}
 			case *icmp.TimeExceeded:
-				if eid, seq, ok := inner(body.Data); ok && eid == id {
+				if eid, seq, ok := inner(body.Data, v6); ok && eid == id {
 					record(seq, from, now, false)
 				}
 			case *icmp.DstUnreach:
-				if eid, seq, ok := inner(body.Data); ok && eid == id {
+				if eid, seq, ok := inner(body.Data, v6); ok && eid == id {
 					record(seq, from, now, true)
 				}
 			}
@@ -152,7 +158,7 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 					continue
 				}
 				seq := seqOf(round, i, ttl)
-				b, _ := (&icmp.Message{Type: ipv4.ICMPTypeEcho, Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte("cii route")}}).Marshal(nil)
+				b, _ := (&icmp.Message{Type: echoType, Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte("cii route")}}).Marshal(nil)
 				mu.Lock()
 				sent[seq] = time.Now()
 				mu.Unlock()
@@ -210,16 +216,23 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	return nil
 }
 
-func inner(data []byte) (id, seq int, ok bool) {
-	if len(data) < 20 {
-		return 0, 0, false
-	}
-	ihl := int(data[0]&0x0f) * 4
-	if len(data) < ihl+8 || data[9] != 1 {
-		return 0, 0, false
+func inner(data []byte, v6 bool) (id, seq int, ok bool) {
+	ihl, echo := 40, byte(128)
+	if v6 {
+		if len(data) < 48 || data[6] != 58 {
+			return 0, 0, false
+		}
+	} else {
+		if len(data) < 20 {
+			return 0, 0, false
+		}
+		ihl, echo = int(data[0]&0x0f)*4, 8
+		if len(data) < ihl+8 || data[9] != 1 {
+			return 0, 0, false
+		}
 	}
 	icmpHdr := data[ihl:]
-	if icmpHdr[0] != 8 {
+	if icmpHdr[0] != echo {
 		return 0, 0, false
 	}
 	return int(icmpHdr[4])<<8 | int(icmpHdr[5]), int(icmpHdr[6])<<8 | int(icmpHdr[7]), true
@@ -239,7 +252,7 @@ func timeTCP(ctx context.Context, n *netx.Net, paths []*Path) {
 			var lastErr error
 			for range 4 {
 				start := time.Now()
-				c, err := n.DialAddr(ctx, Module, "tcp", p.Target.Host, p.addr, "443")
+				c, err := n.DialAddr(ctx, Module, "tcp", p.host, p.addr, "443")
 				if err != nil {
 					lastErr = err
 					if errors.Is(err, netx.ErrProxyRaw) || errors.Is(err, netx.ErrAddrNotOfHost) || netx.AsBlocked(err) != nil {

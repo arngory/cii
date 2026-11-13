@@ -126,6 +126,22 @@ func TestScrubbedRouteOnly(t *testing.T) {
 			t.Errorf("route-only masked report leaks %q", leak)
 		}
 	}
+	r.Route.Paths = append(r.Route.Paths,
+		route.Path{Target: route.Target{Name: "home", Host: "vps.example.org", Group: route.Custom}},
+		route.Path{Target: route.Target{Name: "192.0.2.77", Host: "192.0.2.77", Group: route.Custom}})
+	r.Network = []ledger.Entry{{Module: "route", Host: "vps.example.org", Proto: "icmp"}, {Module: "route", Host: "www.google.com", Proto: "icmp"}}
+	js.Reset()
+	r.Scrubbed().WriteJSON(&js)
+	for _, leak := range []string{"vps.example.org", "192.0.2.77"} {
+		if strings.Contains(js.String(), leak) {
+			t.Errorf("own route target leaks %q", leak)
+		}
+	}
+	for _, keep := range []string{`"name": "home"`, `"name": "target 2"`, "www.google.com"} {
+		if !strings.Contains(js.String(), keep) {
+			t.Errorf("masked route report lost %s", keep)
+		}
+	}
 	if !strings.Contains(js.String(), `"name": "Google"`) {
 		t.Errorf("target name lost:\n%s", js.String())
 	}

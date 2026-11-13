@@ -1,6 +1,7 @@
 package report
 
 import (
+	"fmt"
 	"net/netip"
 	"reflect"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 )
 
 const Hidden = "•••"
@@ -91,6 +93,27 @@ func (r *Report) Scrubbed() *Report {
 		for i := range h.Services {
 			if h.Services[i].Service == risk.PTRService && h.Services[i].Detail != "" {
 				h.Services[i].Detail = Hidden
+			}
+		}
+	}
+	if out.Route != nil {
+		own := map[string]bool{}
+		n := 0
+		for i := range out.Route.Paths {
+			t := &out.Route.Paths[i].Target
+			if t.Group != route.Custom {
+				continue
+			}
+			n++
+			own[t.Host] = true
+			if t.Name == t.Host {
+				t.Name = fmt.Sprintf("target %d", n)
+			}
+			t.Host = Hidden
+		}
+		for i := range out.Network {
+			if own[out.Network[i].Host] {
+				out.Network[i].Host = Hidden
 			}
 		}
 	}

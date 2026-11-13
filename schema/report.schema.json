@@ -1055,6 +1055,9 @@
         "host": {
           "type": "string"
         },
+        "host6": {
+          "type": "string"
+        },
         "name": {
           "type": "string"
         },

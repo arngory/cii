@@ -27,6 +27,10 @@ keys:
 
 data:
   sources: [dbip-country-lite, dbip-asn-lite, ipinfo-lite]
+
+route:
+  targets:
+    - home=vps.example.org@64500
 ```
 
 ## `ip_echo`
@@ -60,3 +64,7 @@ data:
 Какие базы скачивает `cii data update`, если ID не указаны в командной строке. По умолчанию — `dbip-country-lite` и `dbip-asn-lite`. Полный список: `cii data sources`.
 
 Любой другой `.mmdb`, положенный в каталог данных (например, коммерческая база), тоже используется: в отчёте он подписан именем файла.
+
+## `route`
+
+`targets` — свои цели для `cii route` и `cii --route` в виде `[имя=]хост[@asn]`; они добавляются к встроенному списку. Подробности — в [ROUTE.md](ROUTE.md).

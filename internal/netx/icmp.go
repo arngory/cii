@@ -13,23 +13,27 @@ type ICMPConn struct {
 	n       *Net
 	module  string
 	conn    *icmp.PacketConn
+	v6      bool
 	mu      sync.Mutex
 	allowed map[netip.Addr]bool
 }
 
-func (n *Net) ListenICMP4(module string) (*ICMPConn, error) {
+func (n *Net) ListenICMP(module string, v6 bool) (*ICMPConn, error) {
 	if n.proxied {
 		return nil, ErrProxyRaw
 	}
-	src := "0.0.0.0"
-	if n.opts.Source.IsValid() && n.opts.Source.Is4() {
-		src = n.opts.Source.String()
+	network, src := "ip4:icmp", "0.0.0.0"
+	if v6 {
+		network, src = "ip6:ipv6-icmp", "::"
 	}
-	c, err := icmp.ListenPacket("ip4:icmp", src)
+	if s := n.opts.Source; s.IsValid() && s.Is4() != v6 {
+		src = s.String()
+	}
+	c, err := icmp.ListenPacket(network, src)
 	if err != nil {
 		return nil, err
 	}
-	return &ICMPConn{n: n, module: module, conn: c, allowed: map[netip.Addr]bool{}}, nil
+	return &ICMPConn{n: n, module: module, conn: c, v6: v6, allowed: map[netip.Addr]bool{}}, nil
 }
 
 func (c *ICMPConn) Allow(host string, ip netip.Addr) error {
@@ -49,10 +53,16 @@ func (c *ICMPConn) WriteTo(b []byte, ip netip.Addr, ttl int) error {
 	if !ok {
 		return ErrAddrNotOfHost
 	}
-	if err := c.conn.IPv4PacketConn().SetTTL(ttl); err != nil {
+	var err error
+	if c.v6 {
+		err = c.conn.IPv6PacketConn().SetHopLimit(ttl)
+	} else {
+		err = c.conn.IPv4PacketConn().SetTTL(ttl)
+	}
+	if err != nil {
 		return err
 	}
-	_, err := c.conn.WriteTo(b, &net.IPAddr{IP: ip.AsSlice()})
+	_, err = c.conn.WriteTo(b, &net.IPAddr{IP: ip.AsSlice()})
 	return err
 }
 

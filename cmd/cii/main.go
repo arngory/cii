@@ -352,6 +352,7 @@ func cmdIP(ctx context.Context, args []string) error {
 	if c.extended {
 		censorOpts.Modes = nil
 	}
+	var routeList []route.Target
 	benchOpts := bench.Defaults()
 	benchOpts.Net, benchOpts.Iperf = !c.offline, !c.offline
 	policy := netx.NewPolicy()
@@ -369,7 +370,10 @@ func cmdIP(ctx context.Context, args []string) error {
 			policy.Add(bench.Rules(benchOpts)...)
 		}
 		if withRoute {
-			policy.Add(route.Rules(route.Targets)...)
+			if routeList, err = routeTargets(cfg, ""); err != nil {
+				return err
+			}
+			policy.Add(route.Rules(routeList)...)
 		}
 	}
 	if c.plan {
@@ -469,6 +473,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		if routeNet != nil {
 			ro := route.Defaults()
+			ro.Targets = routeList
 			ro.ASN = asnLookup(dbs)
 			ro.OwnASN = s.ownASN(routeNet.Options().Family)
 			rep := route.Run(ctx, routeNet, ro)
@@ -1234,6 +1239,30 @@ func cmdBench(ctx context.Context, args []string) error {
 	return output(s.report(), &c)
 }
 
+func routeTargets(cfg *config.Config, flag string) ([]route.Target, error) {
+	targets := route.Targets
+	if len(cfg.Route.Targets) > 0 {
+		extra, _, err := route.ParseTargets(strings.Join(cfg.Route.Targets, ","))
+		if err != nil {
+			return nil, fmt.Errorf("config route.targets: %w", err)
+		}
+		if targets, err = route.Merge(targets, extra); err != nil {
+			return nil, err
+		}
+	}
+	if flag == "" {
+		return targets, nil
+	}
+	given, add, err := route.ParseTargets(flag)
+	if err != nil {
+		return nil, fmt.Errorf("--targets: %w", err)
+	}
+	if !add {
+		targets = nil
+	}
+	return route.Merge(targets, given)
+}
+
 func asnLookup(dbs *geodb.Set) func(netip.Addr) (uint, string) {
 	return func(a netip.Addr) (uint, string) {
 		for _, r := range dbs.Lookup(a) {
@@ -1248,7 +1277,9 @@ func asnLookup(dbs *geodb.Set) func(netip.Addr) (uint, string) {
 func cmdRoute(ctx context.Context, args []string) error {
 	var c common
 	var tcpOnly bool
+	var targetSpec string
 	fs := flag.NewFlagSet("cii route", flag.ContinueOnError)
+	fs.StringVar(&targetSpec, "targets", "", "own targets: [+][name=]host[@asn],... (+ adds to the built-in list)")
 	c.register(fs)
 	c.registerSVG(fs)
 	opts := route.Defaults()
@@ -1271,6 +1302,13 @@ func cmdRoute(ctx context.Context, args []string) error {
 		return errors.New("--rounds must be 1-15 and --max-hops 1-31")
 	}
 	opts.TCPOnly = tcpOnly
+	cfg, err := config.Load(c.cfgPath)
+	if err != nil {
+		return err
+	}
+	if opts.Targets, err = routeTargets(cfg, targetSpec); err != nil {
+		return err
+	}
 	policy := netx.NewPolicy(route.Rules(opts.Targets)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())

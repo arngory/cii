@@ -26,15 +26,24 @@ func TestInner(t *testing.T) {
 	ip := make([]byte, 20)
 	ip[0], ip[9] = 0x45, 1
 	echo := []byte{8, 0, 0, 0, 0x12, 0x34, 0x08, 0x05}
-	if id, seq, ok := inner(append(ip, echo...)); !ok || id != 0x1234 || seq != 0x0805 {
+	if id, seq, ok := inner(append(ip, echo...), false); !ok || id != 0x1234 || seq != 0x0805 {
 		t.Errorf("inner = %x %x %v", id, seq, ok)
 	}
-	if _, _, ok := inner(ip); ok {
+	if _, _, ok := inner(ip, false); ok {
 		t.Error("short packet accepted")
+	}
+	ip6 := make([]byte, 40)
+	ip6[0], ip6[6] = 0x60, 58
+	echo6 := []byte{128, 0, 0, 0, 0x12, 0x34, 0x08, 0x05}
+	if id, seq, ok := inner(append(ip6, echo6...), true); !ok || id != 0x1234 || seq != 0x0805 {
+		t.Errorf("inner v6 = %x %x %v", id, seq, ok)
+	}
+	if _, _, ok := inner(append(ip6, echo...), true); ok {
+		t.Error("an ICMPv4 echo inside IPv6 accepted")
 	}
 	udp := append([]byte(nil), ip...)
 	udp[9] = 17
-	if _, _, ok := inner(append(udp, echo...)); ok {
+	if _, _, ok := inner(append(udp, echo...), false); ok {
 		t.Error("non-ICMP inner packet accepted")
 	}
 }
@@ -132,6 +141,11 @@ func TestResolveLiteralFamily(t *testing.T) {
 	if p.addr.IsValid() || p.Error != "no ipv6 address" {
 		t.Errorf("IPv4 literal on IPv6 = %v %q", p.addr, p.Error)
 	}
+	p = &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9", Host6: "2620:fe::fe"}}
+	resolve(context.Background(), n6, p)
+	if p.addr.String() != "2620:fe::fe" || p.host != "2620:fe::fe" || p.Error != "" {
+		t.Errorf("IPv6 literal for an IPv4 target = %v %q %q", p.addr, p.host, p.Error)
+	}
 	n4 := netx.New(netx.Options{Family: netx.IPv4}, netx.NewPolicy(Rules(Targets)...), ledger.New())
 	p = &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9"}}
 	resolve(context.Background(), n4, p)
@@ -165,5 +179,34 @@ func TestRealHopsAreNotLocal(t *testing.T) {
 	}
 	if answeredLocally(ps) {
 		t.Error("a well-peered datacentre with real hops was flagged as answered locally")
+	}
+}
+
+func TestParseTargets(t *testing.T) {
+	ts, add, err := ParseTargets("+home=VPS.Example.org@AS64500, 192.0.2.9 ,b.example.net@64501")
+	if err != nil || !add || len(ts) != 3 {
+		t.Fatalf("ParseTargets = %+v %v %v", ts, add, err)
+	}
+	if ts[0] != (Target{Name: "home", Host: "vps.example.org", Expect: 64500, Group: Custom, Unicast: true}) || ts[1].Name != "192.0.2.9" || ts[2].Expect != 64501 {
+		t.Errorf("targets = %+v", ts)
+	}
+	if _, add, _ := ParseTargets("a.example.org"); add {
+		t.Error("no + means replace")
+	}
+	for _, bad := range []string{"", "+", "http://a.example", "a.example/path", "*.example.org", "name=", "a.example@x", "a.example@0", "single"} {
+		if got, _, err := ParseTargets(bad); err == nil {
+			t.Errorf("ParseTargets(%q) = %+v, want error", bad, got)
+		}
+	}
+	merged, err := Merge(Targets, append(ts, Target{Name: "dup", Host: "www.google.com"}))
+	if err != nil || len(merged) != len(Targets)+3 {
+		t.Errorf("Merge = %d, %v", len(merged), err)
+	}
+	many := make([]Target, MaxTargets)
+	for i := range many {
+		many[i].Host = "h" + string(rune('a'+i%26)) + string(rune('a'+i/26)) + ".example"
+	}
+	if _, err := Merge(Targets, many); err == nil {
+		t.Error("exceeding the target limit must fail")
 	}
 }

@@ -27,6 +27,10 @@ keys:
 
 data:
   sources: [dbip-country-lite, dbip-asn-lite, ipinfo-lite]
+
+route:
+  targets:
+    - home=vps.example.org@64500
 ```
 
 ## `ip_echo`
@@ -60,3 +64,7 @@ Only **your own** keys. The environment variables `CII_IPINFO_TOKEN`, `CII_MAXMI
 Which databases `cii data update` downloads when no IDs are given on the command line. The default is `dbip-country-lite` and `dbip-asn-lite`. Full list: `cii data sources`.
 
 Any other `.mmdb` placed in the data directory (for example, a commercial database) is used as well: in the report it is labelled with its file name.
+
+## `route`
+
+`targets` lists your own targets for `cii route` and `cii --route` as `[name=]host[@asn]`; they are added to the built-in list. Details are in [ROUTE.md](ROUTE.md).
