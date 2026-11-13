@@ -121,6 +121,9 @@ func TestScrubbedRouteOnly(t *testing.T) {
 	}}}
 	var js strings.Builder
 	r.Scrubbed().WriteJSON(&js)
+	if !strings.Contains(js.String(), `"reason": "via a transit network"`) {
+		t.Errorf("masked transit reason should read as plain text:\n%s", js.String())
+	}
 	for _, leak := range []string{"Arelion", "Example Access", "198.51.100", "1299", "64500"} {
 		if strings.Contains(js.String(), leak) {
 			t.Errorf("route-only masked report leaks %q", leak)

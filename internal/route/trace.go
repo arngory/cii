@@ -37,7 +37,7 @@ func describe(err error) string {
 	return netx.Redact(err).Error()
 }
 
-const sendGap = 200 * time.Microsecond
+const sendGap = 500 * time.Microsecond
 
 func seqOf(round, target, ttl int) int { return round<<11 | target<<5 | ttl }
 
@@ -148,14 +148,14 @@ func traceICMP(ctx context.Context, n *netx.Net, o Options, paths []*Path) error
 	sentOK := 0
 	var sendErr error
 	for round := 1; round <= o.Rounds && ctx.Err() == nil; round++ {
-		for ttl := 1; ttl <= o.MaxTTL; ttl++ {
-			for k := range active {
-				i := active[(k+round+ttl)%len(active)]
+		for k := range active {
+			i := active[(k+round)%len(active)]
+			for ttl := 1; ttl <= o.MaxTTL; ttl++ {
 				mu.Lock()
 				limit := reached[i]
 				mu.Unlock()
 				if limit > 0 && ttl > limit {
-					continue
+					break
 				}
 				seq := seqOf(round, i, ttl)
 				b, _ := (&icmp.Message{Type: echoType, Body: &icmp.Echo{ID: id, Seq: seq, Data: []byte("cii route")}}).Marshal(nil)

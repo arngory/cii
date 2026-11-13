@@ -18,19 +18,20 @@ import (
 const Hidden = "•••"
 
 var (
-	addrLike   = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*(?:/\d{1,3})?`)
-	asnLike    = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
-	asnPrefix  = regexp.MustCompile(`^AS\d+\s*`)
-	legacyMask = regexp.MustCompile(`(?i)\b(?:\d{1,3}\.\d{1,3}\.\*\.\*|[0-9a-f]{1,4}:[0-9a-f]{1,4}:\*:\*)`)
-	nibbleLike = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
-	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
-	addrType   = reflect.TypeFor[netip.Addr]()
-	prefixType = reflect.TypeFor[netip.Prefix]()
-	orgFields  = []string{"ASOrg", "ASDomain", "Org", "Node"}
-	asnFields  = []string{"ASN", "OwnASN"}
-	freeText   = []string{"Detail", "Reason", "Error", "Notes", "Note", "Transit"}
-	addrText   = []string{"Address", "Interface", "Query", "Via", "Disagree", "Addr"}
-	genericOrg = map[string]bool{
+	addrLike      = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*(?:/\d{1,3})?`)
+	asnLike       = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
+	maskedTransit = regexp.MustCompile(`via ` + Hidden + `(?:[ ,]+` + Hidden + `)*`)
+	asnPrefix     = regexp.MustCompile(`^AS\d+\s*`)
+	legacyMask    = regexp.MustCompile(`(?i)\b(?:\d{1,3}\.\d{1,3}\.\*\.\*|[0-9a-f]{1,4}:[0-9a-f]{1,4}:\*:\*)`)
+	nibbleLike    = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
+	namedNotes    = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
+	addrType      = reflect.TypeFor[netip.Addr]()
+	prefixType    = reflect.TypeFor[netip.Prefix]()
+	orgFields     = []string{"ASOrg", "ASDomain", "Org", "Node"}
+	asnFields     = []string{"ASN", "OwnASN"}
+	freeText      = []string{"Detail", "Reason", "Error", "Notes", "Note", "Transit"}
+	addrText      = []string{"Address", "Interface", "Query", "Via", "Disagree", "Addr"}
+	genericOrg    = map[string]bool{
 		"limited": true, "company": true, "corporation": true, "online": true, "internet": true,
 		"network": true, "networks": true, "telecom": true, "telecommunications": true,
 		"communications": true, "services": true, "service": true, "hosting": true, "cloud": true,
@@ -98,6 +99,9 @@ func (r *Report) Scrubbed() *Report {
 		}
 	}
 	if out.Route != nil {
+		for i := range out.Route.Paths {
+			out.Route.Paths[i].Reason = maskedTransit.ReplaceAllString(out.Route.Paths[i].Reason, "via a transit network")
+		}
 		var own []string
 		n := 0
 		for i := range out.Route.Paths {

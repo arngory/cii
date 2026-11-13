@@ -34,6 +34,7 @@ type Path struct {
 	Timing  string   `json:"timing,omitempty"`
 	addr    netip.Addr
 	host    string
+	absent  bool
 }
 
 type Report struct {
@@ -155,7 +156,7 @@ func resolve(ctx context.Context, n *netx.Net, p *Path) {
 		if a.Unmap().Is4() == want4 {
 			p.addr = a.Unmap()
 		} else {
-			p.Error = "no " + n.Options().Family.String() + " address"
+			p.absent, p.Error = true, noAddress(n.Options().Family)
 		}
 		return
 	}
@@ -170,7 +171,14 @@ func resolve(ctx context.Context, n *netx.Net, p *Path) {
 			return
 		}
 	}
-	p.Error = "no " + n.Options().Family.String() + " address"
+	p.absent, p.Error = true, noAddress(n.Options().Family)
+}
+
+func noAddress(f netx.Family) string {
+	if f == netx.IPv6 {
+		return "the service publishes no IPv6 address"
+	}
+	return "the service publishes no IPv4 address"
 }
 
 func firstHopASN(paths []*Path) uint {
