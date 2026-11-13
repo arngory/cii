@@ -1,0 +1,126 @@
+package report
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/arngory/cii/internal/censor"
+	"github.com/arngory/cii/internal/probe"
+	"github.com/arngory/cii/internal/region"
+	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
+	"github.com/arngory/cii/internal/services"
+)
+
+func analysed(t *testing.T, r *Report, lang string) string {
+	t.Helper()
+	var b strings.Builder
+	for _, f := range Analyze(r, lang) {
+		b.WriteString(f.Level + " | " + f.Title + " | " + f.Detail + "\n")
+	}
+	return b.String()
+}
+
+func TestAnalyzeFindings(t *testing.T) {
+	r := New("online")
+	h := &Host{Address: "203.0.113.7"}
+	h.SetServices([]probe.Result{
+		{Group: services.Streaming, Service: "Disney+", Status: probe.No},
+		{Group: services.AI, Service: "ChatGPT app", Status: probe.IPBlock},
+		{Group: risk.DNSBL, Service: "zen.spamhaus.org", Status: probe.Unknown, Reason: "refused: query via public/open resolver"},
+		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.No},
+		{Group: risk.Mail, Service: "Outbound SMTP (25)", Status: probe.No},
+		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.No, Facts: demoFacts("hosting", "", 80, 3, map[probe.Flag]bool{probe.VPN: true, probe.Hosting: true})},
+	})
+	h.SetRegion(region.Summarize([]probe.Result{
+		{Group: region.GeoIP, Service: "a", Status: probe.OK, Country: "DE"},
+		{Group: region.GeoIP, Service: "b", Status: probe.OK, Country: "DE"},
+		{Group: region.GeoIP, Service: "c", Status: probe.OK, Country: "DE"},
+		{Group: region.Platform, Service: "Google", Status: probe.OK, Country: "DE"},
+		{Group: region.Platform, Service: "Apple", Status: probe.OK, Country: "DE"},
+		{Group: region.Platform, Service: "ChatGPT", Status: probe.OK, Country: "PL"},
+		{Group: region.CDN, Service: "Cloudflare", Status: probe.OK, Country: "PL", IATA: "WAW"},
+		{Group: region.Registry, Service: "RDAP (RIR)", Status: probe.OK, Country: "US"},
+	}))
+	r.IPv4 = h
+	r.IPv6 = &Host{Error: "the resolver returns no AAAA records for any echo service: IPv6 is off or filtered on this network"}
+	r.SetCensor([]probe.Result{
+		{Group: censor.DNS, Service: "Port 53 interception (OpenDNS)", Status: probe.No, Detail: "I am not an OpenDNS resolver."},
+		{Group: censor.DNS, Service: "Example 192.0.2.53 DoH", Status: probe.No},
+		{Group: censor.DPI, Service: "blocked.example HTTP", Status: probe.No},
+		{Group: censor.DPI, Service: "blocked.example HTTPS", Status: probe.No},
+		{Group: censor.Geoblock, Service: "geo.example HTTPS", Status: probe.No},
+		{Group: censor.Telegram, Service: "DC2", Status: probe.No},
+		{Group: censor.Telegram, Service: "DC4", Status: probe.Yes},
+		{Group: censor.Portal, Service: "Google", Status: probe.No, Reason: "redirected (HTTP 302): captive portal or filter page"},
+		{Group: censor.Local, Service: "Default route", Status: probe.Partial},
+	})
+	r.Route = &route.Report{Method: "icmp", Paths: []route.Path{
+		{Target: route.Target{Name: "X"}, Verdict: route.Detour}, {Target: route.Target{Name: "Quad9"}, Verdict: route.Unreachable},
+	}}
+	out := analysed(t, r, "en")
+	for _, want := range []string{
+		"alert | Port 53 DNS is intercepted on the path | OpenDNS: I am not an OpenDNS resolver.. Answers match the reference",
+		"alert | Listed in 1 DNSBL: bl.spamcop.net",
+		"alert | Plain HTTP or TLS is altered on the path | Google: redirected",
+		"warn | Address is classed as hosting (proxycheck.io)",
+		"warn | VPN flagged by 1 of 1 sources: proxycheck.io",
+		"warn | High risk score: proxycheck.io 80",
+		"warn | Registration country US differs",
+		"info | ChatGPT reports PL, the country of its CDN edge (Cloudflare WAW)",
+		"info | Not available from here: Disney+",
+		"warn | Refuse this address or network, not the country: ChatGPT app",
+		"info | Spamhaus was not checked",
+		"info | Outbound port 25 is closed",
+		"info | No IPv6: the resolver returns no AAAA records",
+		"warn | Encrypted DNS is blocked: Example 192.0.2.53 DoH",
+		"warn | Blocked on the path (DPI): blocked.example |",
+		"info | Refuse this country or network: geo.example",
+		"warn | Telegram data centres unreachable: 1 of 2 | DC2",
+		"warn | Traffic leaves through a tunnel",
+		"warn | Detours: X",
+		"warn | Unreachable: Quad9",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Nothing unusual") || strings.Index(out, "alert") > strings.Index(out, "warn") {
+		t.Errorf("order or summary wrong:\n%s", out)
+	}
+	ru := analysed(t, r, "ru")
+	if !strings.Contains(ru, "DNS на 53-м порту перехватывается по пути") || strings.Contains(ru, "%!") {
+		t.Errorf("russian output:\n%s", ru)
+	}
+	for k, v := range analysisRU {
+		if strings.Count(k, "%") != strings.Count(v, "%") {
+			t.Errorf("translation of %q has different placeholders: %q", k, v)
+		}
+	}
+	if clean := analysed(t, Demo("lookup"), "en"); !strings.HasPrefix(clean, "info | Nothing unusual found") {
+		t.Errorf("clean report:\n%s", clean)
+	}
+}
+
+func TestStats(t *testing.T) {
+	mk := func(status probe.Status) *Report {
+		r := New("online")
+		h := &Host{Address: "203.0.113.7"}
+		h.SetServices([]probe.Result{
+			{Group: services.AI, Service: "Flaky API", Status: status},
+			{Group: services.AI, Service: "Dead API", Status: probe.Failed},
+			{Group: services.AI, Service: "Fine API", Status: probe.No},
+		})
+		r.IPv4 = h
+		return r
+	}
+	st := Stats([]*Report{mk(probe.Yes), mk(probe.Unknown), mk(probe.Yes)})
+	if len(st) != 2 || st[0].Service != "Dead API" || st[0].Answered != 0 || st[0].Failed != 3 || st[1].Service != "Flaky API" || st[1].Answered != 2 || st[1].Unknown != 1 {
+		t.Errorf("stats = %+v", st)
+	}
+	var b strings.Builder
+	WriteStats(&b, false, "en", 3, st)
+	if !strings.Contains(b.String(), "Dead API") || !strings.Contains(b.String(), "0/3") || !strings.Contains(b.String(), "2/3") {
+		t.Errorf("stats output:\n%s", b.String())
+	}
+}

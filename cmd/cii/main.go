@@ -58,6 +58,8 @@ Usage:
   cii route [flags]           paths to major networks: hops, transit, detours (see docs/ROUTE.md)
   cii diff [OLD NEW]          what changed between two runs (default: the last two local logs)
   cii show [LOG|JSON|-]       print a past run again (default: the latest local log); works with --mask, --json, --debug, --svg, --lang
+  cii analyze [LOG|JSON|-]    conclusions drawn from a run (default: the latest local log); nothing is checked again
+  cii stats [LOG...]          which checks did not always answer across local logs
   cii version
 
 Default command only:
@@ -139,6 +141,10 @@ func run(ctx context.Context, args []string) error {
 		return cmdDiff(args)
 	case "show":
 		return cmdShow(args)
+	case "analyze", "analyse":
+		return cmdAnalyze(args)
+	case "stats":
+		return cmdStats(args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -798,32 +804,105 @@ func cmdShow(args []string) error {
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
+	r, name, err := pastReport(&c, fs, "usage: cii show [LOG|JSON|-]")
+	if err != nil {
+		return err
+	}
+	c.noLog = true
+	c.from = name
+	return output(r, &c)
+}
+
+func pastReport(c *common, fs *flag.FlagSet, usage string) (*report.Report, string, error) {
 	var path string
 	switch fs.NArg() {
 	case 0:
 		logs, err := runlog.List(paths.LogDir())
 		if err != nil || len(logs) == 0 {
-			return errors.New("no local logs yet; run cii first or pass a log or JSON file")
+			return nil, "", errors.New("no local logs yet; run cii first or pass a log or JSON file")
 		}
 		path = logs[len(logs)-1]
 	case 1:
 		path = fs.Arg(0)
 	default:
-		return errors.New("usage: cii show [LOG|JSON|-]")
+		return nil, "", errors.New(usage)
 	}
 	r, err := loadReport(path)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	if c.mask {
 		r = r.Scrubbed()
 	}
-	c.noLog = true
-	c.from = filepath.Base(path)
+	name := filepath.Base(path)
 	if path == "-" {
-		c.from = "stdin"
+		name = "stdin"
 	}
-	return output(r, &c)
+	return r, name, nil
+}
+
+func cmdAnalyze(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii analyze", flag.ContinueOnError)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	r, name, err := pastReport(&c, fs, "usage: cii analyze [LOG|JSON|-]")
+	if err != nil {
+		return err
+	}
+	lang := c.language()
+	if c.json {
+		lang = "en"
+	}
+	findings := report.Analyze(r, lang)
+	if c.json {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(struct {
+			Source   string           `json:"source"`
+			Taken    time.Time        `json:"generated_at"`
+			Findings []report.Finding `json:"findings"`
+		}{name, r.GeneratedAt, findings})
+	}
+	title := fmt.Sprintf("%s %s · %s · %s · %s", r.Tool.Name, r.Tool.Version, report.Translate(lang, "analysis"), name, r.GeneratedAt.UTC().Format("2006-01-02 15:04 UTC"))
+	report.WriteFindings(os.Stdout, report.Style{Color: c.color(), Unicode: report.UnicodeTerminal(), Width: terminalWidth(), Lang: lang}, title, findings)
+	return nil
+}
+
+func cmdStats(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii stats", flag.ContinueOnError)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	files := fs.Args()
+	if len(files) == 0 {
+		logs, err := runlog.List(paths.LogDir())
+		if err != nil || len(logs) == 0 {
+			return errors.New("no local logs yet; run cii first or pass log or JSON files")
+		}
+		files = logs
+	}
+	var reps []*report.Report
+	for _, f := range files {
+		r, err := loadReport(f)
+		if err != nil {
+			return err
+		}
+		reps = append(reps, r)
+	}
+	stats := report.Stats(reps)
+	if c.json {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(struct {
+			Runs   int                `json:"runs"`
+			Checks []report.CheckStat `json:"checks"`
+		}{len(reps), stats})
+	}
+	report.WriteStats(os.Stdout, c.color(), c.language(), len(reps), stats)
+	return nil
 }
 
 func cmdDiff(args []string) error {
