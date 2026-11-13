@@ -61,7 +61,7 @@ Usage:
   cii analyze [LOG|JSON|-]    conclusions drawn from a run (default: the latest local log); nothing is checked again
   cii stats [LOG...]          which checks did not always answer across local logs
   cii compare A B [C...]      reports from different machines side by side, plus the list of differences for two
-  cii watch [flags]           repeat the check every --every (default 30m, minimum 5m) and print what changed; --count N stops after N runs
+  cii watch [flags]           repeat the check every --every (default 30m, minimum 5m) and print what changed; --count N stops after N runs; --listen HOST:PORT serves metrics
   cii completion SHELL        print a completion script for bash, zsh or fish
   cii man                     print this text as a manual page (roff)
   cii version
@@ -342,11 +342,13 @@ func cmdWatch(ctx context.Context, args []string) error {
 	var c common
 	var f ipFlags
 	every, count := watchDefault, 0
+	var listen string
 	fs := flag.NewFlagSet("cii watch", flag.ContinueOnError)
 	f.register(fs)
 	c.registerExports(fs)
 	fs.DurationVar(&every, "every", every, "pause between runs, 5m or more")
 	fs.IntVar(&count, "count", count, "stop after this many runs (0: until interrupted)")
+	fs.StringVar(&listen, "listen", "", "serve the latest metrics for Prometheus at http://HOST:PORT/metrics")
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -358,7 +360,16 @@ func cmdWatch(ctx context.Context, args []string) error {
 	case count < 0:
 		return errors.New("--count must not be negative")
 	case c.prom:
-		return errors.New("--prom prints a single report; with watch use --prom-file")
+		return errors.New("--prom prints a single report; with watch use --prom-file or --listen")
+	}
+	var metrics *metricsServer
+	if listen != "" && !c.plan {
+		var err error
+		if metrics, err = listenMetrics(listen); err != nil {
+			return err
+		}
+		defer metrics.close()
+		fmt.Fprintf(os.Stderr, "cii: metrics at http://%s/metrics\n", metrics.addr)
 	}
 	var prev *report.Report
 	for n := 1; ; n++ {
@@ -385,6 +396,11 @@ func cmdWatch(ctx context.Context, args []string) error {
 				return err
 			}
 			prev = rep
+		}
+		if metrics != nil && err == nil {
+			if err := metrics.set(rep); err != nil {
+				return fmt.Errorf("--listen: %w", err)
+			}
 		}
 		if ctx.Err() != nil || count > 0 && n >= count {
 			return nil

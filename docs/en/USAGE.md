@@ -63,6 +63,7 @@ An `m` after the number (`2m`) hides addresses and the provider. Enter alone run
 | `--svg FILE` | save the final screen as an SVG image |
 | `--html FILE` | save the final screen as an HTML page: one file without scripts or outside resources, the text can be selected and copied |
 | `--prom`, `--prom-file FILE` | print the report as Prometheus metrics instead of the screen; write them to a file (for example for the node_exporter textfile collector) |
+| `--listen HOST:PORT` | `cii watch` only: serve the metrics of the latest run at `http://HOST:PORT/metrics`. It listens only on the given address; for access from this machine alone use `127.0.0.1`. Until the first run ends it answers 503 |
 | `--demo` | show the report on invented data, no network |
 | `--lang auto\|en\|ru` | screen language; `--debug` and JSON stay in English |
 | `--no-color`, `--no-log` | no colours; no local log |
