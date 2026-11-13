@@ -526,6 +526,7 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 		return nil, err
 	}
 	defer dbs.Close()
+	censorOpts.Locate = locator(dbs)
 
 	mode := "online"
 	if c.offline {
@@ -739,6 +740,20 @@ func (c *common) catalogsFor(allowed, verdict []string) []string {
 		}
 	}
 	return out
+}
+
+func locator(dbs *geodb.Set) func(netip.Addr) (country, network string) {
+	return func(ip netip.Addr) (country, network string) {
+		for _, g := range dbs.Lookup(ip) {
+			if country == "" {
+				country = g.Country
+			}
+			if network == "" && g.ASN != 0 {
+				network = strings.TrimSpace(fmt.Sprintf("AS%d %s", g.ASN, g.ASOrg))
+			}
+		}
+		return country, network
+	}
 }
 
 func firstASN(geo []geodb.Record) uint {
@@ -1371,9 +1386,15 @@ func cmdCensor(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	dbs, err := geodb.Open(c.dir())
+	if err != nil {
+		return err
+	}
+	defer dbs.Close()
+	opts.Locate = locator(dbs)
 	led := ledger.New()
 	n := netx.New(netOpts, policy, led)
-	s := &session{mode: "censor", mask: c.mask, led: led, censor: censor.Placeholders(opts)}
+	s := &session{mode: "censor", mask: c.mask, dbs: dbs, led: led, censor: censor.Placeholders(opts)}
 	screen := startScreen(&c, s)
 	defer screen.stop()
 	rs := censor.Run(ctx, n, opts)

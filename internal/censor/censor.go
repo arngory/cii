@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -34,6 +35,7 @@ type Options struct {
 	Domain      string
 	Protocol    string
 	Retries     int
+	Locate      func(netip.Addr) (country, network string)
 }
 
 func ValidMode(m string) bool {
@@ -167,6 +169,8 @@ func Rules(opts Options) []netx.Rule {
 			add(openDNSServer[fam], "port 53 interception check (TXT which.opendns.com)")
 			add(googleServer[fam], "port 53 interception check (CHAOS id.server)")
 		}
+		add(akamaiWhoami, "resolver exit check via system resolver (A whoami)")
+		add(googleWhoami, "resolver exit check via system resolver (TXT whoami)")
 	}
 	if modes["portal"] {
 		for _, e := range portalEndpoints {

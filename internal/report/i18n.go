@@ -11,6 +11,7 @@ var translations = map[string]map[string]string{
 		"Region & services":                  "Регион и сервисы",
 		"Reputation lists & mail":            "Чёрные списки и почта",
 		"Censorship":                         "Цензура",
+		"DNS exit":                           "Выход DNS",
 		"Routes":                             "Маршруты",
 		"Runs analysed:":                     "Разобрано запусков:",
 		"Every check answered in every run.": "Все проверки ответили во всех запусках.",

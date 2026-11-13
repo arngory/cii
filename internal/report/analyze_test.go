@@ -214,3 +214,46 @@ func TestWritePrometheus(t *testing.T) {
 		t.Errorf("masked metrics leak:\n%s", b.String())
 	}
 }
+
+func TestAnalyzeResolverExit(t *testing.T) {
+	r := Demo("online")
+	r.Bench = nil
+	exit := func(country, reason string) probe.Result {
+		return probe.Result{Group: censor.DNS, Service: censor.EgressPrefix + " (Google)", Status: probe.Yes, Country: country,
+			Reason: reason, Detail: "198.51.100.53 AS64500 Example DNS"}
+	}
+	if same := analysed(t, r, "en"); strings.Contains(same, "resolver") {
+		t.Errorf("a resolver in the address country was reported:\n%s", same)
+	}
+	r.Censor = append(r.Censor, exit("NL", "the resolver that asks on your behalf; it passes the client subnet on (ECS)"))
+	abroad := analysed(t, r, "en")
+	for _, want := range []string{
+		"info | DNS queries leave through a resolver in NL, while the address is in DE | Behind a VPN or proxy this is a DNS leak",
+		"info | The resolver passes your subnet on to name servers (ECS)",
+	} {
+		if !strings.Contains(abroad, want) {
+			t.Errorf("%q missing:\n%s", want, abroad)
+		}
+	}
+	r.Censor = append(r.Censor, probe.Result{Group: censor.Local, Service: "Default route", Status: probe.Partial, Reason: "through tunnel wg0"})
+	if tunnel := analysed(t, r, "ru"); !strings.Contains(tunnel, "warn | DNS-запросы уходят через резолвер в NL, а адрес находится в DE") {
+		t.Errorf("a leak behind a tunnel should be a warning:\n%s", tunnel)
+	}
+	screen := strings.Join(r.Screen(Style{Unicode: true, Width: 220}, "", nil), "\n")
+	for _, want := range []string{"DNS exit  DE 203.0.113.53 AS3320 Deutsche Telekom", "DNS exit  NL 198.51.100.53 AS64500 Example DNS"} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("%q missing on screen:\n%s", want, screen)
+		}
+	}
+	masked := strings.Join(r.Scrubbed().Screen(Style{Unicode: true, Width: 220}, "", nil), "\n")
+	var js strings.Builder
+	r.Scrubbed().WriteJSON(&js)
+	for _, leak := range []string{"198.51.100", "203.0.113", "Example DNS", "64500", "Telekom"} {
+		if strings.Contains(masked, leak) || strings.Contains(js.String(), leak) {
+			t.Errorf("masked report leaks %q", leak)
+		}
+	}
+	if !strings.Contains(masked, "DNS exit  DE •••") || !strings.Contains(masked, "DNS exit  NL •••") {
+		t.Errorf("masked screen lost the resolver country:\n%s", masked)
+	}
+}

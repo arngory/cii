@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/arngory/cii/internal/censor"
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
@@ -99,6 +100,11 @@ func (r *Report) Scrubbed() *Report {
 		}
 	}
 	out.scrubOwnChecks(r, sc)
+	for i := range out.Censor {
+		if strings.HasPrefix(out.Censor[i].Service, censor.EgressPrefix) && out.Censor[i].Detail != "" {
+			out.Censor[i].Detail = Hidden
+		}
+	}
 	if out.Route != nil {
 		var own []string
 		n := 0

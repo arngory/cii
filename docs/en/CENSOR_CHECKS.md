@@ -39,6 +39,13 @@ Lines in the output: `Name IP` (UDP), `Name IP DoH`, `Name IP DoT`, then `DNS hi
 
 No answer or a timeout — `?`: unreachability is not yet interception. With a proxy neither check is run, like all plain DNS.
 
+**DNS exit.** Which resolver your queries really leave to the internet through: the address in the system settings (the router, 127.0.0.53) does not show that. The system resolver is asked for two names whose authoritative servers answer with the address of whoever asked them:
+
+- `Resolver exit (Akamai)` — the A record of `whoami.akamai.net`;
+- `Resolver exit (Google)` — the TXT record of `o-o.myaddr.l.google.com`; if the resolver passes the client subnet on (EDNS Client Subnet), Google returns it too, and "ECS" appears in the reason.
+
+The country and network of the address found come from the local databases, without asking services. On screen this is the "DNS exit" line in the censorship panel; details are in `--debug`. The report itself gives no judgement; `cii analyze` notes when the resolver is in a different country from the address: behind a VPN or proxy this is a DNS leak, without one it is just a resolver abroad. An address from 198.18.0.0/15 means a local fake-IP resolver answered: `?`. With a proxy the check is not run: the proxy resolves names. `--mask` hides the resolver's address and network; the country stays.
+
 ## Local
 
 Two checks that make no network requests. They show that the results of the other checks describe something other than a direct connection:

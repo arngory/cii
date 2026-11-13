@@ -61,9 +61,13 @@ var analysisRU = map[string]string{
 	"Port 25 is open, but the mail server did not accept this address":                            "Порт 25 открыт, но почтовый сервер не принял этот адрес",
 	"Traffic leaves through a tunnel":                                                             "Трафик уходит через туннель",
 	"Every result describes the tunnel exit, not this machine's own connection.":                  "Все результаты описывают выход туннеля, а не собственное подключение этой машины.",
-	"DNS is answered by a local fake-IP proxy":                                                    "DNS отвечает локальный прокси в режиме fake-IP",
-	"Route probes were answered locally":                                                          "На замеры маршрутов ответили локально",
-	"A local proxy, tunnel or sandbox ends the connections; path verdicts mean nothing here.":     "Соединения завершает локальный прокси, туннель или песочница; вердикты маршрутов здесь ничего не значат.",
+	"DNS queries leave through a resolver in %s, while the address is in %s":                      "DNS-запросы уходят через резолвер в %s, а адрес находится в %s",
+	"Behind a VPN or proxy this is a DNS leak: the resolver's operator sees the names you look up. Without one it is just a resolver abroad.": "За VPN или прокси это утечка DNS: оператор резолвера видит имена, которые вы запрашиваете. Без них это просто резолвер за границей.",
+	"The resolver passes your subnet on to name servers (ECS)":                                                                                "Резолвер передаёт вашу подсеть серверам имён (ECS)",
+	"The sites' name servers learn the network a query came from, though not the exact address.":                                              "Серверы имён сайтов узнают сеть, из которой пришёл запрос, но не точный адрес.",
+	"DNS is answered by a local fake-IP proxy":                                                                                                "DNS отвечает локальный прокси в режиме fake-IP",
+	"Route probes were answered locally":                                                                                                      "На замеры маршрутов ответили локально",
+	"A local proxy, tunnel or sandbox ends the connections; path verdicts mean nothing here.":                                                 "Соединения завершает локальный прокси, туннель или песочница; вердикты маршрутов здесь ничего не значат.",
 	"Detours: %s":                  "Крюки: %s",
 	"Through transit networks: %s": "Через транзитные сети: %s",
 	"Unreachable: %s":              "Недоступны: %s",
@@ -141,6 +145,7 @@ func Analyze(r *Report, lang string) []Finding {
 		}
 	}
 	a.censor(r.Censor)
+	a.resolverExit(r)
 	if r.Route != nil {
 		a.route(r.Route)
 	}
@@ -328,6 +333,44 @@ func (a *analysis) censor(rs []probe.Result) {
 		} else {
 			a.add(Warn, a.t("Traffic leaves through a tunnel"), a.t("Every result describes the tunnel exit, not this machine's own connection."))
 		}
+	}
+}
+
+func (a *analysis) resolverExit(r *Report) {
+	exits := pick(r.Censor, func(res probe.Result) bool {
+		return strings.HasPrefix(res.Service, censor.EgressPrefix) && res.Status == probe.Yes
+	})
+	var home, abroad []string
+	for _, f := range r.families() {
+		if f.host.Region != nil {
+			home = append(home, f.host.Region.Verdict...)
+		}
+		for _, g := range f.host.Geo {
+			if g.Country != "" {
+				home = append(home, g.Country)
+			}
+		}
+	}
+	slices.Sort(home)
+	home = slices.Compact(home)
+	for _, e := range exits {
+		if e.Country != "" && len(home) > 0 && !slices.Contains(home, e.Country) && !slices.Contains(abroad, e.Country) {
+			abroad = append(abroad, e.Country)
+		}
+	}
+	if len(abroad) > 0 {
+		level := Info
+		if slices.ContainsFunc(r.Censor, func(res probe.Result) bool {
+			return res.Group == censor.Local && res.Service != "System resolver" && res.Status == probe.Partial
+		}) {
+			level = Warn
+		}
+		a.add(level, a.t("DNS queries leave through a resolver in %s, while the address is in %s", strings.Join(abroad, ", "), strings.Join(home, ", ")),
+			a.t("Behind a VPN or proxy this is a DNS leak: the resolver's operator sees the names you look up. Without one it is just a resolver abroad."))
+	}
+	if slices.ContainsFunc(exits, func(res probe.Result) bool { return strings.Contains(res.Reason, "(ECS)") }) {
+		a.add(Info, a.t("The resolver passes your subnet on to name servers (ECS)"),
+			a.t("The sites' name servers learn the network a query came from, though not the exact address."))
 	}
 }
 

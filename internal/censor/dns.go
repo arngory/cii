@@ -269,6 +269,7 @@ func (r *runner) dns(ctx context.Context) []probe.Result {
 	}
 	out = append(out, r.hijack(ctx, refIdx, refDoH)...)
 	out = append(out, r.interception(ctx)...)
+	out = append(out, r.egress(ctx)...)
 	return append(out, localChecks(r.n)...)
 }
 

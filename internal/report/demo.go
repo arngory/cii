@@ -56,7 +56,7 @@ func Demo(mode string) *Report {
 		{Group: risk.DNSBL, Service: "dnsbl.dronebl.org", Status: probe.Yes},
 		{Group: risk.Mail, Service: "Outbound SMTP (25)", Status: probe.No, Detail: "connection timed out, port 25 likely filtered"},
 		{Group: risk.Network, Service: "PeeringDB", Status: probe.Yes, Detail: "AS3320 Cable/DSL/ISP"},
-		{Group: risk.Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: tor-exits, aws, gcp, oracle, cloudflare"},
+		{Group: risk.Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: tor-exits, aws, gcp"},
 	})
 	v4.SetRegion(region.Summarize([]probe.Result{
 		{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "DE", Facts: demoFacts("", "", 0, 0, clean)},
@@ -77,6 +77,8 @@ func Demo(mode string) *Report {
 			{Group: censor.DNS, Service: "Cloudflare 1.1.1.1", Status: probe.Yes},
 			{Group: censor.DNS, Service: "Google 8.8.8.8", Status: probe.Yes},
 			{Group: censor.DNS, Service: "Port 53 interception (OpenDNS)", Status: probe.Yes},
+			{Group: censor.DNS, Service: censor.EgressPrefix + " (Akamai)", Status: probe.Yes, Country: "DE",
+				Reason: "the resolver that asks on your behalf", Detail: "203.0.113.53 AS3320 Deutsche Telekom AG"},
 			{Group: censor.Telegram, Service: "DC2", Status: probe.Yes},
 			{Group: censor.Telegram, Service: "DC4", Status: probe.Yes},
 			{Group: censor.Portal, Service: "Google", Status: probe.Yes},
