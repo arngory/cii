@@ -3,6 +3,12 @@ set -euo pipefail
 version=${1#v}
 cfg=.nfpm.yaml
 trap 'rm -f "$cfg"' EXIT
+native=dist/cii-linux-$(go env GOHOSTARCH)
+mkdir -p build/share
+"$native" man | gzip -9n >build/share/cii.1.gz
+"$native" completion bash >build/share/cii.bash
+"$native" completion zsh >build/share/_cii
+"$native" completion fish >build/share/cii.fish
 for spec in amd64:cii-linux-amd64 arm64:cii-linux-arm64 arm7:cii-linux-arm-7 386:cii-linux-386 riscv64:cii-linux-riscv64; do
 	arch=${spec%%:*}
 	binary=dist/${spec#*:}

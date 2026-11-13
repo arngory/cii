@@ -1,6 +1,7 @@
 /.claude/review-state/
 /.claude/settings.local.json
 /dist/
+/build/
 /cii
 /cii.exe
 .nfpm.yaml

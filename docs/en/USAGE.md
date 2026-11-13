@@ -37,6 +37,8 @@ An `m` after the number (`2m`) hides addresses and the provider. Enter alone run
 | `cii compare A B [C…]` | reports from different machines side by side (two to six logs or JSON files): an IP quality panel per point and one service grid with a mark for each; for two points the list of differences follows. `--mask`, `--json` and `--svg` apply |
 | `cii watch` | repeat the check every `--every` (30 minutes by default, no more often than 5) and print what changed: address, verdict, service access, blocking, scores. The first run shows the full report. `--count N` stops after N runs, `--prom-file` refreshes a metrics file. Takes the flags of `cii` (`--extended`, `--route`, `--mask`…); with `--mask` an address change is not visible |
 | `cii data update [ID…]` | fetch offline databases from their publishers; `status` shows what is installed, `sources` what is available |
+| `cii completion SHELL` | a completion script for `bash`, `zsh` or `fish` (see [INSTALL.md](INSTALL.md)) |
+| `cii man` | the help as a man page |
 | `cii version` | version |
 
 ## Flags

@@ -62,6 +62,8 @@ Usage:
   cii stats [LOG...]          which checks did not always answer across local logs
   cii compare A B [C...]      reports from different machines side by side, plus the list of differences for two
   cii watch [flags]           repeat the check every --every (default 30m, minimum 5m) and print what changed; --count N stops after N runs
+  cii completion SHELL        print a completion script for bash, zsh or fish
+  cii man                     print this text as a manual page (roff)
   cii version
 
 Default command only:
@@ -154,6 +156,11 @@ func run(ctx context.Context, args []string) error {
 		return cmdCompare(args)
 	case "watch":
 		return cmdWatch(ctx, args)
+	case "completion":
+		return cmdCompletion(args)
+	case "man":
+		fmt.Print(manPage())
+		return nil
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -281,7 +288,7 @@ func (c *common) baseOptions() (netx.Options, error) {
 
 func (c *common) parse(fs *flag.FlagSet, args []string) error {
 	c.register(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	return c.check()
@@ -1369,7 +1376,7 @@ func cmdCensor(ctx context.Context, args []string) error {
 	fs.StringVar(&domain, "domain", "", "check a single domain")
 	fs.StringVar(&protocol, "protocol", "both", "http, https or both")
 	fs.IntVar(&retries, "retries", 0, "extra attempts per target")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := c.check(); err != nil {
@@ -1437,7 +1444,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	fs.StringVar(&opts.Servers, "servers", opts.Servers, "iperf3 servers: global, ru, all or host:ports[:provider[:location]],...")
 	fs.DurationVar(&opts.Duration, "duration", opts.Duration, "duration of each network transfer")
 	fs.BoolVar(&opts.SystemTools, "system", false, "also run installed iperf3 and fio")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := c.check(); err != nil {
@@ -1528,7 +1535,7 @@ func cmdRoute(ctx context.Context, args []string) error {
 	fs.BoolVar(&tcpOnly, "tcp", false, "skip ICMP tracing, measure TCP connect time only")
 	fs.IntVar(&opts.Rounds, "rounds", opts.Rounds, "ICMP probe rounds (1-15)")
 	fs.IntVar(&opts.MaxTTL, "max-hops", opts.MaxTTL, "maximum hops (1-31)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := c.check(); err != nil {

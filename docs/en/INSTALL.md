@@ -63,3 +63,23 @@ gh attestation verify cii-linux-amd64 --repo arngory/cii
 ```
 
 From source: `make build` (needs the Go version from `go.mod`).
+
+## Completion and man
+
+The `deb`, `rpm` and `apk` packages and the Homebrew formula install completion for bash, zsh and fish and the `man cii` page themselves. For a binary downloaded on its own:
+
+```bash
+cii completion bash > ~/.local/share/bash-completion/completions/cii
+```
+
+```bash
+cii completion zsh > "${fpath[1]}/_cii"
+```
+
+```bash
+cii completion fish > ~/.config/fish/completions/cii.fish
+```
+
+```bash
+cii man | man -l -
+```

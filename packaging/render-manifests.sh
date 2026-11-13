@@ -36,6 +36,8 @@ class Cii < Formula
 
   def install
     bin.install Dir["cii-*"].first => "cii"
+    generate_completions_from_executable(bin/"cii", "completion")
+    (man1/"cii.1").write Utils.safe_popen_read(bin/"cii", "man")
   end
 
   test do

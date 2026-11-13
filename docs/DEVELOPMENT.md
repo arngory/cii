@@ -34,7 +34,7 @@ go generate ./internal/refdata
 2. загрузка DB-IP Lite самим `cii data update` напрямую у издателя;
 3. если в репозитории задан секрет **`IPINFO_TOKEN`** — ещё и IPinfo Lite;
 4. `go run ./tools/notices` собирает `THIRD_PARTY_LICENSES.txt` (лицензии стандартной библиотеки Go, всех модулей, которые попадают в бинарник, и встроенных справочников) и `DATA-NOTICE.txt` (атрибуция, лицензия со ссылкой, дата сборки и sha256 для каждой приложенной базы, по манифесту и реестру источников);
-5. пакеты deb, rpm и apk (в них кладётся и `THIRD_PARTY_LICENSES.txt`);
+5. пакеты deb, rpm и apk (в них кладутся `THIRD_PARTY_LICENSES.txt`, страница man и автодополнение, которые печатает сам собранный бинарник: `cii man`, `cii completion`);
 6. публикация релиза с бинарниками, пакетами, `*.mmdb.gz`, `data-manifest.json`, обоими файлами уведомлений и `SHA256SUMS`. Если релиз для тега уже создан вручную, файлы догружаются в него, а пустое описание заменяется шаблоном `docs/RELEASE_NOTES_TEMPLATE.md`.
 
 7. обновление `Formula/cii.rb` и `bucket/cii.json` в ветке `main` отдельным коммитом от `github-actions[bot]` — по ним работают `brew tap arngory/cii https://github.com/arngory/cii` и `scoop bucket add cii https://github.com/arngory/cii`. Для предварительных версий (тег с дефисом) шаг пропускается. Шаг не валит релиз: если ветка защищена от прямых пушей, файлы нужно обновить вручную из приложенных к релизу `cii.rb` и `cii.json`.

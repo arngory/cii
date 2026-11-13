@@ -63,3 +63,23 @@ gh attestation verify cii-linux-amd64 --repo arngory/cii
 ```
 
 Сборка из исходников: `make build` (нужен Go из `go.mod`).
+
+## Автодополнение и man
+
+Пакеты `deb`, `rpm`, `apk` и формула Homebrew ставят автодополнение для bash, zsh и fish и страницу `man cii` сами. Для бинарника, скачанного отдельно:
+
+```bash
+cii completion bash > ~/.local/share/bash-completion/completions/cii
+```
+
+```bash
+cii completion zsh > "${fpath[1]}/_cii"
+```
+
+```bash
+cii completion fish > ~/.config/fish/completions/cii.fish
+```
+
+```bash
+cii man | man -l -
+```
