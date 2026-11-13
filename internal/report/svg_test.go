@@ -40,6 +40,28 @@ func TestWriteSVG(t *testing.T) {
 	}
 }
 
+func TestWriteHTML(t *testing.T) {
+	c := paint(true)
+	lines := []string{"┌─ " + c.bold("Title") + " ─┐", "│ " + c.badge(badgeBad, "HOST") + " a<b & \"c\" " + c.green("✓") + " " + c.dim("note") + " │"}
+	var b strings.Builder
+	if err := WriteHTML(&b, `cii <demo> & "more"`, "ru", lines); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	for _, want := range []string{"<!doctype html>", `<html lang="ru">`, `<meta charset="utf-8">`, "<title>cii &lt;demo&gt; &amp; &#34;more&#34;</title>",
+		`<span class="b">Title</span>`, `background:#da3633`, "a&lt;b &amp; &#34;c&#34;", `<span style="color:#3fb950">✓</span>`, `<span class="d">note</span>`, "┌─ ", "</pre>\n</body>\n</html>\n"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q missing\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "\x1b") || strings.Contains(out, "<script") || strings.Contains(out, "http") {
+		t.Errorf("escape codes, scripts or outside resources in the page\n%s", out)
+	}
+	if strings.Count(out, "<span") != strings.Count(out, "</span>") {
+		t.Errorf("unbalanced spans\n%s", out)
+	}
+}
+
 func TestDemoUsesDocumentationData(t *testing.T) {
 	r := Demo("online")
 	var js strings.Builder

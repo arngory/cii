@@ -85,6 +85,7 @@ Common flags:
   --no-log           do not write the local log (default: %s)
   --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
   --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route, show, compare)
+  --html FILE        also save the final screen as a self-contained HTML page (same commands as --svg)
   --prom             print the report as Prometheus metrics instead of the screen (not for lookup)
   --prom-file FILE   also write those metrics to FILE atomically, e.g. for the node_exporter textfile collector
   --demo             show the report on invented sample data without touching the network (cii only)
@@ -166,7 +167,7 @@ func run(ctx context.Context, args []string) error {
 
 type common struct {
 	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo, prom, quiet bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from, promFile                           string
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, html, from, promFile                     string
 	timeout                                                                                              time.Duration
 }
 
@@ -196,6 +197,7 @@ func (c *common) register(fs *flag.FlagSet) {
 
 func (c *common) registerSVG(fs *flag.FlagSet) {
 	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
+	fs.StringVar(&c.html, "html", "", "also write the final screen as an HTML page to this file")
 }
 
 func (c *common) registerExports(fs *flag.FlagSet) {
@@ -395,10 +397,8 @@ func watchStep(c *common, n int, prev, cur *report.Report) error {
 	if logErr != nil {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}
-	if c.svg != "" {
-		if err := writeSVG(cur, c, logPath, logErr); err != nil {
-			return fmt.Errorf("--svg: %w", err)
-		}
+	if err := writeScreens(cur, c, logPath, logErr); err != nil {
+		return err
 	}
 	if c.promFile != "" {
 		if err := writeMetricsFile(cur, c.promFile); err != nil {
@@ -788,10 +788,8 @@ func output(r *report.Report, c *common) error {
 	if err := printReport(r, c, logPath, logErr); err != nil {
 		return err
 	}
-	if c.svg != "" {
-		if err := writeSVG(r, c, logPath, logErr); err != nil {
-			return fmt.Errorf("--svg: %w", err)
-		}
+	if err := writeScreens(r, c, logPath, logErr); err != nil {
+		return err
 	}
 	if c.promFile != "" {
 		if err := writeMetricsFile(r, c.promFile); err != nil {
@@ -903,13 +901,32 @@ func footer(r *report.Report, unicode bool, lang, logPath string, logErr error) 
 	return parts
 }
 
-func writeSVG(r *report.Report, c *common, logPath string, logErr error) error {
+func writeScreens(r *report.Report, c *common, logPath string, logErr error) error {
+	if c.svg == "" && c.html == "" {
+		return nil
+	}
 	style := report.Style{Color: true, Unicode: true, Width: terminalWidth(), Lang: c.language()}
-	f, err := os.Create(c.svg)
+	lines := r.Screen(style, screenTitle(r, c), footer(r, true, c.language(), logPath, logErr))
+	if c.svg != "" {
+		if err := writeFile(c.svg, func(w io.Writer) error { return report.WriteSVG(w, lines) }); err != nil {
+			return fmt.Errorf("--svg: %w", err)
+		}
+	}
+	if c.html != "" {
+		page := func(w io.Writer) error { return report.WriteHTML(w, screenTitle(r, c), c.language(), lines) }
+		if err := writeFile(c.html, page); err != nil {
+			return fmt.Errorf("--html: %w", err)
+		}
+	}
+	return nil
+}
+
+func writeFile(path string, write func(io.Writer) error) error {
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	if err := report.WriteSVG(f, r.Screen(style, screenTitle(r, c), footer(r, true, c.language(), logPath, logErr))); err != nil {
+	if err := write(f); err != nil {
 		f.Close()
 		return err
 	}
