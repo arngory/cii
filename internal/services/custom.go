@@ -88,7 +88,12 @@ func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 		}
 		host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 		if _, err := netip.ParseAddr(host); err != nil {
-			if host, err = idna.Lookup.ToASCII(host); err != nil {
+			if strings.ContainsFunc(host, func(r rune) bool { return r >= utf8.RuneSelf }) {
+				host, err = idna.Lookup.ToASCII(host)
+			} else {
+				err = nil
+			}
+			if err != nil || host == "" || slices.Contains(strings.Split(host, "."), "") {
 				return nil, fmt.Errorf("services[%d]: url has a host name that cannot be used", i)
 			}
 			if port := u.Port(); port != "" {

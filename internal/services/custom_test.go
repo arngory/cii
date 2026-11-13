@@ -36,6 +36,9 @@ func TestCustomChecks(t *testing.T) {
 	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://example.org/?a={ip}"}}); strings.Contains(q[0].Requests[0].URL, "{ip}") {
 		t.Errorf("the address placeholder of built-in checks is live in an own check: %s", q[0].Requests[0].URL)
 	}
+	if q, err := CustomChecks([]config.ServiceCheck{{URL: "http://My_App:8080/health"}}); err != nil || q[0].Host != "my_app" || q[0].Requests[0].URL != "http://my_app:8080/health" {
+		t.Errorf("underscore host = %+v, %v", q, err)
+	}
 	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://wiki.example.org./"}}); q[0].Host != "wiki.example.org" || q[0].Service != "wiki.example.org" {
 		t.Errorf("trailing dot kept: %+v", q[0])
 	}
@@ -102,7 +105,9 @@ func TestCustomChecksRejectBadDefinitions(t *testing.T) {
 		"built-in":    {{Name: "Netflix", URL: "https://example.org/", Group: "Streaming"}},
 		"built-in 2":  {{Name: "netflix", URL: "https://example.org/"}},
 		"catalog":     {{Name: Catalogs[0].checks[0].Service, URL: "https://example.org/", Group: "Work"}},
-		"bad idn":     {{URL: "https://exa_mple..org/"}},
+		"empty label": {{URL: "https://exa_mple..org/"}},
+		"only a dot":  {{URL: "https://./"}},
+		"bad idn":     {{URL: "https://\u0432\u0438\u043a\u0438-.example/"}},
 		"long name":   {{Name: strings.Repeat("n", maxLabel+1), URL: "https://example.org/"}},
 		"control":     {{Name: "a\x1b[31m", URL: "https://example.org/"}},
 		"long group":  {{URL: "https://example.org/", Group: strings.Repeat("g", maxLabel+1)}},
