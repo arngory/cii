@@ -165,6 +165,7 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 }
 
 func typeLines(c paint, m marks, sources []probe.Result, name func(probe.Result) string, nameW int) []string {
+	company := slices.ContainsFunc(sources, func(r probe.Result) bool { return r.Facts.Company != "" })
 	var out []string
 	for _, r := range sources {
 		f := r.Facts
@@ -172,9 +173,17 @@ func typeLines(c paint, m marks, sources []probe.Result, name func(probe.Result)
 			continue
 		}
 		if len(out) == 0 {
-			out = append(out, c.dim(pad("", nameW)+"  "+pad(m.tr("usage"), badgeWidth)+" "+m.tr("company")))
+			head := pad("", nameW) + "  " + m.tr("usage")
+			if company {
+				head = pad(head, nameW+2+badgeWidth) + " " + m.tr("company")
+			}
+			out = append(out, c.dim(head))
 		}
-		out = append(out, name(r)+" "+usageBadge(c, f.Usage)+" "+usageBadge(c, f.Company))
+		line := name(r) + " " + usageBadge(c, f.Usage)
+		if company {
+			line += " " + usageBadge(c, f.Company)
+		}
+		out = append(out, line)
 	}
 	return out
 }

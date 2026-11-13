@@ -48,6 +48,8 @@ func Demo(mode string) *Report {
 		{Group: services.AI, Service: "Kimi API (CN)", Status: probe.No, Reason: "region not supported"},
 		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.Yes, Country: "DE", Detail: "Residential; risk 0",
 			Facts: demoFacts("isp", "", 0, 0, clean)},
+		{Group: risk.Reputation, Service: "ipinfo.io", Status: probe.Yes, Country: "DE", Detail: "ASN type isp", Extended: true,
+			Facts: demoFacts("isp", "isp", -1, 0, clean)},
 		{Group: risk.Network, Service: risk.PTRService, Status: probe.Yes, Detail: "p203-0-113-7.dip0.example.net"},
 		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.Yes},
 		{Group: risk.DNSBL, Service: "psbl.surriel.com", Status: probe.Yes},
@@ -57,9 +59,10 @@ func Demo(mode string) *Report {
 		{Group: risk.Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: tor-exits, aws, gcp, oracle, cloudflare"},
 	})
 	v4.SetRegion(region.Summarize([]probe.Result{
-		{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "DE", Facts: demoFacts("isp", "", 0, 0, clean)},
-		{Group: region.GeoIP, Service: "ip-api.com", Status: probe.OK, Country: "DE", Facts: demoFacts("isp", "", -1, 0, clean)},
-		{Group: region.GeoIP, Service: "ip2location.io", Status: probe.OK, Country: "DE", Facts: demoFacts("isp", "", -1, 0, map[probe.Flag]bool{probe.Proxy: false})},
+		{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "DE", Facts: demoFacts("", "", 0, 0, clean)},
+		{Group: region.GeoIP, Service: "ip-api.com", Status: probe.OK, Country: "DE",
+			Facts: demoFacts("", "", -1, 0, map[probe.Flag]bool{probe.Proxy: false, probe.Hosting: false})},
+		{Group: region.GeoIP, Service: "ip2location.io", Status: probe.OK, Country: "DE", Facts: demoFacts("", "", -1, 0, map[probe.Flag]bool{probe.Proxy: false})},
 		{Group: region.GeoIP, Service: "ipinfo.io", Status: probe.OK, Country: "DE"},
 		{Group: region.Platform, Service: "Cloudflare", Status: probe.OK, Country: "DE"},
 		{Group: region.Platform, Service: "Google", Status: probe.OK, Country: "DE"},

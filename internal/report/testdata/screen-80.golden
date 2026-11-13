@@ -4,10 +4,10 @@ cii golden
 │ Registry US  ⚠ geo-discrepant                                                │
 │                                                                              │
 │ Type ─────────────────────────────────────────────────────────────────────── │
-│                usage  company                                                │
-│ ipquery.io    [ISP ]  —                                                      │
-│ ip-api.com    [HOST]  —                                                      │
-│ AbuseIPDB     [ISP ]  —                                                      │
+│                usage                                                         │
+│ ipquery.io    [ISP ]                                                         │
+│ ip-api.com    [HOST]                                                         │
+│ AbuseIPDB     [ISP ]                                                         │
 │                                                                              │
 │ Score ────────────────────────────────────────────────────────────────────── │
 │ ipquery.io      3 ■□□□□ very low                                             │

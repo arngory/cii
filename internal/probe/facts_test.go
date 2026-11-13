@@ -7,7 +7,7 @@ func TestNormalizeUsage(t *testing.T) {
 		"isp": "isp", "Residential": "isp", "Fixed Line ISP": "isp",
 		"Mobile ISP": "mobile", "Wireless": "mobile",
 		"Data Center/Web Hosting/Transit": "hosting", "hosting": "hosting", "Data Center": "hosting",
-		"Content Delivery Network": "cdn", "Commercial": "business", "Corporate": "business", "business": "business",
+		"Content Delivery Network": "cdn", "Commercial": "business", "Corporate": "business", "business": "business", "banking": "business",
 		"University/College/School": "education", "edu": "education", "Military": "government",
 		"VPN": "", "TOR": "", "": "",
 	} {

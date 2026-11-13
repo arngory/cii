@@ -69,8 +69,8 @@ func TestProfileOutput(t *testing.T) {
 	out := strings.Join(r.Screen(Style{Width: 200, Unicode: true}, "", nil), "\n")
 	for _, s := range []string{
 		"Registry US  ⚠ geo-discrepant",
-		"ipquery.io    [ISP ]  —",
-		"ip-api.com    [HOST]  —",
+		"ipquery.io    [ISP ]   ",
+		"ip-api.com    [HOST]   ",
 		"ipquery.io      3 ■□□□□ very low",
 		"proxycheck.io  66 ■■■■□ high",
 		"cc proxy   VPN   Tor  host abuse   bot",
@@ -90,10 +90,34 @@ func TestProfileOutput(t *testing.T) {
 	}
 	var detailed strings.Builder
 	r.WriteDetailed(&detailed, false)
-	out = detailed.String()
+	plain := detailed.String()
 	for _, s := range []string{"IP profile (IPv4) · registered US, geo-discrepant", "source", "abuser", "RDAP (RIR)", "Registry"} {
-		if !strings.Contains(out, s) {
-			t.Errorf("%q missing in detailed output:\n%s", s, out)
+		if !strings.Contains(plain, s) {
+			t.Errorf("%q missing in detailed output:\n%s", s, plain)
 		}
+	}
+	if strings.Contains(out, "company") || strings.Contains(plain, "company") {
+		t.Errorf("company column shown though no source reports a company type:\n%s\n%s", out, plain)
+	}
+}
+
+func TestProfileCompanyColumn(t *testing.T) {
+	h := sampleProfileHost()
+	h.SetServices(append(h.Services, probe.Result{Group: risk.Reputation, Service: "ipinfo.io", Status: probe.Yes,
+		Facts: &probe.Facts{Usage: "isp", Company: "business"}}))
+	r := &Report{Tool: Tool{Name: "cii"}, IPv4: h}
+	out := strings.Join(r.Screen(Style{Width: 200, Unicode: true}, "", nil), "\n")
+	for _, s := range []string{"usage  company", "ipquery.io    [ISP ]  —", "ipinfo.io     [ISP ] [BIZ ]"} {
+		if !strings.Contains(out, s) {
+			t.Errorf("%q missing in screen:\n%s", s, out)
+		}
+	}
+	var detailed strings.Builder
+	r.WriteDetailed(&detailed, false)
+	if plain := detailed.String(); !strings.Contains(plain, "company") || !strings.Contains(plain, "business") {
+		t.Errorf("company column missing in detailed output:\n%s", plain)
+	}
+	if p := h.Profile; len(p.Company) != 1 || p.Company[0].Value != "business" || p.Company[0].Sources[0] != "ipinfo.io" {
+		t.Errorf("company votes = %+v", p.Company)
 	}
 }

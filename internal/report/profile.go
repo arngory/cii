@@ -136,7 +136,12 @@ func writeProfile(w io.Writer, c paint, label string, h *Host) {
 		title += " · " + text
 	}
 	fmt.Fprintln(w, c.bold(title))
-	header := []gcell{{text: "  source", style: c.dim}, {text: "usage", style: c.dim}, {text: "company", style: c.dim}, {text: "score", style: c.dim}}
+	company := len(p.Company) > 0
+	header := []gcell{{text: "  source", style: c.dim}, {text: "usage", style: c.dim}}
+	if company {
+		header = append(header, gcell{text: "company", style: c.dim})
+	}
+	header = append(header, gcell{text: "score", style: c.dim})
 	for _, f := range probe.Flags {
 		header = append(header, gcell{text: flagTitles[f], style: c.dim})
 	}
@@ -146,7 +151,10 @@ func writeProfile(w io.Writer, c paint, label string, h *Host) {
 		if f == nil {
 			continue
 		}
-		row := []gcell{plain("  " + r.Service), plain(cmp.Or(usageTitles[f.Usage], "—")), plain(cmp.Or(usageTitles[f.Company], "—"))}
+		row := []gcell{plain("  " + r.Service), plain(cmp.Or(usageTitles[f.Usage], "—"))}
+		if company {
+			row = append(row, plain(cmp.Or(usageTitles[f.Company], "—")))
+		}
 		if f.Score != nil {
 			row = append(row, gcell{text: strconv.Itoa(*f.Score), style: levelStyle(c, levelOf(f))})
 		} else {
