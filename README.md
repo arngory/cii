@@ -184,6 +184,14 @@ scoop bucket add cii https://github.com/arngory/cii; scoop install cii
 
 Формула и манифест лежат в этом же репозитории (`Formula/`, `bucket/`), их обновляет релизный workflow.
 
+Docker (образ `ghcr.io/arngory/cii`, amd64 и arm64, собирается из тех же бинарников):
+
+```bash
+docker run --rm -it --network host ghcr.io/arngory/cii
+```
+
+`--network host` нужен, чтобы проверялась сеть машины, а не сеть контейнера; `-it` — для меню. Для хопов в `cii route` добавьте `--cap-add NET_RAW`, для баз и логов между запусками — том `-v cii:/data`.
+
 Бинарники для Linux (amd64, arm64, armv7, 386, mips/mipsle softfloat, riscv64), macOS и Windows, пакеты `deb`, `rpm` и `apk`, формула Homebrew (`cii.rb`), манифест Scoop (`cii.json`) и `PKGBUILD` для AUR лежат на [странице релиза](https://github.com/arngory/cii/releases/latest). Всё собирается в GitHub Actions из этого репозитория, у каждого файла есть подтверждение происхождения:
 
 ```bash
