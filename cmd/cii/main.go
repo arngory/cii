@@ -309,6 +309,9 @@ func cmdIP(ctx context.Context, args []string) error {
 	if c.demo {
 		c.noLog = true
 		rep := report.Demo("online")
+		if !f.bench {
+			rep.Bench = nil
+		}
 		if c.mask {
 			rep = rep.Scrubbed()
 		}

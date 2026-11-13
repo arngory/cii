@@ -1,8 +1,11 @@
 package report
 
 import (
+	"bytes"
 	"encoding/xml"
 	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -51,6 +54,19 @@ func TestDemoUsesDocumentationData(t *testing.T) {
 	for _, ip := range regexp.MustCompile(`\b\d{1,3}(?:\.\d{1,3}){3}\b`).FindAllString(js.String()+screen, -1) {
 		if !allowed.MatchString(ip) {
 			t.Errorf("demo carries a non-documentation address %s", ip)
+		}
+	}
+}
+
+func TestDemoImagesAreCurrent(t *testing.T) {
+	for name, spec := range DemoImages() {
+		want, err := DemoSVG(spec[0].(string), spec[1].(int))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join("..", "..", "docs", "img", name))
+		if err != nil || !bytes.Equal(got, want) {
+			t.Errorf("docs/img/%s is out of date: run `make demo` (%v)", name, err)
 		}
 	}
 }

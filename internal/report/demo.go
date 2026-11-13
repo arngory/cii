@@ -1,6 +1,7 @@
 package report
 
 import (
+	"bytes"
 	"net/netip"
 	"time"
 
@@ -91,4 +92,27 @@ func Demo(mode string) *Report {
 	}
 	r.Network = []ledger.Entry{{Module: "ipdetect", Host: "www.cloudflare.com", Proto: "https", Requests: 1, Purpose: "public IP echo (cloudflare)"}}
 	return r
+}
+
+const (
+	DemoWide   = 118
+	DemoNarrow = 60
+)
+
+func DemoSVG(lang string, width int) ([]byte, error) {
+	r := Demo("online")
+	r.Bench = nil
+	lines := r.Screen(Style{Color: true, Unicode: true, Width: width, Lang: lang}, r.Tool.Name+" demo", []string{Legend(r, true, lang)})
+	var b bytes.Buffer
+	err := WriteSVG(&b, lines)
+	return b.Bytes(), err
+}
+
+func DemoImages() map[string][2]any {
+	return map[string][2]any{
+		"demo-en.svg":        {"en", DemoWide},
+		"demo-ru.svg":        {"ru", DemoWide},
+		"demo-en-narrow.svg": {"en", DemoNarrow},
+		"demo-ru-narrow.svg": {"ru", DemoNarrow},
+	}
 }

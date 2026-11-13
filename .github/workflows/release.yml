@@ -111,6 +111,7 @@ jobs:
             --label "org.opencontainers.image.source=$SOURCE" \
             --label "org.opencontainers.image.version=${TAG#v}" \
             --label "org.opencontainers.image.licenses=AGPL-3.0-only" \
+            --label "org.opencontainers.image.description=cii: complete information about current IP (region, IP quality, services, censorship, routes, benchmark)" \
             --push "$ctx"
 
       - name: Update the Homebrew formula and Scoop manifest in the repository
