@@ -680,6 +680,9 @@
         "group": {
           "type": "string"
         },
+        "host": {
+          "type": "string"
+        },
         "iata": {
           "type": "string"
         },

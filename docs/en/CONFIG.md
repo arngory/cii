@@ -84,7 +84,7 @@ Your own availability checks: one `GET` request per address, the result goes to 
 | Field | Meaning |
 |---|---|
 | `url` | required; `https://` or `http://`, without a login and password in the address |
-| `name` | the label in the report; by default, the host from `url` |
+| `name` | the label in the report; by default, the host from `url`. No semicolon, and not the name of a built-in check |
 | `expect` | the expected status code or a list: `200`, `[401, 403]`; by default any code below 400 fits |
 | `contains` | a string that must be in the response body |
 | `blocked` | a string that identifies a refusal: if it is in the body, the result is `no` |

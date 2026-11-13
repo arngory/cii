@@ -3,12 +3,16 @@ package services
 import (
 	"bytes"
 	"fmt"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"golang.org/x/net/idna"
 
 	"github.com/arngory/cii/internal/config"
 	"github.com/arngory/cii/internal/probe"
@@ -55,6 +59,11 @@ func label(kind, s string) error {
 	return nil
 }
 
+func builtin(name string) bool {
+	same := func(c probe.Check) bool { return strings.EqualFold(c.Service, name) }
+	return slices.ContainsFunc(Checks, same) || slices.ContainsFunc(Catalogs, func(c *Catalog) bool { return slices.ContainsFunc(c.checks, same) })
+}
+
 func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 	if len(defs) > MaxCustom {
 		return nil, fmt.Errorf("services: %d checks in the config, at most %d are supported", len(defs), MaxCustom)
@@ -73,10 +82,20 @@ func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 		case u.User != nil:
 			return nil, fmt.Errorf("services[%d]: url must not carry credentials", i)
 		}
-		u.Host = strings.ToLower(u.Host)
+		host := strings.ToLower(u.Hostname())
+		if _, err := netip.ParseAddr(host); err != nil {
+			if host, err = idna.Lookup.ToASCII(host); err != nil {
+				return nil, fmt.Errorf("services[%d]: url has a host name that cannot be used", i)
+			}
+			if port := u.Port(); port != "" {
+				u.Host = net.JoinHostPort(host, port)
+			} else {
+				u.Host = host
+			}
+		}
 		name, group := strings.TrimSpace(d.Name), strings.TrimSpace(d.Group)
 		if name == "" {
-			name = u.Hostname()
+			name = host
 		}
 		if err := label("name", name); err != nil {
 			return nil, fmt.Errorf("services[%d]: %w", i, err)
@@ -87,8 +106,8 @@ func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 		if seen[name] {
 			return nil, fmt.Errorf("services[%d]: name %q is used twice", i, name)
 		}
-		if g := customGroup(group); slices.ContainsFunc(Checks, func(c probe.Check) bool { return c.Group == g && c.Service == name }) {
-			return nil, fmt.Errorf("services[%d]: %q is a built-in check of the group %s", i, name, group)
+		if builtin(name) {
+			return nil, fmt.Errorf("services[%d]: %q is the name of a built-in check", i, name)
 		}
 		seen[name] = true
 		for _, code := range d.Expect {
@@ -97,7 +116,7 @@ func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 			}
 		}
 		out = append(out, probe.Check{
-			Module: Module, Service: name, Group: customGroup(group), Custom: true,
+			Module: Module, Service: name, Group: customGroup(group), Custom: true, Host: host,
 			Requests: []probe.Request{{URL: strings.ReplaceAll(u.String(), "{ip}", "%7Bip%7D"), NoRedirect: true}},
 			Eval:     customEval(d),
 		})

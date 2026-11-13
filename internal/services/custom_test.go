@@ -39,6 +39,14 @@ func TestCustomChecks(t *testing.T) {
 	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://Wiki.Example.ORG/Path"}}); q[0].Service != "wiki.example.org" || q[0].Requests[0].URL != "https://wiki.example.org/Path" {
 		t.Errorf("host case kept: %+v", q[0])
 	}
+	idn, err := CustomChecks([]config.ServiceCheck{{URL: "https://Вики.example:8443/x"}, {URL: "https://[2001:DB8::1]:8443/"}, {URL: "http://192.0.2.10/"}})
+	if err != nil || idn[0].Host != "xn--b1amah.example" || idn[0].Service != idn[0].Host || idn[0].Requests[0].URL != "https://xn--b1amah.example:8443/x" ||
+		idn[1].Host != "2001:db8::1" || idn[1].Requests[0].URL != "https://[2001:DB8::1]:8443/" || idn[2].Host != "192.0.2.10" {
+		t.Errorf("hosts = %+v, err = %v", idn, err)
+	}
+	if checks[1].Host != "shop.example.org" || probe.Placeholders(checks)[1].Host != "shop.example.org" {
+		t.Errorf("host of the check = %q", checks[1].Host)
+	}
 	rules := probe.Rules(checks)
 	if len(rules) != 3 || rules[1].Pattern != "shop.example.org" || rules[1].Purpose != "services: Shop" {
 		t.Errorf("rules = %+v", rules)
@@ -89,6 +97,9 @@ func TestCustomChecksRejectBadDefinitions(t *testing.T) {
 		"twice":       {{Name: "a", URL: "https://example.org/"}, {Name: "a", URL: "https://example.net/"}},
 		"same host":   {{URL: "https://example.org/a"}, {URL: "https://example.org/b"}},
 		"built-in":    {{Name: "Netflix", URL: "https://example.org/", Group: "Streaming"}},
+		"built-in 2":  {{Name: "netflix", URL: "https://example.org/"}},
+		"catalog":     {{Name: Catalogs[0].checks[0].Service, URL: "https://example.org/", Group: "Work"}},
+		"bad idn":     {{URL: "https://exa_mple..org/"}},
 		"long name":   {{Name: strings.Repeat("n", maxLabel+1), URL: "https://example.org/"}},
 		"control":     {{Name: "a\x1b[31m", URL: "https://example.org/"}},
 		"long group":  {{URL: "https://example.org/", Group: strings.Repeat("g", maxLabel+1)}},
@@ -139,7 +150,7 @@ func TestCustomChecksRun(t *testing.T) {
 		t.Fatalf("results = %+v", res)
 	}
 	for i, want := range []probe.Status{probe.Yes, probe.Yes, probe.No, probe.Failed} {
-		if res[i].Status != want || !res[i].Custom || res[i].Group != Custom {
+		if res[i].Status != want || !res[i].Custom || res[i].Group != Custom || res[i].Host != "127.0.0.1" {
 			t.Errorf("%s = %+v, want %s", checks[i].Service, res[i], want)
 		}
 	}

@@ -172,24 +172,33 @@ func TestScrubbedRouteOnly(t *testing.T) {
 func TestScrubbedOwnServiceChecks(t *testing.T) {
 	r := New("full")
 	h := &Host{Address: "203.0.113.7"}
+	own := func(group probe.Group, name, host string, status probe.Status, reason string) probe.Result {
+		return probe.Result{Group: group, Service: name, Custom: true, Host: host, Status: status, Reason: reason}
+	}
 	h.SetServices([]probe.Result{
-		{Group: services.Custom, Service: "wiki.example.org", Custom: true, Status: probe.Failed,
-			Reason: "dial tcp: lookup wiki.example.org: no such host"},
-		{Group: "custom:Work", Service: "Shop", Custom: true, Status: probe.No, Reason: "HTTP 403"},
-		{Group: services.Custom, Service: "192.0.2.10", Custom: true, Status: probe.Failed, Reason: "no IPv4 connectivity"},
-		{Group: services.Custom, Service: "shop.example.org mirror", Custom: true, Status: probe.Yes},
-		{Group: services.Custom, Service: "Portal", Custom: true, Status: probe.Failed, Reason: "lookup Portal.Example.NET: no such host"},
+		own(services.Custom, "wiki.example.org", "wiki.example.org", probe.Failed, "dial tcp: lookup wiki.example.org: no such host"),
+		own("custom:Work", "Shop", "shop.example.org", probe.No, "HTTP 403"),
+		own(services.Custom, "192.0.2.10", "192.0.2.10", probe.Failed, "no IPv4 connectivity"),
+		own(services.Custom, "shop.example.org mirror", "shop.example.org", probe.Yes, ""),
+		own(services.Custom, "Portal", "portal.example.net", probe.Failed, "lookup Portal.Example.NET: no such host"),
+		own(services.Custom, "intra.corp.example", "198.51.100.5", probe.Yes, ""),
+		own(services.Custom, "xn--b1aajm.example", "xn--b1aajm.example", probe.Failed, "lookup xn--b1aajm.example: no such host"),
+		own(services.Custom, "Films", "www.netflix.com", probe.Yes, ""),
 		{Group: services.Streaming, Service: "Netflix", Status: probe.Yes},
+		{Group: services.Streaming, Service: "Prime Video", Status: probe.Yes},
 	})
 	r.IPv4 = h
 	v6 := &Host{Address: "2001:db8::7"}
-	v6.SetServices([]probe.Result{{Group: services.Custom, Service: "wiki.example.org", Custom: true, Status: probe.Yes}})
+	v6.SetServices([]probe.Result{own(services.Custom, "wiki.example.org", "wiki.example.org", probe.Yes, "")})
 	r.IPv6 = v6
 	r.Network = []ledger.Entry{
 		{Module: "services", Host: "wiki.example.org", Proto: "https", Purpose: "services: wiki.example.org"},
 		{Module: "services", Host: "shop.example.org", Proto: "https", Purpose: "services: Shop; services: shop.example.org mirror"},
-		{Module: "services", Host: "www.netflix.com", Proto: "https", Purpose: "services: Netflix"},
+		{Module: "services", Host: "www.netflix.com", Proto: "https", Purpose: "services: Netflix; services: Films"},
+		{Module: "services", Host: "www.primevideo.com", Proto: "https", Purpose: "services: Prime Video"},
 		{Module: "services", Host: "portal.example.net", Proto: "https", Purpose: "services: Portal"},
+		{Module: "services", Host: "198.51.100.5", Proto: "https", Purpose: "services: intra.corp.example"},
+		{Module: "services", Host: "xn--b1aajm.example", Proto: "dns", Purpose: "services: xn--b1aajm.example"},
 		{Module: "region", Host: "wiki.example.org", Proto: "https", Purpose: "region: other"},
 	}
 	m := r.Scrubbed()
@@ -198,21 +207,22 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := strings.ReplaceAll(js.String(), `"host": "wiki.example.org"`, "")
-	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10", "portal.example"} {
+	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10", "portal.example", "corp.example", "198.51.100", "xn--", "netflix.com"} {
 		if strings.Contains(strings.ToLower(out), leak) {
 			t.Errorf("own service check leaks %q:\n%s", leak, out)
 		}
 	}
-	for _, keep := range []string{`"service": "check 1"`, `"service": "check 2"`, `"service": "check 3"`, `"service": "Shop"`, `"service": "Netflix"`,
-		`"reason": "HTTP 403"`, `"reason": "dial tcp: lookup •••: no such host"`, "www.netflix.com", `"purpose": "services: Shop; services: ••• mirror"`, `"purpose": "region: other"`} {
+	for _, keep := range []string{`"service": "check 1"`, `"service": "check 2"`, `"service": "check 3"`, `"service": "check 4"`, `"service": "check 5"`,
+		`"service": "Shop"`, `"service": "Films"`, `"service": "Netflix"`, `"reason": "HTTP 403"`, `"reason": "dial tcp: lookup •••: no such host"`,
+		"www.primevideo.com", `"purpose": "services: Shop; services: check 3"`, `"purpose": "services: check 4"`, `"purpose": "region: other"`} {
 		if !strings.Contains(out, keep) {
 			t.Errorf("masked report lost %s:\n%s", keep, out)
 		}
 	}
-	if m.IPv6.Services[0].Service != m.IPv4.Services[0].Service {
-		t.Errorf("one check got two names: %q and %q", m.IPv4.Services[0].Service, m.IPv6.Services[0].Service)
+	if m.IPv6.Services[0].Service != m.IPv4.Services[0].Service || m.IPv6.Services[0].Host != Hidden {
+		t.Errorf("one check got two names or kept its host: %+v and %+v", m.IPv4.Services[0], m.IPv6.Services[0])
 	}
-	if r.IPv4.Services[0].Service != "wiki.example.org" || r.Network[0].Host != "wiki.example.org" {
+	if r.IPv4.Services[0].Service != "wiki.example.org" || r.IPv4.Services[0].Host != "wiki.example.org" || r.Network[0].Host != "wiki.example.org" {
 		t.Errorf("Scrubbed modified the original report")
 	}
 }

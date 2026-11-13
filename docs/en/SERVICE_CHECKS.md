@@ -56,6 +56,6 @@ The response is read in order:
 3. a `contains` string is set and the body lacks it — `no` ("marker not found");
 4. otherwise — `yes`.
 
-Redirects are not followed: a 301 or 302 is the answer itself, and no request goes to another host. To check the final page, give its address. A Cloudflare challenge page gives `?`, as with the built-in checks. In JSON such results are marked `"custom": true`.
+Redirects are not followed: a 301 or 302 is the answer itself, and no request goes to another host. To check the final page, give its address. A Cloudflare challenge page gives `?`, as with the built-in checks. In JSON such results are marked `"custom": true` and carry the checked host in the `host` field (an internationalised name in its punycode form).
 
 `--mask` hides the hosts of your own checks in error reasons and in the network ledger. A label set in `name` stays; a label that looks like a host (including the one taken from `url` by default) is replaced with `check N`.

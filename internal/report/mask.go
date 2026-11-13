@@ -140,19 +140,12 @@ func (r *Report) Scrubbed() *Report {
 }
 
 func ownCheckHosts(r *Report) []string {
-	purposes := map[string]bool{}
+	var own []string
 	for _, h := range r.hosts() {
 		for _, res := range h.Services {
-			if res.Custom {
-				purposes[services.Module+": "+res.Service] = true
+			if host := strings.ToLower(res.Host); res.Custom && host != "" && !slices.Contains(own, host) {
+				own = append(own, host)
 			}
-		}
-	}
-	var own []string
-	for _, e := range r.Network {
-		if e.Module == services.Module && !slices.Contains(own, e.Host) &&
-			slices.ContainsFunc(strings.Split(e.Purpose, "; "), func(p string) bool { return purposes[p] }) {
-			own = append(own, e.Host)
 		}
 	}
 	slices.SortFunc(own, func(a, b string) int { return len(b) - len(a) })
@@ -189,6 +182,9 @@ func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
 				res.Service = renamed[orig.Service]
 			}
 			res.Reason, res.Detail = sc.text(hide(orig.Reason), answerText), sc.text(hide(orig.Detail), answerText)
+			if res.Host != "" {
+				res.Host = Hidden
+			}
 		}
 	}
 	for i := range out.Network {
@@ -196,10 +192,17 @@ func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
 		if e.Module != services.Module {
 			continue
 		}
-		if slices.Contains(own, e.Host) {
+		if slices.Contains(own, strings.ToLower(e.Host)) {
 			e.Host = Hidden
 		}
-		e.Purpose = hide(e.Purpose)
+		purposes := strings.Split(e.Purpose, "; ")
+		for k, p := range purposes {
+			if name, ok := strings.CutPrefix(p, services.Module+": "); ok && renamed[name] != "" {
+				p = services.Module + ": " + renamed[name]
+			}
+			purposes[k] = hide(p)
+		}
+		e.Purpose = strings.Join(purposes, "; ")
 	}
 }
 
