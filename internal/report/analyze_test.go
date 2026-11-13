@@ -1,6 +1,7 @@
 package report
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -166,5 +167,50 @@ func TestCompare(t *testing.T) {
 	}
 	if _, err := Compare([]*Report{a, New("bench")}, []string{"a", "b"}); err == nil {
 		t.Error("a report without an address must be rejected")
+	}
+}
+
+func TestWritePrometheus(t *testing.T) {
+	r := Demo("online")
+	r.IPv4.Services[0].Service = "Net\"flix\\\n"
+	r.Route = &route.Report{Method: "icmp", Paths: []route.Path{{Target: route.Target{Name: "Google"}, RTTms: 1.5, Verdict: route.Direct}}}
+	var b strings.Builder
+	if err := r.WritePrometheus(&b); err != nil {
+		t.Fatal(err)
+	}
+	out := b.String()
+	line := regexp.MustCompile(`^(# (HELP|TYPE) cii_[a-z_]+ .+|cii_[a-z_]+(\{[a-z_]+="(\\.|[^"\\])*"(,[a-z_]+="(\\.|[^"\\])*")*\})? -?[0-9.e+-]+)$`)
+	types := map[string]int{}
+	for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+		if !line.MatchString(l) {
+			t.Errorf("not exposition format: %q", l)
+		}
+		if strings.HasPrefix(l, "# TYPE ") {
+			types[strings.Fields(l)[2]]++
+		}
+	}
+	for name, n := range types {
+		if n != 1 {
+			t.Errorf("metric family %s declared %d times", name, n)
+		}
+	}
+	for _, want := range []string{
+		`cii_address_info{point="IPv4",address="203.0.113.7",asn="3320",country="DE"} 1`,
+		`cii_check_available{point="IPv4",group="Streaming",service="Net\"flix\\\n"} 1`,
+		`cii_check_available{point="IPv4",group="AI",service="Kimi API (CN)"} 0`,
+		`cii_check_answered{group="DNS",service="Cloudflare 1.1.1.1"} 1`,
+		`cii_risk_score{point="IPv4",source="proxycheck.io"} 0`,
+		`cii_route_rtt_ms{target="Google"} 1.5`,
+		`cii_route_verdict{target="Google",verdict="direct"} 1`,
+		`cii_bench_speed_mbps{direction="down"} 930`,
+	} {
+		if !strings.Contains(out, want+"\n") {
+			t.Errorf("missing %s\n%s", want, out)
+		}
+	}
+	b.Reset()
+	r.Scrubbed().WritePrometheus(&b)
+	if strings.Contains(b.String(), "203.0.113") || strings.Contains(b.String(), "3320") {
+		t.Errorf("masked metrics leak:\n%s", b.String())
 	}
 }

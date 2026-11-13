@@ -26,7 +26,7 @@ type liveScreen struct {
 
 func liveCapable(c *common) bool {
 	fd := int(os.Stdout.Fd())
-	return !c.json && !c.debug && term.IsTerminal(fd) && os.Getenv("TERM") != "dumb" && enableVT()
+	return !c.json && !c.prom && !c.debug && term.IsTerminal(fd) && os.Getenv("TERM") != "dumb" && enableVT()
 }
 
 func startScreen(c *common, s *session) *liveScreen {

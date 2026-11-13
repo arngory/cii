@@ -83,7 +83,9 @@ Common flags:
   --debug            detailed tables, failed checks, data sources and every network contact
   --no-log           do not write the local log (default: %s)
   --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
-  --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route)
+  --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route, show, compare)
+  --prom             print the report as Prometheus metrics (text exposition format) instead of the screen
+  --prom-file FILE   also write those metrics to FILE atomically, e.g. for the node_exporter textfile collector
   --demo             show the report on invented sample data without touching the network (cii only)
   --no-color         disable colours
   --lang LANG        interface language: auto (from LANG/LC_ALL), en or ru; the --debug report and JSON stay in English
@@ -160,9 +162,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from                        string
-	timeout                                                                                 time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo, prom bool
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from, promFile                    string
+	timeout                                                                                       time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -189,11 +191,13 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.Usage = printUsage
 }
 
-func (c *common) registerSVG(fs *flag.FlagSet) {
+func (c *common) registerExports(fs *flag.FlagSet) {
 	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
+	fs.BoolVar(&c.prom, "prom", false, "print Prometheus metrics instead of the report")
+	fs.StringVar(&c.promFile, "prom-file", "", "also write Prometheus metrics to this file")
 }
 
-func (c *common) color() bool { return !c.noColor && !c.json && report.ColorEnabled() }
+func (c *common) color() bool { return !c.noColor && !c.json && !c.prom && report.ColorEnabled() }
 
 func (c *common) language() string {
 	switch c.lang {
@@ -290,7 +294,7 @@ func cmdIP(ctx context.Context, args []string) error {
 	fs.BoolVar(&noCensor, "no-censor", false, "skip censorship checks")
 	fs.BoolVar(&withRoute, "route", false, "also analyse paths to major networks (see cii route)")
 	fs.BoolVar(&c.demo, "demo", false, "render invented sample data, no network")
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -643,7 +647,31 @@ func output(r *report.Report, c *common) error {
 			return fmt.Errorf("--svg: %w", err)
 		}
 	}
+	if c.promFile != "" {
+		if err := writeMetricsFile(r, c.promFile); err != nil {
+			return fmt.Errorf("--prom-file: %w", err)
+		}
+	}
 	return nil
+}
+
+func writeMetricsFile(r *report.Report, path string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	err = r.WritePrometheus(tmp)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), 0o644)
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func printReport(r *report.Report, c *common, logPath string, logErr error) error {
@@ -651,6 +679,8 @@ func printReport(r *report.Report, c *common, logPath string, logErr error) erro
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}
 	switch {
+	case c.prom:
+		return r.WritePrometheus(os.Stdout)
 	case c.json:
 		return r.WriteJSON(os.Stdout)
 	case c.debug:
@@ -753,7 +783,7 @@ func terminalWidth() int {
 func cmdLookup(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii lookup", flag.ContinueOnError)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -808,7 +838,7 @@ func loadReport(path string) (*report.Report, error) {
 func cmdShow(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii show", flag.ContinueOnError)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -898,7 +928,7 @@ func loadReports(files []string, strict bool) ([]*report.Report, error) {
 func cmdCompare(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii compare", flag.ContinueOnError)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -1170,7 +1200,7 @@ func cmdCensor(ctx context.Context, args []string) error {
 	var retries int
 	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
 	c.register(fs)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal (comma-separated)")
 	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
 	fs.StringVar(&domain, "domain", "", "check a single domain")
@@ -1225,7 +1255,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	var c common
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
 	c.register(fs)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	opts := bench.Defaults()
 	var noDisk, noCPU, noNet, noIperf bool
 	var diskSize string
@@ -1324,7 +1354,7 @@ func cmdRoute(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("cii route", flag.ContinueOnError)
 	fs.StringVar(&targetSpec, "targets", "", "own targets: [+][name=]host[@asn],... (+ adds to the built-in list)")
 	c.register(fs)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	opts := route.Defaults()
 	fs.BoolVar(&tcpOnly, "tcp", false, "skip ICMP tracing, measure TCP connect time only")
 	fs.IntVar(&opts.Rounds, "rounds", opts.Rounds, "ICMP probe rounds (1-15)")
