@@ -36,6 +36,9 @@ func TestCustomChecks(t *testing.T) {
 	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://example.org/?a={ip}"}}); strings.Contains(q[0].Requests[0].URL, "{ip}") {
 		t.Errorf("the address placeholder of built-in checks is live in an own check: %s", q[0].Requests[0].URL)
 	}
+	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://wiki.example.org./"}}); q[0].Host != "wiki.example.org" || q[0].Service != "wiki.example.org" {
+		t.Errorf("trailing dot kept: %+v", q[0])
+	}
 	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://Wiki.Example.ORG/Path"}}); q[0].Service != "wiki.example.org" || q[0].Requests[0].URL != "https://wiki.example.org/Path" {
 		t.Errorf("host case kept: %+v", q[0])
 	}

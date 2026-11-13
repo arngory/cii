@@ -86,7 +86,7 @@ func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 		case u.User != nil:
 			return nil, fmt.Errorf("services[%d]: url must not carry credentials", i)
 		}
-		host := strings.ToLower(u.Hostname())
+		host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 		if _, err := netip.ParseAddr(host); err != nil {
 			if host, err = idna.Lookup.ToASCII(host); err != nil {
 				return nil, fmt.Errorf("services[%d]: url has a host name that cannot be used", i)

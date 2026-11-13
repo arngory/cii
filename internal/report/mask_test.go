@@ -178,7 +178,9 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 	h.SetServices([]probe.Result{
 		own(services.Custom, "wiki.example.org", "wiki.example.org", probe.Failed, "dial tcp: lookup wiki.example.org: no such host"),
 		own("custom:Work", "Shop", "shop.example.org", probe.No, "HTTP 403"),
-		own(services.Custom, "192.0.2.10", "192.0.2.10", probe.Failed, "no IPv4 connectivity"),
+		own(services.Custom, "192.0.2.10", "192.0.2.10", probe.Failed, "no ipv4 connectivity"),
+		own(services.Custom, "Odd", "wiki.example.org", probe.Failed, "unexpected reply from gateway-7 at site alpha"),
+		own(services.Custom, "Bare", "wiki.example.org", probe.Failed, "x509: certificate is valid for localhost, router-backup, not wiki.example.org"),
 		own(services.Custom, "shop.example.org mirror", "shop.example.org", probe.Yes, ""),
 		own(services.Custom, "Portal", "portal.example.net", probe.Failed, "lookup Portal.Example.NET: no such host"),
 		own(services.Custom, "intra.corp.example", "198.51.100.5", probe.Yes, ""),
@@ -210,13 +212,13 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := strings.ReplaceAll(js.String(), `"host": "wiki.example.org"`, "")
-	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10", "portal.example", "corp.example", "198.51.100", "xn--", "netflix.com"} {
+	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10", "portal.example", "corp.example", "198.51.100", "xn--", "netflix.com", "localhost", "router", "gateway", "alpha"} {
 		if strings.Contains(strings.ToLower(out), leak) {
 			t.Errorf("own service check leaks %q:\n%s", leak, out)
 		}
 	}
 	for _, keep := range []string{`"service": "check 1"`, `"service": "check 2"`, `"service": "check 3"`, `"service": "check 4"`, `"service": "check 5"`,
-		`"service": "Shop"`, `"service": "Films"`, `"service": "Files"`, `"service": "Mirror"`, `"group": "custom:Work"`, `"service": "Netflix"`, `"reason": "HTTP 403"`, `"reason": "tls: failed to verify certificate: x509: certificate is valid for •••, •••, not •••"`, `"reason": "dial tcp: lookup •••: no such host"`,
+		`"service": "Shop"`, `"service": "Films"`, `"service": "Files"`, `"service": "Mirror"`, `"group": "custom:Work"`, `"service": "Netflix"`, `"reason": "HTTP 403"`, `"reason": "certificate"`, `"reason": "no such host"`, `"reason": "no ipv4 connectivity"`, `"reason": "request failed"`,
 		"www.primevideo.com", `"purpose": "services: Shop; services: check 3"`, `"purpose": "services: check 4"`, `"purpose": "region: other"`} {
 		if !strings.Contains(out, keep) {
 			t.Errorf("masked report lost %s:\n%s", keep, out)

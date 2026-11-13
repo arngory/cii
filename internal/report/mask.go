@@ -24,7 +24,8 @@ var (
 	asnLike    = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
 	asnPrefix  = regexp.MustCompile(`^AS\d+\s*`)
 	legacyMask = regexp.MustCompile(`(?i)\b(?:\d{1,3}\.\d{1,3}\.\*\.\*|[0-9a-f]{1,4}:[0-9a-f]{1,4}:\*:\*)`)
-	domainLike = regexp.MustCompile(`(?i)(?:\*\.)?(?:[a-z0-9_-]+\.)+[a-z][a-z0-9-]+`)
+	ownReason  = regexp.MustCompile(`^(?:HTTP \d{3}|marker not found|blocked marker found|rate limited|timeout|no (?:ipv4|ipv6|any) connectivity|Cloudflare challenge, availability not tested)$`)
+	ownFailure = []string{"no such host", "connection refused", "connection reset", "network is unreachable", "no route to host", "certificate", "blocked by policy", "timeout"}
 	nibbleLike = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
@@ -100,7 +101,7 @@ func (r *Report) Scrubbed() *Report {
 			}
 		}
 	}
-	out.scrubOwnChecks(r, sc)
+	out.scrubOwnChecks(r)
 	for i := range out.Censor {
 		if strings.HasPrefix(out.Censor[i].Service, censor.EgressPrefix) && out.Censor[i].Detail != "" {
 			out.Censor[i].Detail = Hidden
@@ -153,11 +154,23 @@ func ownCheckHosts(r *Report) []string {
 	return own
 }
 
+func ownCheckReason(reason string) string {
+	if reason == "" || ownReason.MatchString(reason) {
+		return reason
+	}
+	for _, kind := range ownFailure {
+		if strings.Contains(reason, kind) {
+			return kind
+		}
+	}
+	return "request failed"
+}
+
 func hostLike(s string) bool {
 	return !strings.ContainsFunc(s, unicode.IsSpace) && strings.ContainsAny(s, ".:")
 }
 
-func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
+func (out *Report) scrubOwnChecks(r *Report) {
 	own := ownCheckHosts(r)
 	hide := func(s string) string { return s }
 	if len(own) > 0 {
@@ -182,8 +195,7 @@ func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
 				}
 				res.Service = renamed[orig.Service]
 			}
-			res.Reason = sc.text(domainLike.ReplaceAllLiteralString(hide(orig.Reason), Hidden), answerText)
-			res.Detail = sc.text(domainLike.ReplaceAllLiteralString(hide(orig.Detail), Hidden), answerText)
+			res.Reason, res.Detail = ownCheckReason(orig.Reason), ""
 			if title, ok := services.OwnGroup(orig.Group); ok && (hostLike(title) || hide(title) != title) {
 				res.Group = services.Custom
 			}
