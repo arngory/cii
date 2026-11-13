@@ -8,6 +8,7 @@ permissions:
   contents: write
   id-token: write
   attestations: write
+  packages: write
 
 jobs:
   release:
@@ -76,8 +77,61 @@ jobs:
             if [ -z "$body" ]; then
               gh release edit "$TAG" --notes-file docs/RELEASE_NOTES_TEMPLATE.md
             fi
+            title=$(gh release view "$TAG" --json name --jq .name)
+            if [ -z "$title" ]; then
+              gh release edit "$TAG" --title "cii $TAG"
+            fi
           else
             gh release create "$TAG" dist/* \
-              --title "$TAG" \
+              --title "cii $TAG" \
               --notes-file docs/RELEASE_NOTES_TEMPLATE.md
           fi
+
+      - name: Publish the container image
+        continue-on-error: true
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          IMAGE: ghcr.io/${{ github.repository }}
+          SOURCE: https://github.com/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          ctx=$(mktemp -d)
+          cp dist/cii-linux-amd64 dist/cii-linux-arm64 packaging/Dockerfile "$ctx/"
+          cp /etc/ssl/certs/ca-certificates.crt "$ctx/"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          tags=(-t "$IMAGE:${TAG#v}")
+          case "$TAG" in
+            *-*) ;;
+            *) tags+=(-t "$IMAGE:latest") ;;
+          esac
+          docker buildx create --use >/dev/null
+          docker buildx build --platform linux/amd64,linux/arm64 "${tags[@]}" \
+            --label "org.opencontainers.image.source=$SOURCE" \
+            --label "org.opencontainers.image.version=${TAG#v}" \
+            --label "org.opencontainers.image.licenses=AGPL-3.0-only" \
+            --push "$ctx"
+
+      - name: Update the Homebrew formula and Scoop manifest in the repository
+        continue-on-error: true
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            *-*) echo "pre-release: package manifests are not updated"; exit 0 ;;
+          esac
+          git fetch origin main
+          git checkout -B package-manifests origin/main
+          mkdir -p Formula bucket
+          cp dist/cii.rb Formula/cii.rb
+          cp dist/cii.json bucket/cii.json
+          git add Formula/cii.rb bucket/cii.json
+          if git diff --cached --quiet; then
+            echo "package manifests already up to date"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update Homebrew formula and Scoop manifest for $TAG"
+          git push origin HEAD:main

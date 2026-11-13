@@ -26,7 +26,7 @@ type liveScreen struct {
 
 func liveCapable(c *common) bool {
 	fd := int(os.Stdout.Fd())
-	return !c.json && !c.debug && term.IsTerminal(fd) && os.Getenv("TERM") != "dumb" && enableVT()
+	return !c.quiet && !c.json && !c.prom && !c.debug && term.IsTerminal(fd) && os.Getenv("TERM") != "dumb" && enableVT()
 }
 
 func startScreen(c *common, s *session) *liveScreen {
@@ -106,7 +106,7 @@ func clipRunes(s string, n int) string {
 }
 
 func benchProgress(c *common, s *session, live *liveScreen) func(string) {
-	plain := live == nil && !c.json && term.IsTerminal(int(os.Stderr.Fd()))
+	plain := live == nil && !c.quiet && !c.json && term.IsTerminal(int(os.Stderr.Fd()))
 	return func(step string) {
 		s.update(func() { s.benchStep = step })
 		if plain {

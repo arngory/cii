@@ -1,5 +1,7 @@
 # Бенчмарки: `cii bench`
 
+[English version](en/BENCH.md)
+
 Бенчмарк отвечает на вопрос «что это за машина и какой у неё канал». Он запускается либо отдельной командой `cii bench` с настройками ниже, либо флагом `cii --bench` после остальных проверок с настройками по умолчанию (панель «Benchmark» на общем экране, текущий шаг — в заголовке). Идеи взяты из [masonr/yet-another-bench-script](https://github.com/masonr/yet-another-bench-script) и [teddysun/across](https://github.com/teddysun/across) (bench.sh), но всё реализовано заново на Go внутри сетевой политики cii: ничего не скачивается, результаты никуда не отправляются, каждый адрес объявлен заранее и виден в `--plan`.
 
 ```bash

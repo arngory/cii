@@ -90,6 +90,13 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 	}
 }
 
+func TestMaskTextLegacyPartialMasks(t *testing.T) {
+	got := MaskText("from 203.0.*.* and 2001:db8:*:* at 12:30")
+	if strings.Contains(got, "203.0") || strings.Contains(got, "2001:db8") || !strings.Contains(got, "12:30") {
+		t.Errorf("legacy masks = %q", got)
+	}
+}
+
 func TestMaskTextKeepsPlainText(t *testing.T) {
 	in := "dial tcp4 203.0.113.5:0->198.51.100.7:443: connect: refused; [2001:db8::1]:443 ::ffff:192.0.2.9 v1.2 ok 12:30:00 AS-path"
 	got := MaskText(in)
@@ -117,6 +124,36 @@ func TestScrubbedRouteOnly(t *testing.T) {
 	for _, leak := range []string{"Arelion", "Example Access", "198.51.100", "1299", "64500"} {
 		if strings.Contains(js.String(), leak) {
 			t.Errorf("route-only masked report leaks %q", leak)
+		}
+	}
+	r.Route.Paths = append(r.Route.Paths,
+		route.Path{Target: route.Target{Name: "home", Host: "vps.example.org", Expect: 64512, Group: route.Custom}},
+		route.Path{Target: route.Target{Name: "example.org", Host: "example.org", Group: route.Custom}},
+		route.Path{Target: route.Target{Name: "192.0.2.77", Host: "192.0.2.77", Group: route.Custom}},
+		route.Path{Target: route.Target{Name: "nx.example.org", Host: "nx.example.org", Group: route.Custom},
+			Reason: "lookup nx.example.org on 192.0.2.53:53: no such host", Error: "lookup nx.example.org on 192.0.2.53:53: no such host"})
+	r.IPv4 = &Host{Address: "203.0.113.7", Geo: []geodb.Record{{Source: "dbip-asn-lite", ASN: 64500, ASOrg: "Hostwerk Online GmbH"}}}
+	r.Route.Paths = append(r.Route.Paths,
+		route.Path{Target: route.Target{Name: "box.hostwerk.example", Host: "box.hostwerk.example", Group: route.Custom},
+			Reason: "lookup box.hostwerk.example: no such host"},
+		route.Path{Target: route.Target{Name: "10.0.0.1.nip.io", Host: "10.0.0.1.nip.io", Group: route.Custom},
+			Error: "lookup 10.0.0.1.nip.io: no such host"})
+	r.Network = []ledger.Entry{
+		{Module: "route", Host: "vps.example.org", Proto: "icmp", Purpose: "route: path to home"},
+		{Module: "route", Host: "nx.example.org", Proto: "dns", Purpose: "route: path to nx.example.org"},
+		{Module: "route", Host: "example.org", Proto: "dns", Purpose: "route: path to example.org"},
+		{Module: "route", Host: "www.google.com", Proto: "icmp"},
+	}
+	js.Reset()
+	r.Scrubbed().WriteJSON(&js)
+	for _, leak := range []string{"vps.example.org", "192.0.2.77", "nx.example.org", "192.0.2.53", "example.org", "64512", "nx.", "box.", ".example", "nip.io"} {
+		if strings.Contains(js.String(), leak) {
+			t.Errorf("own route target leaks %q", leak)
+		}
+	}
+	for _, keep := range []string{`"name": "home"`, `"name": "target 3"`, "www.google.com"} {
+		if !strings.Contains(js.String(), keep) {
+			t.Errorf("masked route report lost %s", keep)
 		}
 	}
 	if !strings.Contains(js.String(), `"name": "Google"`) {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,7 +73,9 @@ func TestLoadReportFromLogAndJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	jsonPath := filepath.Join(dir, "r.json")
-	os.WriteFile(jsonPath, js.Bytes(), 0o600)
+	if err := os.WriteFile(jsonPath, js.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	for _, p := range []string{logPath, jsonPath} {
 		r, err := loadReport(p)
 		if err != nil || r.IPv4 == nil || r.IPv4.Address != "203.0.113.7" {
@@ -83,8 +86,88 @@ func TestLoadReportFromLogAndJSON(t *testing.T) {
 		}
 	}
 	bad := filepath.Join(dir, "bad.json")
-	os.WriteFile(bad, []byte(`{"schema":"other/v9"}`), 0o600)
+	if err := os.WriteFile(bad, []byte(`{"schema":"other/v9"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := loadReport(bad); err == nil || !strings.Contains(err.Error(), "unsupported report schema") {
 		t.Errorf("foreign schema = %v", err)
+	}
+	if reps, err := loadReports([]string{bad, logPath, jsonPath}, false); err != nil || len(reps) != 2 {
+		t.Errorf("lenient load = %d reports, %v", len(reps), err)
+	}
+	if _, err := loadReports([]string{bad, logPath}, true); err == nil {
+		t.Error("a named unreadable file must be an error")
+	}
+	if _, err := loadReports([]string{bad}, false); err == nil {
+		t.Error("no readable logs must be an error")
+	}
+}
+
+func TestParseChoice(t *testing.T) {
+	for in, want := range map[string]string{
+		"":    "ip",
+		" 1 ": "ip",
+		"2m":  "ip --extended --mask",
+		"2M":  "ip --extended --mask",
+		"3":   "ip --extended --route --bench",
+		"5m":  "censor --mask",
+		"10":  "data update",
+		"10m": "data update",
+		"09":  "analyze",
+	} {
+		got, err := parseChoice(in)
+		if err != nil || strings.Join(got, " ") != want {
+			t.Errorf("parseChoice(%q) = %v, %v; want %s", in, got, err, want)
+		}
+	}
+	if !choicePattern.MatchString("2M") || choicePattern.MatchString("route") {
+		t.Error("the command-line gate must accept 2M and leave command names alone")
+	}
+	if _, err := parseChoice("0"); !errors.Is(err, errMenuExit) {
+		t.Errorf("0 = %v", err)
+	}
+	for _, bad := range []string{"11", "99", "m", "2x", "1 2", "-1", "123"} {
+		if got, err := parseChoice(bad); err == nil {
+			t.Errorf("parseChoice(%q) = %v, want error", bad, got)
+		}
+	}
+	for i, it := range menu {
+		if it.title["en"] == "" || it.title["ru"] == "" || it.hint["en"] == "" || it.hint["ru"] == "" || len(it.args) == 0 {
+			t.Errorf("menu item %d incomplete: %+v", i+1, it)
+		}
+	}
+}
+
+func TestWatchStep(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CII_LOG_DIR", filepath.Join(dir, "logs"))
+	prev, cur := report.Demo("online"), report.Demo("online")
+	cur.GeneratedAt = cur.GeneratedAt.Add(30 * time.Minute)
+	cur.IPv4.Services[0].Status = "no"
+	c := &common{noColor: true, lang: "en", promFile: filepath.Join(dir, "cii.prom"), svg: filepath.Join(dir, "cii.svg")}
+	old := os.Stdout
+	rd, wr, _ := os.Pipe()
+	os.Stdout = wr
+	err1 := watchStep(c, 2, prev, cur)
+	err2 := watchStep(c, 3, cur, cur)
+	wr.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(rd)
+	out := buf.String()
+	if err1 != nil || err2 != nil {
+		t.Fatalf("watchStep: %v %v", err1, err2)
+	}
+	if !strings.Contains(out, "Streaming: Netflix") || !strings.Contains(out, "run 3: no changes") {
+		t.Errorf("watch output:\n%s", out)
+	}
+	if prom, err := os.ReadFile(c.promFile); err != nil || !strings.Contains(string(prom), "cii_check_available") {
+		t.Errorf("metrics file: %v", err)
+	}
+	if svg, err := os.ReadFile(c.svg); err != nil || !strings.Contains(string(svg), "<svg") {
+		t.Errorf("svg not refreshed by watch: %v", err)
+	}
+	if logs, _ := runlog.List(filepath.Join(dir, "logs")); len(logs) != 2 {
+		t.Errorf("logs written = %d, want 2", len(logs))
 	}
 }

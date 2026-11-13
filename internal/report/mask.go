@@ -1,6 +1,7 @@
 package report
 
 import (
+	"fmt"
 	"net/netip"
 	"reflect"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 )
 
 const Hidden = "•••"
@@ -19,6 +21,7 @@ var (
 	addrLike   = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*(?:/\d{1,3})?`)
 	asnLike    = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
 	asnPrefix  = regexp.MustCompile(`^AS\d+\s*`)
+	legacyMask = regexp.MustCompile(`(?i)\b(?:\d{1,3}\.\d{1,3}\.\*\.\*|[0-9a-f]{1,4}:[0-9a-f]{1,4}:\*:\*)`)
 	nibbleLike = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
@@ -42,6 +45,7 @@ var (
 
 func MaskText(s string) string {
 	s = nibbleLike.ReplaceAllString(s, Hidden)
+	s = legacyMask.ReplaceAllString(s, Hidden)
 	s = addrLike.ReplaceAllStringFunc(s, func(tok string) string {
 		for _, cand := range []string{tok, trimEdge(tok)} {
 			if isAddress(cand) {
@@ -76,7 +80,8 @@ func trimEdge(s string) string {
 }
 
 func (r *Report) Scrubbed() *Report {
-	out := newScrubber(orgNames(r)).copy(reflect.ValueOf(r), keepText).Interface().(*Report)
+	sc := newScrubber(orgNames(r))
+	out := sc.copy(reflect.ValueOf(r), keepText).Interface().(*Report)
 	out.Masked = true
 	for _, h := range out.hosts() {
 		if h.Region != nil {
@@ -89,6 +94,34 @@ func (r *Report) Scrubbed() *Report {
 		for i := range h.Services {
 			if h.Services[i].Service == risk.PTRService && h.Services[i].Detail != "" {
 				h.Services[i].Detail = Hidden
+			}
+		}
+	}
+	if out.Route != nil {
+		var own []string
+		n := 0
+		for i := range out.Route.Paths {
+			path := &out.Route.Paths[i]
+			t := &path.Target
+			if t.Group != route.Custom {
+				continue
+			}
+			n++
+			own = append(own, t.Host)
+			if t.Name == t.Host {
+				t.Name = fmt.Sprintf("target %d", n)
+			}
+			path.Reason = sc.text(strings.ReplaceAll(r.Route.Paths[i].Reason, t.Host, Hidden), answerText)
+			path.Error = sc.text(strings.ReplaceAll(r.Route.Paths[i].Error, t.Host, Hidden), answerText)
+			t.Host, t.Expect = Hidden, 0
+		}
+		slices.SortFunc(own, func(a, b string) int { return len(b) - len(a) })
+		for i := range out.Network {
+			for _, host := range own {
+				if out.Network[i].Host == host {
+					out.Network[i].Host = Hidden
+				}
+				out.Network[i].Purpose = strings.ReplaceAll(out.Network[i].Purpose, host, Hidden)
 			}
 		}
 	}
@@ -140,11 +173,6 @@ func orgNames(r *Report) []string {
 		for _, p := range r.Route.Paths {
 			for _, t := range p.Transit {
 				addOrg(asnPrefix.ReplaceAllString(t, ""))
-			}
-			for _, h := range p.Hops {
-				if h.ASN != 0 && h.ASN != p.ASN && h.ASN != p.Target.Expect {
-					addOrg(h.Org)
-				}
 			}
 		}
 	}

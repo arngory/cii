@@ -46,6 +46,8 @@ import (
 const usage = `cii — complete information about current IP
 
 Usage:
+  cii                         in a terminal: a menu of modes, pick one by number (add m to mask, e.g. 2m)
+  cii N[m] [flags]            run menu mode N directly, e.g. cii 2m; cii ip runs the standard check without the menu
   cii [flags]                 detect public IPv4/IPv6, describe them, check services, reputation and censorship (default)
   cii lookup [flags] IP...    describe given addresses using local data only (no network)
   cii data update [ID...]     download offline databases from their publishers
@@ -56,6 +58,10 @@ Usage:
   cii route [flags]           paths to major networks: hops, transit, detours (see docs/ROUTE.md)
   cii diff [OLD NEW]          what changed between two runs (default: the last two local logs)
   cii show [LOG|JSON|-]       print a past run again (default: the latest local log); works with --mask, --json, --debug, --svg, --lang
+  cii analyze [LOG|JSON|-]    conclusions drawn from a run (default: the latest local log); nothing is checked again
+  cii stats [LOG...]          which checks did not always answer across local logs
+  cii compare A B [C...]      reports from different machines side by side, plus the list of differences for two
+  cii watch [flags]           repeat the check every --every (default 30m, minimum 5m) and print what changed; --count N stops after N runs
   cii version
 
 Default command only:
@@ -78,7 +84,9 @@ Common flags:
   --debug            detailed tables, failed checks, data sources and every network contact
   --no-log           do not write the local log (default: %s)
   --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
-  --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route)
+  --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route, show, compare)
+  --prom             print the report as Prometheus metrics instead of the screen (not for lookup)
+  --prom-file FILE   also write those metrics to FILE atomically, e.g. for the node_exporter textfile collector
   --demo             show the report on invented sample data without touching the network (cii only)
   --no-color         disable colours
   --lang LANG        interface language: auto (from LANG/LC_ALL), en or ru; the --debug report and JSON stay in English
@@ -103,9 +111,22 @@ func printUsage() {
 }
 
 func run(ctx context.Context, args []string) error {
+	if len(args) == 0 && interactive() {
+		return runMenu(ctx)
+	}
 	cmd := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
+	}
+	if choicePattern.MatchString(cmd) {
+		chosen, err := parseChoice(cmd)
+		if errors.Is(err, errMenuExit) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("no mode %q: modes are 1-%d, see `cii` without arguments", cmd, len(menu))
+		}
+		return run(ctx, append(chosen, args...))
 	}
 	switch cmd {
 	case "", "ip":
@@ -124,6 +145,14 @@ func run(ctx context.Context, args []string) error {
 		return cmdDiff(args)
 	case "show":
 		return cmdShow(args)
+	case "analyze", "analyse":
+		return cmdAnalyze(args)
+	case "stats":
+		return cmdStats(args)
+	case "compare":
+		return cmdCompare(args)
+	case "watch":
+		return cmdWatch(ctx, args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -136,9 +165,9 @@ func run(ctx context.Context, args []string) error {
 }
 
 type common struct {
-	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from                        string
-	timeout                                                                                 time.Duration
+	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo, prom, quiet bool
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from, promFile                           string
+	timeout                                                                                              time.Duration
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -169,7 +198,13 @@ func (c *common) registerSVG(fs *flag.FlagSet) {
 	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
 }
 
-func (c *common) color() bool { return !c.noColor && !c.json && report.ColorEnabled() }
+func (c *common) registerExports(fs *flag.FlagSet) {
+	c.registerSVG(fs)
+	fs.BoolVar(&c.prom, "prom", false, "print Prometheus metrics instead of the report")
+	fs.StringVar(&c.promFile, "prom-file", "", "also write Prometheus metrics to this file")
+}
+
+func (c *common) color() bool { return !c.noColor && !c.json && !c.prom && report.ColorEnabled() }
 
 func (c *common) language() string {
 	switch c.lang {
@@ -260,13 +295,11 @@ func (c *common) check() error {
 
 func cmdIP(ctx context.Context, args []string) error {
 	var c common
-	var withBench, noCensor, withRoute bool
+	var f ipFlags
 	fs := flag.NewFlagSet("cii", flag.ContinueOnError)
-	fs.BoolVar(&withBench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
-	fs.BoolVar(&noCensor, "no-censor", false, "skip censorship checks")
-	fs.BoolVar(&withRoute, "route", false, "also analyse paths to major networks (see cii route)")
+	f.register(fs)
 	fs.BoolVar(&c.demo, "demo", false, "render invented sample data, no network")
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -281,30 +314,148 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		return output(rep, &c)
 	}
+	rep, err := collectIP(ctx, &c, f)
+	if err != nil || rep == nil {
+		return err
+	}
+	return output(rep, &c)
+}
+
+const (
+	watchDefault = 30 * time.Minute
+	watchMinimum = 5 * time.Minute
+)
+
+func cmdWatch(ctx context.Context, args []string) error {
+	var c common
+	var f ipFlags
+	every, count := watchDefault, 0
+	fs := flag.NewFlagSet("cii watch", flag.ContinueOnError)
+	f.register(fs)
+	c.registerExports(fs)
+	fs.DurationVar(&every, "every", every, "pause between runs, 5m or more")
+	fs.IntVar(&count, "count", count, "stop after this many runs (0: until interrupted)")
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	switch {
+	case fs.NArg() > 0:
+		return fmt.Errorf("unexpected argument %q", fs.Arg(0))
+	case every < watchMinimum:
+		return fmt.Errorf("--every %s is too often: the checks query other people's services, the minimum is %s", every, watchMinimum)
+	case count < 0:
+		return errors.New("--count must not be negative")
+	case c.prom:
+		return errors.New("--prom prints a single report; with watch use --prom-file")
+	}
+	var prev *report.Report
+	for n := 1; ; n++ {
+		rc := c
+		rc.quiet = prev != nil
+		rep, err := collectIP(ctx, &rc, f)
+		if ctx.Err() != nil && prev != nil {
+			return nil
+		}
+		switch {
+		case err != nil && prev == nil:
+			return err
+		case err != nil:
+			fmt.Fprintf(os.Stderr, "%s  run %d failed: %v\n", time.Now().Format("15:04"), n, err)
+		case rep == nil:
+			return nil
+		case prev == nil:
+			if err := output(rep, &rc); err != nil {
+				return err
+			}
+			prev = rep
+		default:
+			if err := watchStep(&rc, n, prev, rep); err != nil {
+				return err
+			}
+			prev = rep
+		}
+		if ctx.Err() != nil || count > 0 && n >= count {
+			return nil
+		}
+		timer := time.NewTimer(every)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-timer.C:
+		}
+	}
+}
+
+func watchStep(c *common, n int, prev, cur *report.Report) error {
+	logPath, logErr := writeLog(cur, c)
+	if logErr != nil {
+		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
+	}
+	if c.svg != "" {
+		if err := writeSVG(cur, c, logPath, logErr); err != nil {
+			return fmt.Errorf("--svg: %w", err)
+		}
+	}
+	if c.promFile != "" {
+		if err := writeMetricsFile(cur, c.promFile); err != nil {
+			return fmt.Errorf("--prom-file: %w", err)
+		}
+	}
+	changes := report.Diff(prev, cur)
+	stamp := cur.GeneratedAt.Local().Format("15:04")
+	if c.json {
+		return json.NewEncoder(os.Stdout).Encode(struct {
+			Run     int             `json:"run"`
+			Taken   time.Time       `json:"generated_at"`
+			Changes []report.Change `json:"changes"`
+		}{n, cur.GeneratedAt, append([]report.Change{}, changes...)})
+	}
+	if len(changes) == 0 {
+		fmt.Printf("%s  run %d: %s\n", stamp, n, report.Translate(c.language(), "no changes"))
+		return nil
+	}
+	fmt.Println()
+	report.WriteDiff(os.Stdout, c.color(), prev.GeneratedAt.Local().Format("15:04"), stamp, changes)
+	return nil
+}
+
+type ipFlags struct{ bench, noCensor, route bool }
+
+func (f *ipFlags) register(fs *flag.FlagSet) {
+	fs.BoolVar(&f.bench, "bench", false, "also run the benchmark (disk, CPU, speed, iperf3)")
+	fs.BoolVar(&f.noCensor, "no-censor", false, "skip censorship checks")
+	fs.BoolVar(&f.route, "route", false, "also analyse paths to major networks (see cii route)")
+}
+
+func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, error) {
+	c := *cp
+	defer func() { *cp = c }()
+	withBench, noCensor, withRoute := f.bench, f.noCensor, f.route
 	cfg, err := config.Load(c.cfgPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	exits := c.exits()
 	for _, e := range exits {
 		if _, err := e.c.baseOptions(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if len(exits) == 1 {
 		c = exits[0].c
 	}
 	if len(exits) > 1 && c.offline {
-		return errors.New("--offline cannot check several proxies: exits are only known online")
+		return nil, errors.New("--offline cannot check several proxies: exits are only known online")
 	}
 	if len(exits) > 1 && withBench {
-		return errors.New("--bench measures one path; run it without a list of proxies")
+		return nil, errors.New("--bench measures one path; run it without a list of proxies")
 	}
 	if len(exits) > 1 && withRoute {
-		return errors.New("--route measures one path; run it without a list of proxies")
+		return nil, errors.New("--route measures one path; run it without a list of proxies")
 	}
 	if withRoute && c.offline {
-		return errors.New("--route needs the network; drop --offline")
+		return nil, errors.New("--route needs the network; drop --offline")
 	}
 
 	providers := cfg.IPEcho
@@ -312,7 +463,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		providers = ipdetect.DefaultProviders
 	}
 	if c.quick && c.extended {
-		return errors.New("--quick and --extended are mutually exclusive")
+		return nil, errors.New("--quick and --extended are mutually exclusive")
 	}
 	var checks []probe.Check
 	var catalogs []string
@@ -320,7 +471,7 @@ func cmdIP(ctx context.Context, args []string) error {
 	if !c.quick {
 		checks = append(region.Select(cfg.Keys, c.extended), services.Select(cfg.Keys, c.extended)...)
 		if catalogs, err = c.catalogs(); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if riskOn {
@@ -331,6 +482,7 @@ func cmdIP(ctx context.Context, args []string) error {
 	if c.extended {
 		censorOpts.Modes = nil
 	}
+	var routeList []route.Target
 	benchOpts := bench.Defaults()
 	benchOpts.Net, benchOpts.Iperf = !c.offline, !c.offline
 	policy := netx.NewPolicy()
@@ -348,19 +500,22 @@ func cmdIP(ctx context.Context, args []string) error {
 			policy.Add(bench.Rules(benchOpts)...)
 		}
 		if withRoute {
-			policy.Add(route.Rules(route.Targets)...)
+			if routeList, err = routeTargets(cfg, ""); err != nil {
+				return nil, err
+			}
+			policy.Add(route.Rules(routeList)...)
 		}
 	}
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
-		return nil
+		return nil, nil
 	}
 
 	led := ledger.New()
 
 	dbs, err := geodb.Open(c.dir())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer dbs.Close()
 
@@ -448,6 +603,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		}
 		if routeNet != nil {
 			ro := route.Defaults()
+			ro.Targets = routeList
 			ro.ASN = asnLookup(dbs)
 			ro.OwnASN = s.ownASN(routeNet.Options().Family)
 			rep := route.Run(ctx, routeNet, ro)
@@ -473,7 +629,7 @@ func cmdIP(ctx context.Context, args []string) error {
 		s.update(func() { s.bench = &b })
 	}
 	screen.stop()
-	return output(s.report(), &c)
+	return s.report(), nil
 }
 
 type target struct {
@@ -614,14 +770,40 @@ func output(r *report.Report, c *common) error {
 			return fmt.Errorf("--svg: %w", err)
 		}
 	}
+	if c.promFile != "" {
+		if err := writeMetricsFile(r, c.promFile); err != nil {
+			return fmt.Errorf("--prom-file: %w", err)
+		}
+	}
 	return nil
 }
 
+func writeMetricsFile(r *report.Report, path string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	err = r.WritePrometheus(tmp)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), 0o644)
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
+}
+
 func printReport(r *report.Report, c *common, logPath string, logErr error) error {
-	if logErr != nil && (c.json || c.debug) {
+	if logErr != nil && (c.json || c.debug || c.prom) {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}
 	switch {
+	case c.prom:
+		return r.WritePrometheus(os.Stdout)
 	case c.json:
 		return r.WriteJSON(os.Stdout)
 	case c.debug:
@@ -779,36 +961,158 @@ func loadReport(path string) (*report.Report, error) {
 func cmdShow(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii show", flag.ContinueOnError)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
+	r, name, err := pastReport(&c, fs, "usage: cii show [LOG|JSON|-]")
+	if err != nil {
+		return err
+	}
+	c.noLog = true
+	c.from = name
+	return output(r, &c)
+}
+
+func pastReport(c *common, fs *flag.FlagSet, usage string) (*report.Report, string, error) {
 	var path string
 	switch fs.NArg() {
 	case 0:
 		logs, err := runlog.List(paths.LogDir())
 		if err != nil || len(logs) == 0 {
-			return errors.New("no local logs yet; run cii first or pass a log or JSON file")
+			return nil, "", errors.New("no local logs yet; run cii first or pass a log or JSON file")
 		}
 		path = logs[len(logs)-1]
 	case 1:
 		path = fs.Arg(0)
 	default:
-		return errors.New("usage: cii show [LOG|JSON|-]")
+		return nil, "", errors.New(usage)
 	}
 	r, err := loadReport(path)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	if c.mask {
 		r = r.Scrubbed()
 	}
-	c.noLog = true
-	c.from = filepath.Base(path)
+	name := filepath.Base(path)
 	if path == "-" {
-		c.from = "stdin"
+		name = "stdin"
 	}
-	return output(r, &c)
+	return r, name, nil
+}
+
+func cmdAnalyze(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii analyze", flag.ContinueOnError)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	r, name, err := pastReport(&c, fs, "usage: cii analyze [LOG|JSON|-]")
+	if err != nil {
+		return err
+	}
+	lang := c.language()
+	if c.json {
+		lang = "en"
+	}
+	findings := report.Analyze(r, lang)
+	if c.json {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(struct {
+			Source   string           `json:"source"`
+			Taken    time.Time        `json:"generated_at"`
+			Findings []report.Finding `json:"findings"`
+		}{name, r.GeneratedAt, findings})
+	}
+	title := fmt.Sprintf("%s %s · %s · %s · %s", r.Tool.Name, r.Tool.Version, report.Translate(lang, "analysis"), name, r.GeneratedAt.UTC().Format("2006-01-02 15:04 UTC"))
+	report.WriteFindings(os.Stdout, report.Style{Color: c.color(), Unicode: report.UnicodeTerminal(), Width: terminalWidth(), Lang: lang}, title, findings)
+	return nil
+}
+
+func loadReports(files []string, strict bool) ([]*report.Report, error) {
+	var reps []*report.Report
+	for _, f := range files {
+		r, err := loadReport(f)
+		switch {
+		case err == nil:
+			reps = append(reps, r)
+		case strict:
+			return nil, err
+		}
+	}
+	if len(reps) == 0 {
+		return nil, errors.New("no readable local logs; run cii first or pass log or JSON files")
+	}
+	return reps, nil
+}
+
+func cmdCompare(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii compare", flag.ContinueOnError)
+	c.registerExports(fs)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() < 2 || fs.NArg() > 6 {
+		return errors.New("usage: cii compare A B [C...] (two to six logs or JSON reports)")
+	}
+	reps, err := loadReports(fs.Args(), true)
+	if err != nil {
+		return err
+	}
+	names := make([]string, len(reps))
+	for i, f := range fs.Args() {
+		names[i] = strings.TrimSuffix(filepath.Base(f), filepath.Ext(f))
+	}
+	combined, err := report.Compare(reps, names)
+	if err != nil {
+		return err
+	}
+	if c.mask {
+		combined = combined.Scrubbed()
+		for i := range reps {
+			reps[i] = reps[i].Scrubbed()
+		}
+	}
+	c.noLog = true
+	c.from = "compare"
+	if err := output(combined, &c); err != nil {
+		return err
+	}
+	if len(reps) == 2 && !c.json && !c.prom {
+		fmt.Println()
+		report.WriteDiff(os.Stdout, c.color(), "A", "B", report.Diff(reps[0], reps[1]))
+	}
+	return nil
+}
+
+func cmdStats(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii stats", flag.ContinueOnError)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	files, named := fs.Args(), fs.NArg() > 0
+	if !named {
+		files, _ = runlog.List(paths.LogDir())
+	}
+	reps, err := loadReports(files, named)
+	if err != nil {
+		return err
+	}
+	stats := report.Stats(reps)
+	if c.json {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(struct {
+			Runs   int                `json:"runs"`
+			Checks []report.CheckStat `json:"checks"`
+		}{len(reps), stats})
+	}
+	report.WriteStats(os.Stdout, c.color(), c.language(), len(reps), stats)
+	return nil
 }
 
 func cmdDiff(args []string) error {
@@ -1019,7 +1323,7 @@ func cmdCensor(ctx context.Context, args []string) error {
 	var retries int
 	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
 	c.register(fs)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal (comma-separated)")
 	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
 	fs.StringVar(&domain, "domain", "", "check a single domain")
@@ -1074,7 +1378,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	var c common
 	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
 	c.register(fs)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	opts := bench.Defaults()
 	var noDisk, noCPU, noNet, noIperf bool
 	var diskSize string
@@ -1131,6 +1435,30 @@ func cmdBench(ctx context.Context, args []string) error {
 	return output(s.report(), &c)
 }
 
+func routeTargets(cfg *config.Config, flag string) ([]route.Target, error) {
+	targets := route.Targets
+	if len(cfg.Route.Targets) > 0 {
+		extra, _, err := route.ParseTargets(strings.Join(cfg.Route.Targets, ","))
+		if err != nil {
+			return nil, fmt.Errorf("config route.targets: %w", err)
+		}
+		if targets, err = route.Merge(targets, extra); err != nil {
+			return nil, err
+		}
+	}
+	if flag == "" {
+		return targets, nil
+	}
+	given, add, err := route.ParseTargets(flag)
+	if err != nil {
+		return nil, fmt.Errorf("--targets: %w", err)
+	}
+	if !add {
+		targets = nil
+	}
+	return route.Merge(targets, given)
+}
+
 func asnLookup(dbs *geodb.Set) func(netip.Addr) (uint, string) {
 	return func(a netip.Addr) (uint, string) {
 		for _, r := range dbs.Lookup(a) {
@@ -1145,9 +1473,11 @@ func asnLookup(dbs *geodb.Set) func(netip.Addr) (uint, string) {
 func cmdRoute(ctx context.Context, args []string) error {
 	var c common
 	var tcpOnly bool
+	var targetSpec string
 	fs := flag.NewFlagSet("cii route", flag.ContinueOnError)
+	fs.StringVar(&targetSpec, "targets", "", "own targets: [+][name=]host[@asn],... (+ adds to the built-in list)")
 	c.register(fs)
-	c.registerSVG(fs)
+	c.registerExports(fs)
 	opts := route.Defaults()
 	fs.BoolVar(&tcpOnly, "tcp", false, "skip ICMP tracing, measure TCP connect time only")
 	fs.IntVar(&opts.Rounds, "rounds", opts.Rounds, "ICMP probe rounds (1-15)")
@@ -1168,6 +1498,13 @@ func cmdRoute(ctx context.Context, args []string) error {
 		return errors.New("--rounds must be 1-15 and --max-hops 1-31")
 	}
 	opts.TCPOnly = tcpOnly
+	cfg, err := config.Load(c.cfgPath)
+	if err != nil {
+		return err
+	}
+	if opts.Targets, err = routeTargets(cfg, targetSpec); err != nil {
+		return err
+	}
 	policy := netx.NewPolicy(route.Rules(opts.Targets)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())

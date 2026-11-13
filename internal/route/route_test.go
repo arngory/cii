@@ -26,15 +26,24 @@ func TestInner(t *testing.T) {
 	ip := make([]byte, 20)
 	ip[0], ip[9] = 0x45, 1
 	echo := []byte{8, 0, 0, 0, 0x12, 0x34, 0x08, 0x05}
-	if id, seq, ok := inner(append(ip, echo...)); !ok || id != 0x1234 || seq != 0x0805 {
+	if id, seq, ok := inner(append(ip, echo...), false); !ok || id != 0x1234 || seq != 0x0805 {
 		t.Errorf("inner = %x %x %v", id, seq, ok)
 	}
-	if _, _, ok := inner(ip); ok {
+	if _, _, ok := inner(ip, false); ok {
 		t.Error("short packet accepted")
+	}
+	ip6 := make([]byte, 40)
+	ip6[0], ip6[6] = 0x60, 58
+	echo6 := []byte{128, 0, 0, 0, 0x12, 0x34, 0x08, 0x05}
+	if id, seq, ok := inner(append(ip6, echo6...), true); !ok || id != 0x1234 || seq != 0x0805 {
+		t.Errorf("inner v6 = %x %x %v", id, seq, ok)
+	}
+	if _, _, ok := inner(append(ip6, echo...), true); ok {
+		t.Error("an ICMPv4 echo inside IPv6 accepted")
 	}
 	udp := append([]byte(nil), ip...)
 	udp[9] = 17
-	if _, _, ok := inner(append(udp, echo...)); ok {
+	if _, _, ok := inner(append(udp, echo...), false); ok {
 		t.Error("non-ICMP inner packet accepted")
 	}
 }
@@ -54,7 +63,11 @@ func TestJudge(t *testing.T) {
 		{path("c", 15169, 50, 15169), Regional, "+46 ms"},
 		{path("d", 15169, 120, 15169), Detour, "+116 ms"},
 		{path("e", 15169, 30, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1, ASN: 64500}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 5, ASN: 1299}, Hop{TTL: 3, Addr: "203.0.113.1", RTTms: 30, ASN: 15169}), Transit, "via AS1299 Arelion"},
-		{path("f", 15169, 30, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 55}), Detour, "one hop adds 54 ms"},
+		{path("f", 15169, 60, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 55}), Detour, "one hop adds 54 ms"},
+		{path("f2", 15169, 5, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 95}, Hop{TTL: 3, Addr: "198.51.100.2", RTTms: 4}), Direct, ""},
+		{&Path{Target: Target{Name: "u", Expect: 62041, Unicast: true}, RTTms: 180, ASN: 62041, Hops: []Hop{{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, {TTL: 2, Addr: "198.51.100.1", RTTms: 150}}}, Distant, "single-location service, +176 ms away"},
+		{&Path{Target: Target{Name: "u2", Expect: 62041, Unicast: true}, RTTms: 8, ASN: 62041}, Direct, ""},
+		{path("tail", 15169, 50, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 3}), Regional, "+46 ms"},
 		{path("g", 13335, 0.4, 13335, Hop{TTL: 1}, Hop{TTL: 2, Addr: "1.1.1.1", RTTms: 0.4}), Intercepted, "local proxy"},
 		{path("h", 15169, 4, 64500), Direct, "cache inside your network"},
 		{path("i", 15169, 4, 20940), Direct, "served from AS20940, not AS15169"},
@@ -128,6 +141,11 @@ func TestResolveLiteralFamily(t *testing.T) {
 	if p.addr.IsValid() || p.Error != "no ipv6 address" {
 		t.Errorf("IPv4 literal on IPv6 = %v %q", p.addr, p.Error)
 	}
+	p = &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9", Host6: "2620:fe::fe"}}
+	resolve(context.Background(), n6, p)
+	if p.addr.String() != "2620:fe::fe" || p.host != "2620:fe::fe" || p.Error != "" {
+		t.Errorf("IPv6 literal for an IPv4 target = %v %q %q", p.addr, p.host, p.Error)
+	}
 	n4 := netx.New(netx.Options{Family: netx.IPv4}, netx.NewPolicy(Rules(Targets)...), ledger.New())
 	p = &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9"}}
 	resolve(context.Background(), n4, p)
@@ -137,7 +155,7 @@ func TestResolveLiteralFamily(t *testing.T) {
 }
 
 func TestAttributed(t *testing.T) {
-	reached := &Path{addr: netip.MustParseAddr("192.0.2.1")}
+	reached := &Path{addr: netip.MustParseAddr("8.8.8.8")}
 	if attributed([]*Path{reached}) {
 		t.Error("a reached path without any ASN counts as attributed")
 	}
@@ -146,5 +164,53 @@ func TestAttributed(t *testing.T) {
 	}
 	if !attributed([]*Path{{Target: Target{Name: "x"}}}) {
 		t.Error("nothing resolved should not claim missing ASN data")
+	}
+	if !attributed([]*Path{{addr: netip.MustParseAddr("198.18.0.7")}}) {
+		t.Error("fake-IP answers should not claim missing ASN data")
+	}
+}
+
+func TestRealHopsAreNotLocal(t *testing.T) {
+	var ps []*Path
+	for i, asn := range []uint{15169, 32934, 13335, 36459, 62041, 19281} {
+		p := path(string(rune('a'+i)), asn, 0.9, asn, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 0.4}, Hop{TTL: 2, Addr: "192.0.2.2", RTTms: 0.5}, Hop{TTL: 3, Addr: "192.0.2.3", RTTms: 0.8})
+		p.Timing = "icmp"
+		ps = append(ps, p)
+	}
+	if answeredLocally(ps) {
+		t.Error("a well-peered datacentre with real hops was flagged as answered locally")
+	}
+}
+
+func TestParseTargets(t *testing.T) {
+	ts, add, err := ParseTargets("+home=VPS.Example.org@AS64500, 192.0.2.9 ,b.example.net@64501")
+	if err != nil || !add || len(ts) != 3 {
+		t.Fatalf("ParseTargets = %+v %v %v", ts, add, err)
+	}
+	if ts[0] != (Target{Name: "home", Host: "vps.example.org", Expect: 64500, Group: Custom, Unicast: true}) || ts[1].Name != "192.0.2.9" || ts[2].Expect != 64501 {
+		t.Errorf("targets = %+v", ts)
+	}
+	if _, add, _ := ParseTargets("a.example.org"); add {
+		t.Error("no + means replace")
+	}
+	for _, bad := range []string{"", "+", "http://a.example", "a.example/path", "*.example.org", "name=", "a.example@x", "a.example@0", "single"} {
+		if got, _, err := ParseTargets(bad); err == nil {
+			t.Errorf("ParseTargets(%q) = %+v, want error", bad, got)
+		}
+	}
+	merged, err := Merge(Targets, append(ts, Target{Name: "dup", Host: "www.google.com"}))
+	if err != nil || len(merged) != len(Targets)+3 {
+		t.Errorf("Merge = %d, %v", len(merged), err)
+	}
+	if _, err := Merge(Targets, []Target{{Name: "google", Host: "my.example.org"}}); err == nil {
+		t.Error("a second target named like a built-in one must be rejected")
+	}
+	many := make([]Target, MaxTargets)
+	for i := range many {
+		many[i].Host = "h" + string(rune('a'+i%26)) + string(rune('a'+i/26)) + ".example"
+		many[i].Name = many[i].Host
+	}
+	if _, err := Merge(Targets, many); err == nil {
+		t.Error("exceeding the target limit must fail")
 	}
 }

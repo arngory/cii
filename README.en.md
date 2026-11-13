@@ -4,7 +4,7 @@
 
 **cii — complete information about current IP.** One static binary that puts into a single report what usually takes several scripts: where databases and services think your IP is, who owns the network, how clean the address is, which services work from here, whether there is censorship, DPI or DNS tampering, how traffic is routed and how fast the link is.
 
-cii only contacts destinations its modules declare up front (`cii --plan` prints all of them). It sends no reports to anyone, keeps no counters or telemetry, downloads and runs no code, and uses no one else's proxies or keys. See [docs/NETWORK_POLICY.md](docs/NETWORK_POLICY.md).
+cii only contacts destinations its modules declare up front (`cii --plan` prints all of them). It sends no reports to anyone, keeps no counters or telemetry, downloads and runs no code, and uses no one else's proxies or keys. See [docs/en/NETWORK_POLICY.md](docs/en/NETWORK_POLICY.md).
 
 ## Run in one line
 
@@ -20,7 +20,26 @@ Windows (PowerShell):
 iwr https://github.com/arngory/cii/releases/latest/download/cii-windows-amd64.exe -OutFile cii.exe; .\cii.exe
 ```
 
-This downloads the latest release binary from GitHub into the current directory and runs the full check. On a router, run it from `/tmp` so the binary only lives in memory. For mips/mipsle and other targets, pick the file name from the [release page](https://github.com/arngory/cii/releases/latest).
+This downloads the latest release binary from GitHub into the current directory and runs it. Without arguments cii shows a menu of modes and waits for a number:
+
+```
+   1  Standard check        address, IP quality, region, services, reputation, censorship
+   2  Extended check        standard + vendors' internal APIs, risk pages, DPI and geoblock lists
+   3  Everything            extended + routes + benchmark (minutes, 1 GiB on disk)
+   4  Quick                 address and local databases only
+   5  Censorship only       DNS, DPI, geoblocking, Telegram, connectivity checks
+   6  Routes only           paths to major networks (hops need root)
+   7  Benchmark only        system, disk, CPU, speed, iperf3
+   8  Show the last run     from the local log, no network
+   9  Analyse the last run  conclusions from the local log, no network
+  10  Update databases      DB-IP Lite and range lists from their publishers
+```
+
+An `m` after the number (`2m`) hides addresses and the provider, for a screenshot. Enter alone runs the standard check, `0` exits.
+
+To pick a mode up front, append the number or flags to the command, for example `./cii 2m` or `./cii --extended --mask`. `./cii ip` runs the standard check without asking. In scripts and pipes (when input or output is not a terminal) there is no menu and the standard check runs.
+
+On a router, run the command from `/tmp` so the binary only lives in memory. For mips/mipsle and other targets, pick the file name from the [release page](https://github.com/arngory/cii/releases/latest).
 
 Local DB-IP databases (country and ASN without asking services, hop labels in `cii route`) are fetched once:
 
@@ -101,11 +120,15 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 |---|---|
 | `cii` | the full check: address, IP quality, region, services, reputation, censorship (DNS, Telegram, connectivity checks) |
 | `cii lookup IP…` | describe given addresses from local databases, no network |
-| `cii censor` | censorship only, every mode and the full grid ([docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md)) |
-| `cii route` | routes only ([docs/ROUTE.md](docs/ROUTE.md)) |
-| `cii bench` | the benchmark only, with its own options ([docs/BENCH.md](docs/BENCH.md)) |
+| `cii censor` | censorship only, every mode and the full grid ([docs/en/CENSOR_CHECKS.md](docs/en/CENSOR_CHECKS.md)) |
+| `cii route` | routes only; `--targets` sets your own targets, `-6` traces over IPv6 ([docs/en/ROUTE.md](docs/en/ROUTE.md)) |
+| `cii bench` | the benchmark only, with its own options ([docs/en/BENCH.md](docs/en/BENCH.md)) |
 | `cii show [LOG\|JSON\|-]` | print a past run again: the latest local log by default, or a log file, a `--json` file or `-` for standard input. `--mask`, `--json`, `--debug`, `--svg` and `--lang` apply; the title names the file and when the run was taken |
+| `cii analyze [LOG\|JSON\|-]` | conclusions from a finished run, checking nothing again: DNS interception and what follows from it, blocking, altered HTTP or TLS, a tunnel, address type and risk flags, blocklists, route detours. The latest log by default; `--mask`, `--json` and `--lang` apply. The `cii` report itself stays as is, without interpretation |
+| `cii stats [LOG…]` | which checks did not always answer, across all local logs: this shows a check that broke because the service changed |
 | `cii diff [OLD NEW]` | what changed between two runs; without arguments, the last two logs |
+| `cii compare A B [C…]` | reports from different machines side by side (two to six logs or JSON files): an IP quality panel per point and one service grid with a mark for each; for two points the list of differences follows. `--mask`, `--json` and `--svg` apply |
+| `cii watch` | repeat the check every `--every` (30 minutes by default, no more often than 5) and print what changed: address, verdict, service access, blocking, scores. The first run shows the full report. `--count N` stops after N runs, `--prom-file` refreshes a metrics file. Takes the flags of `cii` (`--extended`, `--route`, `--mask`…); with `--mask` an address change is not visible |
 | `cii data update [ID…]` | fetch offline databases from their publishers; `status` shows what is installed, `sources` what is available |
 | `cii version` | version |
 
@@ -129,18 +152,45 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 | `--debug` | full tables, failure reasons and the log of every connection |
 | `--mask` | hide addresses, prefixes, AS numbers and holders, PTR — for screenshots |
 | `--svg FILE` | save the final screen as an SVG image |
+| `--prom`, `--prom-file FILE` | print the report as Prometheus metrics instead of the screen; write them to a file (for example for the node_exporter textfile collector) |
 | `--demo` | show the report on invented data, no network |
 | `--lang auto\|en\|ru` | screen language; `--debug` and JSON stay in English |
 | `--no-color`, `--no-log` | no colours; no local log |
 | `--config FILE`, `--data-dir DIR` | your config (keys, your own echo service) and database directory |
 
-Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks — see [docs/CONFIG.md](docs/CONFIG.md). Everything works without them.
+Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks — see [docs/en/CONFIG.md](docs/en/CONFIG.md). Everything works without them.
 
 **Log.** Every run saves the frame, the detailed report and JSON to a local log: `~/.local/state/cii/logs` on Linux, `~/Library/Logs/cii` on macOS, `%LOCALAPPDATA%\cii\logs` on Windows. Mode 0600, the last 20 runs are kept, nothing is sent anywhere. `cii show` and `cii diff` work from these logs: `cii show --mask`, for example, prints the latest run without addresses or provider even if it ran without `--mask`.
 
 **`--mask`** replaces with `•••` everything that identifies the address or network: addresses and prefixes in any form, AS numbers and holders, PTR, hop addresses, CDN node names (an ISP-hosted cache is often named after the ISP), VPN and datacenter names in answers. Country, city and all check results stay.
 
 ## Install and verify
+
+Homebrew (macOS and Linux):
+
+```bash
+brew tap arngory/cii https://github.com/arngory/cii
+```
+
+```bash
+brew install cii
+```
+
+Scoop (Windows):
+
+```powershell
+scoop bucket add cii https://github.com/arngory/cii; scoop install cii
+```
+
+The formula and manifest live in this repository (`Formula/`, `bucket/`) and are updated by the release workflow.
+
+Docker (image `ghcr.io/arngory/cii`, amd64 and arm64, built from the same binaries):
+
+```bash
+docker run --rm -it --network host ghcr.io/arngory/cii
+```
+
+`--network host` makes cii check the machine's network instead of the container's; `-it` is for the menu. Add `--cap-add NET_RAW` for hops in `cii route` and a volume `-v cii:/data` to keep databases and logs between runs.
 
 Binaries for Linux (amd64, arm64, armv7, 386, mips/mipsle softfloat, riscv64), macOS and Windows, `deb`, `rpm` and `apk` packages, a Homebrew formula (`cii.rb`), a Scoop manifest (`cii.json`) and an AUR `PKGBUILD` are on the [release page](https://github.com/arngory/cii/releases/latest). Everything is built by GitHub Actions from this repository, and every file carries a provenance attestation:
 
@@ -156,21 +206,21 @@ From source: `make build` (needs the Go version from `go.mod`).
 
 ## Documentation
 
-The detailed documentation is in Russian.
+The user documentation is available in English under `docs/en/`; the developer documents (architecture, development, roadmap) are in Russian.
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — design, modules, report format
-- [docs/NETWORK_POLICY.md](docs/NETWORK_POLICY.md) — network policy and ToS/FUP rules
-- [docs/CONFIG.md](docs/CONFIG.md) — configuration and your own keys
-- [docs/REGION_CHECKS.md](docs/REGION_CHECKS.md), [docs/SERVICE_CHECKS.md](docs/SERVICE_CHECKS.md), [docs/catalogs/](docs/catalogs/) — region and services
-- [docs/RISK_CHECKS.md](docs/RISK_CHECKS.md) — reputation, DNSBL, mail, known ranges
-- [docs/CENSOR_CHECKS.md](docs/CENSOR_CHECKS.md) — DNS, connectivity checks, DPI, geoblocking, Telegram
-- [docs/ROUTE.md](docs/ROUTE.md) — routes
-- [docs/BENCH.md](docs/BENCH.md) — benchmark
-- [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) — offline databases and licences
+- [docs/en/NETWORK_POLICY.md](docs/en/NETWORK_POLICY.md) — network policy and ToS/FUP rules
+- [docs/en/CONFIG.md](docs/en/CONFIG.md) — configuration and your own keys
+- [docs/en/REGION_CHECKS.md](docs/en/REGION_CHECKS.md), [docs/en/SERVICE_CHECKS.md](docs/en/SERVICE_CHECKS.md), [docs/catalogs/](docs/catalogs/) — region and services
+- [docs/en/RISK_CHECKS.md](docs/en/RISK_CHECKS.md) — reputation, DNSBL, mail, known ranges
+- [docs/en/CENSOR_CHECKS.md](docs/en/CENSOR_CHECKS.md) — DNS, connectivity checks, DPI, geoblocking, Telegram
+- [docs/en/ROUTE.md](docs/en/ROUTE.md) — routes
+- [docs/en/BENCH.md](docs/en/BENCH.md) — benchmark
+- [docs/en/DATA_SOURCES.md](docs/en/DATA_SOURCES.md) — offline databases and licences
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — build, tests, releases
 - [docs/ROADMAP.md](docs/ROADMAP.md) — roadmap
 - [CREDITS.md](CREDITS.md) — credits and the origin of ideas
 
 ## Licence
 
-[AGPL-3.0](LICENSE). DB-IP data is CC BY 4.0, IPinfo Lite is CC BY-SA 4.0 (see [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md)).
+[AGPL-3.0](LICENSE). DB-IP data is CC BY 4.0, IPinfo Lite is CC BY-SA 4.0 (see [docs/en/DATA_SOURCES.md](docs/en/DATA_SOURCES.md)).

@@ -34,6 +34,9 @@ type Config struct {
 	Data   struct {
 		Sources []string `yaml:"sources"`
 	} `yaml:"data"`
+	Route struct {
+		Targets []string `yaml:"targets"`
+	} `yaml:"route"`
 }
 
 func DefaultPath() string { return filepath.Join(paths.ConfigDir(), "config.yaml") }

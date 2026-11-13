@@ -14,6 +14,7 @@ const (
 	Regional    = "regional"
 	Transit     = "transit"
 	Detour      = "detour"
+	Distant     = "distant"
 	Intercepted = "intercepted"
 	Unreachable = "unreachable"
 )
@@ -33,17 +34,13 @@ func judge(p *Path, floor float64, own uint) {
 	}
 	p.Error = ""
 	responding := 0
-	prev := 0.0
 	seenDest := false
+	p.JumpMs = maxJump(p.Hops, p.RTTms)
 	for _, h := range p.Hops {
 		if h.Addr == "" {
 			continue
 		}
 		responding++
-		if prev > 0 && h.RTTms-prev > p.JumpMs {
-			p.JumpMs = h.RTTms - prev
-		}
-		prev = h.RTTms
 		if h.ASN != 0 && h.ASN == p.ASN {
 			seenDest = true
 		}
@@ -60,10 +57,16 @@ func judge(p *Path, floor float64, own uint) {
 	case len(p.Hops) > 0 && p.RTTms < 1 && responding <= 1:
 		p.Verdict = Intercepted
 		parts = append(parts, "answered in under 1 ms with no hops: a local proxy or tunnel replied")
+	case p.Target.Unicast && len(p.Transit) > 0:
+		p.Verdict = Transit
+		parts = append(parts, "via "+strings.Join(p.Transit, ", "))
+	case p.Target.Unicast && excess > 25:
+		p.Verdict = Distant
+		parts = append(parts, fmt.Sprintf("single-location service, +%.0f ms away", excess))
 	case excess > 60:
 		p.Verdict = Detour
 		parts = append(parts, fmt.Sprintf("+%.0f ms over the fastest path", excess))
-	case p.JumpMs > jumpLimit:
+	case p.JumpMs > jumpLimit && !p.Target.Unicast:
 		p.Verdict = Detour
 		parts = append(parts, fmt.Sprintf("one hop adds %.0f ms", p.JumpMs))
 	case len(p.Transit) > 0:
@@ -92,7 +95,7 @@ func (r *Report) Results() []probe.Result {
 	for _, p := range r.Paths {
 		res := probe.Result{Group: p.Target.Group, Service: p.Target.Name, Reason: p.Reason}
 		switch p.Verdict {
-		case Direct, Near:
+		case Direct, Near, Distant:
 			res.Status = probe.Yes
 		case Regional, Transit:
 			res.Status = probe.Partial
@@ -110,4 +113,26 @@ func (r *Report) Results() []probe.Result {
 		out = append(out, res)
 	}
 	return out
+}
+
+func maxJump(hops []Hop, dest float64) float64 {
+	floor := dest
+	eff := make([]float64, len(hops))
+	for i := len(hops) - 1; i >= 0; i-- {
+		if hops[i].Addr != "" && hops[i].RTTms < floor {
+			floor = hops[i].RTTms
+		}
+		eff[i] = floor
+	}
+	jump, prev := 0.0, -1.0
+	for i, h := range hops {
+		if h.Addr == "" {
+			continue
+		}
+		if prev >= 0 && eff[i]-prev > jump {
+			jump = eff[i] - prev
+		}
+		prev = eff[i]
+	}
+	return jump
 }

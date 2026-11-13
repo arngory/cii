@@ -33,6 +33,7 @@ type Path struct {
 	Error   string   `json:"error,omitempty"`
 	Timing  string   `json:"timing,omitempty"`
 	addr    netip.Addr
+	host    string
 }
 
 type Report struct {
@@ -70,8 +71,6 @@ func Run(ctx context.Context, n *netx.Net, o Options) *Report {
 	switch {
 	case o.TCPOnly:
 		rep.Note = "TCP connect timing only (--tcp)"
-	case n.Options().Family == netx.IPv6:
-		rep.Note = "IPv6: TCP connect timing only"
 	default:
 		if err := traceICMP(ctx, n, o, paths); err != nil {
 			rep.Note = "no hop data: " + err.Error() + "; TCP connect timing only"
@@ -115,9 +114,19 @@ func attributed(paths []*Path) bool {
 				return true
 			}
 		}
-		reached = reached || p.addr.IsValid()
+		reached = reached || netx.IsPublic(p.addr)
 	}
 	return !reached
+}
+
+func respondingHops(p *Path) int {
+	seen := map[string]bool{}
+	for _, h := range p.Hops {
+		if h.Addr != "" {
+			seen[h.Addr] = true
+		}
+	}
+	return len(seen)
 }
 
 func answeredLocally(paths []*Path) bool {
@@ -126,6 +135,9 @@ func answeredLocally(paths []*Path) bool {
 	for _, p := range paths {
 		if p.RTTms <= 0 {
 			continue
+		}
+		if p.Timing == "icmp" && respondingHops(p) >= 3 {
+			return false
 		}
 		if p.RTTms >= localLimitMs {
 			return false
@@ -138,7 +150,8 @@ func answeredLocally(paths []*Path) bool {
 
 func resolve(ctx context.Context, n *netx.Net, p *Path) {
 	want4 := n.Options().Family != netx.IPv6
-	if a, err := netip.ParseAddr(p.Target.Host); err == nil {
+	p.host = p.Target.hostFor(n.Options().Family)
+	if a, err := netip.ParseAddr(p.host); err == nil {
 		if a.Unmap().Is4() == want4 {
 			p.addr = a.Unmap()
 		} else {
@@ -146,7 +159,7 @@ func resolve(ctx context.Context, n *netx.Net, p *Path) {
 		}
 		return
 	}
-	addrs, err := n.LookupHost(ctx, Module, p.Target.Host)
+	addrs, err := n.LookupHost(ctx, Module, p.host)
 	if err != nil {
 		p.Error = describe(err)
 		return

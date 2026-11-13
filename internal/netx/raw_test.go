@@ -166,6 +166,9 @@ func TestDialAddrChecksHostDialsAddress(t *testing.T) {
 	if _, err := n.DialAddr(context.Background(), "route", "tcp", "localhost", netip.MustParseAddr("192.0.2.1"), port); !errors.Is(err, ErrAddrNotOfHost) {
 		t.Errorf("address outside the resolved set dialled: %v", err)
 	}
+	if _, err := n.DialAddr(context.Background(), "route", "tcp", "localhost", netip.Addr{}, port); !errors.Is(err, ErrAddrNotOfHost) {
+		t.Errorf("zero address dialled: %v", err)
+	}
 	if _, err := n.DialAddr(context.Background(), "route", "tcp", "127.0.0.1", netip.MustParseAddr("192.0.2.1"), port); !errors.Is(err, ErrAddrNotOfHost) {
 		t.Errorf("literal host with another address dialled: %v", err)
 	}
@@ -179,7 +182,7 @@ func TestDialAddrChecksHostDialsAddress(t *testing.T) {
 			t.Errorf("ledger = %+v", e)
 		}
 	}
-	if blocked["localhost"] != 2 || blocked["127.0.0.1"] != 1 || blocked["other.example"] != 1 {
+	if blocked["localhost"] != 3 || blocked["127.0.0.1"] != 1 || blocked["other.example"] != 1 {
 		t.Errorf("blocked attempts in the ledger = %v", blocked)
 	}
 }
