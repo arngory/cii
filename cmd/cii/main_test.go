@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,5 +91,37 @@ func TestLoadReportFromLogAndJSON(t *testing.T) {
 	}
 	if _, err := loadReport(bad); err == nil || !strings.Contains(err.Error(), "unsupported report schema") {
 		t.Errorf("foreign schema = %v", err)
+	}
+}
+
+func TestParseChoice(t *testing.T) {
+	for in, want := range map[string]string{
+		"":    "ip",
+		" 1 ": "ip",
+		"2m":  "ip --extended --mask",
+		"2M":  "ip --extended --mask",
+		"3":   "ip --extended --route --bench",
+		"5m":  "censor --mask",
+		"10":  "data update",
+		"10m": "data update",
+		"09":  "analyze",
+	} {
+		got, err := parseChoice(in)
+		if err != nil || strings.Join(got, " ") != want {
+			t.Errorf("parseChoice(%q) = %v, %v; want %s", in, got, err, want)
+		}
+	}
+	if _, err := parseChoice("0"); !errors.Is(err, errMenuExit) {
+		t.Errorf("0 = %v", err)
+	}
+	for _, bad := range []string{"11", "99", "m", "2x", "1 2", "-1", "123"} {
+		if got, err := parseChoice(bad); err == nil {
+			t.Errorf("parseChoice(%q) = %v, want error", bad, got)
+		}
+	}
+	for i, it := range menu {
+		if it.title["en"] == "" || it.title["ru"] == "" || it.hint["en"] == "" || it.hint["ru"] == "" || len(it.args) == 0 {
+			t.Errorf("menu item %d incomplete: %+v", i+1, it)
+		}
 	}
 }

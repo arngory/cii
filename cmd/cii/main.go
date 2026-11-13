@@ -46,6 +46,8 @@ import (
 const usage = `cii — complete information about current IP
 
 Usage:
+  cii                         in a terminal: a menu of modes, pick one by number (add m to mask, e.g. 2m)
+  cii N[m] [flags]            run menu mode N directly, e.g. cii 2m; cii ip runs the standard check without the menu
   cii [flags]                 detect public IPv4/IPv6, describe them, check services, reputation and censorship (default)
   cii lookup [flags] IP...    describe given addresses using local data only (no network)
   cii data update [ID...]     download offline databases from their publishers
@@ -103,9 +105,22 @@ func printUsage() {
 }
 
 func run(ctx context.Context, args []string) error {
+	if len(args) == 0 && interactive() {
+		return runMenu(ctx)
+	}
 	cmd := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
+	}
+	if choicePattern.MatchString(cmd) {
+		chosen, err := parseChoice(cmd)
+		if errors.Is(err, errMenuExit) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("no mode %q: modes are 1-%d, see `cii` without arguments", cmd, len(menu))
+		}
+		return run(ctx, append(chosen, args...))
 	}
 	switch cmd {
 	case "", "ip":
