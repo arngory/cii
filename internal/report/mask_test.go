@@ -130,6 +130,10 @@ func TestScrubbedRouteOnly(t *testing.T) {
 		}
 	}
 	r.Route.Paths = append(r.Route.Paths,
+		route.Path{Target: route.Target{Name: "office", Host: "office.example.net", Group: route.Custom}, Verdict: route.Transit,
+			Reason:  "via AS1299 Arelion, AS3356 Lumen, AS6453 Tata Communications; served from AS64999, not AS64998",
+			Transit: []string{"AS1299 Arelion", "AS3356 Lumen", "AS6453 Tata Communications"},
+			Hops:    []route.Hop{{TTL: 4, ASN: 3356, Org: "Level 3 Parent, LLC"}}},
 		route.Path{Target: route.Target{Name: "home", Host: "vps.example.org", Expect: 64512, Group: route.Custom}},
 		route.Path{Target: route.Target{Name: "example.org", Host: "example.org", Group: route.Custom}},
 		route.Path{Target: route.Target{Name: "192.0.2.77", Host: "192.0.2.77", Group: route.Custom}},
@@ -149,12 +153,12 @@ func TestScrubbedRouteOnly(t *testing.T) {
 	}
 	js.Reset()
 	r.Scrubbed().WriteJSON(&js)
-	for _, leak := range []string{"vps.example.org", "192.0.2.77", "nx.example.org", "192.0.2.53", "example.org", "64512", "nx.", "box.", ".example", "nip.io"} {
+	for _, leak := range []string{"vps.example.org", "192.0.2.77", "nx.example.org", "192.0.2.53", "example.org", "64512", "nx.", "box.", ".example", "nip.io", "Lumen", "Tata", "Level 3", "64999", "64998", "office.example"} {
 		if strings.Contains(js.String(), leak) {
 			t.Errorf("own route target leaks %q", leak)
 		}
 	}
-	for _, keep := range []string{`"name": "home"`, `"name": "target 3"`, "www.google.com"} {
+	for _, keep := range []string{`"name": "home"`, `"name": "target 4"`, "www.google.com", `"reason": "via a transit network; served from •••, not •••"`} {
 		if !strings.Contains(js.String(), keep) {
 			t.Errorf("masked route report lost %s", keep)
 		}
