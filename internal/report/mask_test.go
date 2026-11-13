@@ -128,11 +128,17 @@ func TestScrubbedRouteOnly(t *testing.T) {
 	}
 	r.Route.Paths = append(r.Route.Paths,
 		route.Path{Target: route.Target{Name: "home", Host: "vps.example.org", Group: route.Custom}},
-		route.Path{Target: route.Target{Name: "192.0.2.77", Host: "192.0.2.77", Group: route.Custom}})
-	r.Network = []ledger.Entry{{Module: "route", Host: "vps.example.org", Proto: "icmp"}, {Module: "route", Host: "www.google.com", Proto: "icmp"}}
+		route.Path{Target: route.Target{Name: "192.0.2.77", Host: "192.0.2.77", Group: route.Custom}},
+		route.Path{Target: route.Target{Name: "nx.example.org", Host: "nx.example.org", Group: route.Custom},
+			Reason: "lookup nx.example.org on 192.0.2.53:53: no such host", Error: "lookup nx.example.org on 192.0.2.53:53: no such host"})
+	r.Network = []ledger.Entry{
+		{Module: "route", Host: "vps.example.org", Proto: "icmp", Purpose: "route: path to home"},
+		{Module: "route", Host: "nx.example.org", Proto: "dns", Purpose: "route: path to nx.example.org"},
+		{Module: "route", Host: "www.google.com", Proto: "icmp"},
+	}
 	js.Reset()
 	r.Scrubbed().WriteJSON(&js)
-	for _, leak := range []string{"vps.example.org", "192.0.2.77"} {
+	for _, leak := range []string{"vps.example.org", "192.0.2.77", "nx.example.org", "192.0.2.53"} {
 		if strings.Contains(js.String(), leak) {
 			t.Errorf("own route target leaks %q", leak)
 		}

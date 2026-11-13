@@ -202,9 +202,13 @@ func TestParseTargets(t *testing.T) {
 	if err != nil || len(merged) != len(Targets)+3 {
 		t.Errorf("Merge = %d, %v", len(merged), err)
 	}
+	if _, err := Merge(Targets, []Target{{Name: "google", Host: "my.example.org"}}); err == nil {
+		t.Error("a second target named like a built-in one must be rejected")
+	}
 	many := make([]Target, MaxTargets)
 	for i := range many {
 		many[i].Host = "h" + string(rune('a'+i%26)) + string(rune('a'+i/26)) + ".example"
+		many[i].Name = many[i].Host
 	}
 	if _, err := Merge(Targets, many); err == nil {
 		t.Error("exceeding the target limit must fail")

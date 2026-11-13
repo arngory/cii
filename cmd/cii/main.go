@@ -85,7 +85,7 @@ Common flags:
   --no-log           do not write the local log (default: %s)
   --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
   --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route, show, compare)
-  --prom             print the report as Prometheus metrics (text exposition format) instead of the screen
+  --prom             print the report as Prometheus metrics instead of the screen (not for lookup)
   --prom-file FILE   also write those metrics to FILE atomically, e.g. for the node_exporter textfile collector
   --demo             show the report on invented sample data without touching the network (cii only)
   --no-color         disable colours
@@ -194,8 +194,12 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.Usage = printUsage
 }
 
-func (c *common) registerExports(fs *flag.FlagSet) {
+func (c *common) registerSVG(fs *flag.FlagSet) {
 	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
+}
+
+func (c *common) registerExports(fs *flag.FlagSet) {
+	c.registerSVG(fs)
 	fs.BoolVar(&c.prom, "prom", false, "print Prometheus metrics instead of the report")
 	fs.StringVar(&c.promFile, "prom-file", "", "also write Prometheus metrics to this file")
 }
@@ -349,6 +353,9 @@ func cmdWatch(ctx context.Context, args []string) error {
 		rc := c
 		rc.quiet = prev != nil
 		rep, err := collectIP(ctx, &rc, f)
+		if ctx.Err() != nil && prev != nil {
+			return nil
+		}
 		switch {
 		case err != nil && prev == nil:
 			return err
@@ -894,7 +901,7 @@ func terminalWidth() int {
 func cmdLookup(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii lookup", flag.ContinueOnError)
-	c.registerExports(fs)
+	c.registerSVG(fs)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -1069,7 +1076,7 @@ func cmdCompare(args []string) error {
 	if err := output(combined, &c); err != nil {
 		return err
 	}
-	if len(reps) == 2 && !c.json {
+	if len(reps) == 2 && !c.json && !c.prom {
 		fmt.Println()
 		report.WriteDiff(os.Stdout, c.color(), "A", "B", report.Diff(reps[0], reps[1]))
 	}

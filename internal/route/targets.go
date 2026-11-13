@@ -133,9 +133,13 @@ func ParseTargets(spec string) (targets []Target, add bool, err error) {
 func Merge(base, extra []Target) ([]Target, error) {
 	out := append([]Target(nil), base...)
 	for _, t := range extra {
-		if !slices.ContainsFunc(out, func(x Target) bool { return x.Host == t.Host }) {
-			out = append(out, t)
+		if slices.ContainsFunc(out, func(x Target) bool { return x.Host == t.Host }) {
+			continue
 		}
+		if slices.ContainsFunc(out, func(x Target) bool { return strings.EqualFold(x.Name, t.Name) }) {
+			return nil, fmt.Errorf("route target name %q is already taken; give %s another name", t.Name, t.Host)
+		}
+		out = append(out, t)
 	}
 	if len(out) > MaxTargets {
 		return nil, fmt.Errorf("too many route targets: %d, the limit is %d", len(out), MaxTargets)

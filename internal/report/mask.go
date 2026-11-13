@@ -97,23 +97,29 @@ func (r *Report) Scrubbed() *Report {
 		}
 	}
 	if out.Route != nil {
-		own := map[string]bool{}
+		var own []string
 		n := 0
 		for i := range out.Route.Paths {
-			t := &out.Route.Paths[i].Target
+			path := &out.Route.Paths[i]
+			t := &path.Target
 			if t.Group != route.Custom {
 				continue
 			}
 			n++
-			own[t.Host] = true
+			own = append(own, t.Host)
 			if t.Name == t.Host {
 				t.Name = fmt.Sprintf("target %d", n)
 			}
+			path.Reason = strings.ReplaceAll(path.Reason, t.Host, Hidden)
+			path.Error = strings.ReplaceAll(path.Error, t.Host, Hidden)
 			t.Host = Hidden
 		}
 		for i := range out.Network {
-			if own[out.Network[i].Host] {
-				out.Network[i].Host = Hidden
+			for _, host := range own {
+				if out.Network[i].Host == host {
+					out.Network[i].Host = Hidden
+				}
+				out.Network[i].Purpose = strings.ReplaceAll(out.Network[i].Purpose, host, Hidden)
 			}
 		}
 	}
