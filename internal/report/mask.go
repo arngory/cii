@@ -19,6 +19,7 @@ var (
 	addrLike   = regexp.MustCompile(`[0-9A-Fa-f:.]*[.:][0-9A-Fa-f:.]*(?:/\d{1,3})?`)
 	asnLike    = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
 	asnPrefix  = regexp.MustCompile(`^AS\d+\s*`)
+	legacyMask = regexp.MustCompile(`(?i)\b(?:\d{1,3}\.\d{1,3}\.\*\.\*|[0-9a-f]{1,4}:[0-9a-f]{1,4}:\*:\*)`)
 	nibbleLike = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
@@ -42,6 +43,7 @@ var (
 
 func MaskText(s string) string {
 	s = nibbleLike.ReplaceAllString(s, Hidden)
+	s = legacyMask.ReplaceAllString(s, Hidden)
 	s = addrLike.ReplaceAllStringFunc(s, func(tok string) string {
 		for _, cand := range []string{tok, trimEdge(tok)} {
 			if isAddress(cand) {

@@ -90,6 +90,13 @@ func TestScrubbedLeaksNothing(t *testing.T) {
 	}
 }
 
+func TestMaskTextLegacyPartialMasks(t *testing.T) {
+	got := MaskText("from 203.0.*.* and 2001:db8:*:* at 12:30")
+	if strings.Contains(got, "203.0") || strings.Contains(got, "2001:db8") || !strings.Contains(got, "12:30") {
+		t.Errorf("legacy masks = %q", got)
+	}
+}
+
 func TestMaskTextKeepsPlainText(t *testing.T) {
 	in := "dial tcp4 203.0.113.5:0->198.51.100.7:443: connect: refused; [2001:db8::1]:443 ::ffff:192.0.2.9 v1.2 ok 12:30:00 AS-path"
 	got := MaskText(in)
