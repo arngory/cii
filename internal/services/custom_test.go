@@ -36,6 +36,9 @@ func TestCustomChecks(t *testing.T) {
 	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://example.org/?a={ip}"}}); strings.Contains(q[0].Requests[0].URL, "{ip}") {
 		t.Errorf("the address placeholder of built-in checks is live in an own check: %s", q[0].Requests[0].URL)
 	}
+	if q, _ := CustomChecks([]config.ServiceCheck{{URL: "https://Wiki.Example.ORG/Path"}}); q[0].Service != "wiki.example.org" || q[0].Requests[0].URL != "https://wiki.example.org/Path" {
+		t.Errorf("host case kept: %+v", q[0])
+	}
 	rules := probe.Rules(checks)
 	if len(rules) != 3 || rules[1].Pattern != "shop.example.org" || rules[1].Purpose != "services: Shop" {
 		t.Errorf("rules = %+v", rules)
@@ -79,6 +82,9 @@ func TestCustomChecksRejectBadDefinitions(t *testing.T) {
 		"scheme":      {{URL: "ftp://example.org/"}},
 		"no host":     {{URL: "https:///path"}},
 		"credentials": {{URL: "https://user:secret@example.org/"}},
+		"bad port":    {{URL: "https://user:secret@example.org:9x/"}},
+		"bad escape":  {{URL: "https://example.org/%zz?token=secret"}},
+		"semicolon":   {{Name: "Shop; EU", URL: "https://example.org/"}},
 		"status":      {{URL: "https://example.org/", Expect: config.Codes{700}}},
 		"twice":       {{Name: "a", URL: "https://example.org/"}, {Name: "a", URL: "https://example.net/"}},
 		"same host":   {{URL: "https://example.org/a"}, {URL: "https://example.org/b"}},

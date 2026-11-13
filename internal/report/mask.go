@@ -165,11 +165,14 @@ func hostLike(s string) bool {
 
 func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
 	own := ownCheckHosts(r)
-	hide := func(s string) string {
-		for _, h := range own {
-			s = strings.ReplaceAll(s, h, Hidden)
+	hide := func(s string) string { return s }
+	if len(own) > 0 {
+		quoted := make([]string, len(own))
+		for i, h := range own {
+			quoted[i] = regexp.QuoteMeta(h)
 		}
-		return s
+		anyCase := regexp.MustCompile(`(?i)` + strings.Join(quoted, "|"))
+		hide = func(s string) string { return anyCase.ReplaceAllLiteralString(s, Hidden) }
 	}
 	renamed := map[string]string{}
 	origin := r.hosts()

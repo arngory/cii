@@ -49,6 +49,8 @@ func label(kind, s string) error {
 		return fmt.Errorf("%s %q is longer than %d characters", kind, s, maxLabel)
 	case strings.ContainsFunc(s, func(r rune) bool { return !unicode.IsPrint(r) }):
 		return fmt.Errorf("%s %q has unprintable characters", kind, s)
+	case strings.Contains(s, ";"):
+		return fmt.Errorf("%s %q must not contain a semicolon", kind, s)
 	}
 	return nil
 }
@@ -63,7 +65,7 @@ func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 		u, err := url.Parse(strings.TrimSpace(d.URL))
 		switch {
 		case err != nil:
-			return nil, fmt.Errorf("services[%d]: bad url: %w", i, err)
+			return nil, fmt.Errorf("services[%d]: bad url", i)
 		case u.Scheme != "https" && u.Scheme != "http":
 			return nil, fmt.Errorf("services[%d]: url must start with https:// or http://", i)
 		case u.Hostname() == "":
@@ -71,6 +73,7 @@ func CustomChecks(defs []config.ServiceCheck) ([]probe.Check, error) {
 		case u.User != nil:
 			return nil, fmt.Errorf("services[%d]: url must not carry credentials", i)
 		}
+		u.Host = strings.ToLower(u.Host)
 		name, group := strings.TrimSpace(d.Name), strings.TrimSpace(d.Group)
 		if name == "" {
 			name = u.Hostname()

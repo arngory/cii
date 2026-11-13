@@ -178,6 +178,7 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 		{Group: "custom:Work", Service: "Shop", Custom: true, Status: probe.No, Reason: "HTTP 403"},
 		{Group: services.Custom, Service: "192.0.2.10", Custom: true, Status: probe.Failed, Reason: "no IPv4 connectivity"},
 		{Group: services.Custom, Service: "shop.example.org mirror", Custom: true, Status: probe.Yes},
+		{Group: services.Custom, Service: "Portal", Custom: true, Status: probe.Failed, Reason: "lookup Portal.Example.NET: no such host"},
 		{Group: services.Streaming, Service: "Netflix", Status: probe.Yes},
 	})
 	r.IPv4 = h
@@ -188,6 +189,7 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 		{Module: "services", Host: "wiki.example.org", Proto: "https", Purpose: "services: wiki.example.org"},
 		{Module: "services", Host: "shop.example.org", Proto: "https", Purpose: "services: Shop; services: shop.example.org mirror"},
 		{Module: "services", Host: "www.netflix.com", Proto: "https", Purpose: "services: Netflix"},
+		{Module: "services", Host: "portal.example.net", Proto: "https", Purpose: "services: Portal"},
 		{Module: "region", Host: "wiki.example.org", Proto: "https", Purpose: "region: other"},
 	}
 	m := r.Scrubbed()
@@ -196,8 +198,8 @@ func TestScrubbedOwnServiceChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := strings.ReplaceAll(js.String(), `"host": "wiki.example.org"`, "")
-	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10"} {
-		if strings.Contains(out, leak) {
+	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10", "portal.example"} {
+		if strings.Contains(strings.ToLower(out), leak) {
 			t.Errorf("own service check leaks %q:\n%s", leak, out)
 		}
 	}
