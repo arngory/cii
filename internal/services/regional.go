@@ -86,5 +86,5 @@ func Title(g probe.Group) string {
 	if c := catalog(string(g)); c != nil {
 		return c.Title
 	}
-	return ""
+	return customTitle(g)
 }

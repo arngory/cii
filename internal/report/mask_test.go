@@ -12,6 +12,7 @@ import (
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 	"github.com/arngory/cii/internal/route"
+	"github.com/arngory/cii/internal/services"
 )
 
 func maskedSample() *Report {
@@ -165,5 +166,51 @@ func TestScrubbedRouteOnly(t *testing.T) {
 	}
 	if !strings.Contains(js.String(), `"name": "Google"`) {
 		t.Errorf("target name lost:\n%s", js.String())
+	}
+}
+
+func TestScrubbedOwnServiceChecks(t *testing.T) {
+	r := New("full")
+	h := &Host{Address: "203.0.113.7"}
+	h.SetServices([]probe.Result{
+		{Group: services.Custom, Service: "wiki.example.org", Custom: true, Status: probe.Failed,
+			Reason: "dial tcp: lookup wiki.example.org: no such host"},
+		{Group: "custom:Work", Service: "Shop", Custom: true, Status: probe.No, Reason: "HTTP 403"},
+		{Group: services.Custom, Service: "192.0.2.10", Custom: true, Status: probe.Failed, Reason: "no IPv4 connectivity"},
+		{Group: services.Custom, Service: "shop.example.org mirror", Custom: true, Status: probe.Yes},
+		{Group: services.Streaming, Service: "Netflix", Status: probe.Yes},
+	})
+	r.IPv4 = h
+	v6 := &Host{Address: "2001:db8::7"}
+	v6.SetServices([]probe.Result{{Group: services.Custom, Service: "wiki.example.org", Custom: true, Status: probe.Yes}})
+	r.IPv6 = v6
+	r.Network = []ledger.Entry{
+		{Module: "services", Host: "wiki.example.org", Proto: "https", Purpose: "services: wiki.example.org"},
+		{Module: "services", Host: "shop.example.org", Proto: "https", Purpose: "services: Shop; services: shop.example.org mirror"},
+		{Module: "services", Host: "www.netflix.com", Proto: "https", Purpose: "services: Netflix"},
+		{Module: "region", Host: "wiki.example.org", Proto: "https", Purpose: "region: other"},
+	}
+	m := r.Scrubbed()
+	var js strings.Builder
+	if err := m.WriteJSON(&js); err != nil {
+		t.Fatal(err)
+	}
+	out := strings.ReplaceAll(js.String(), `"host": "wiki.example.org"`, "")
+	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10"} {
+		if strings.Contains(out, leak) {
+			t.Errorf("own service check leaks %q:\n%s", leak, out)
+		}
+	}
+	for _, keep := range []string{`"service": "check 1"`, `"service": "check 2"`, `"service": "check 3"`, `"service": "Shop"`, `"service": "Netflix"`,
+		`"reason": "HTTP 403"`, `"reason": "dial tcp: lookup •••: no such host"`, "www.netflix.com", `"purpose": "services: Shop; services: ••• mirror"`, `"purpose": "region: other"`} {
+		if !strings.Contains(out, keep) {
+			t.Errorf("masked report lost %s:\n%s", keep, out)
+		}
+	}
+	if m.IPv6.Services[0].Service != m.IPv4.Services[0].Service {
+		t.Errorf("one check got two names: %q and %q", m.IPv4.Services[0].Service, m.IPv6.Services[0].Service)
+	}
+	if r.IPv4.Services[0].Service != "wiki.example.org" || r.Network[0].Host != "wiki.example.org" {
+		t.Errorf("Scrubbed modified the original report")
 	}
 }

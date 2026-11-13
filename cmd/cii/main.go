@@ -473,6 +473,11 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 	riskOn := !c.quick && !c.noRisk
 	if !c.quick {
 		checks = append(region.Select(cfg.Keys, c.extended), services.Select(cfg.Keys, c.extended)...)
+		own, err := services.CustomChecks(cfg.Services)
+		if err != nil {
+			return nil, err
+		}
+		checks = append(checks, own...)
 		if catalogs, err = c.catalogs(); err != nil {
 			return nil, err
 		}

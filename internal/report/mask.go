@@ -13,6 +13,7 @@ import (
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 	"github.com/arngory/cii/internal/route"
+	"github.com/arngory/cii/internal/services"
 )
 
 const Hidden = "•••"
@@ -97,6 +98,7 @@ func (r *Report) Scrubbed() *Report {
 			}
 		}
 	}
+	out.scrubOwnChecks(r, sc)
 	if out.Route != nil {
 		var own []string
 		n := 0
@@ -129,6 +131,67 @@ func (r *Report) Scrubbed() *Report {
 		}
 	}
 	return out
+}
+
+func ownCheckHosts(r *Report) []string {
+	purposes := map[string]bool{}
+	for _, h := range r.hosts() {
+		for _, res := range h.Services {
+			if res.Custom {
+				purposes[services.Module+": "+res.Service] = true
+			}
+		}
+	}
+	var own []string
+	for _, e := range r.Network {
+		if e.Module == services.Module && !slices.Contains(own, e.Host) &&
+			slices.ContainsFunc(strings.Split(e.Purpose, "; "), func(p string) bool { return purposes[p] }) {
+			own = append(own, e.Host)
+		}
+	}
+	slices.SortFunc(own, func(a, b string) int { return len(b) - len(a) })
+	return own
+}
+
+func hostLike(s string) bool {
+	return !strings.ContainsFunc(s, unicode.IsSpace) && strings.ContainsAny(s, ".:")
+}
+
+func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
+	own := ownCheckHosts(r)
+	hide := func(s string) string {
+		for _, h := range own {
+			s = strings.ReplaceAll(s, h, Hidden)
+		}
+		return s
+	}
+	renamed := map[string]string{}
+	origin := r.hosts()
+	for hi, h := range out.hosts() {
+		for i := range h.Services {
+			orig, res := origin[hi].Services[i], &h.Services[i]
+			if !orig.Custom {
+				continue
+			}
+			if hostLike(orig.Service) || hide(orig.Service) != orig.Service {
+				if renamed[orig.Service] == "" {
+					renamed[orig.Service] = fmt.Sprintf("check %d", len(renamed)+1)
+				}
+				res.Service = renamed[orig.Service]
+			}
+			res.Reason, res.Detail = sc.text(hide(orig.Reason), answerText), sc.text(hide(orig.Detail), answerText)
+		}
+	}
+	for i := range out.Network {
+		e := &out.Network[i]
+		if e.Module != services.Module {
+			continue
+		}
+		if slices.Contains(own, e.Host) {
+			e.Host = Hidden
+		}
+		e.Purpose = hide(e.Purpose)
+	}
 }
 
 func (r *Report) hosts() []*Host {

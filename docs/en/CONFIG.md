@@ -31,6 +31,14 @@ data:
 route:
   targets:
     - home=vps.example.org@64500
+
+services:
+  - name: Shop
+    url: https://shop.example.org/
+    expect: 200
+    contains: "Add to cart"
+    blocked: "not available in your country"
+    group: Work
 ```
 
 ## `ip_echo`
@@ -68,3 +76,16 @@ Any other `.mmdb` placed in the data directory (for example, a commercial databa
 ## `route`
 
 `targets` lists your own targets for `cii route` and `cii --route` as `[name=]host[@asn]`; they are added to the built-in list. Details are in [ROUTE.md](ROUTE.md).
+
+## `services`
+
+Your own availability checks: one `GET` request per address, the result goes to the "Region & services" panel next to the built-in ones. Up to 32 checks. How the response is read is in [SERVICE_CHECKS.md](SERVICE_CHECKS.md#your-own-checks).
+
+| Field | Meaning |
+|---|---|
+| `url` | required; `https://` or `http://`, without a login and password in the address |
+| `name` | the label in the report; by default, the host from `url` |
+| `expect` | the expected status code or a list: `200`, `[401, 403]`; by default any code below 400 fits |
+| `contains` | a string that must be in the response body |
+| `blocked` | a string that identifies a refusal: if it is in the body, the result is `no` |
+| `group` | the group heading; `Streaming`, `AI` and `Web` add the check to the built-in group, without the field the group is `Custom` |

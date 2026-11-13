@@ -44,3 +44,18 @@ They use identifiers from `internal/clientids/clientids.go`; the risks are the s
 | `gemini.google.com`, `play.google.com` | the markers from RegionRestrictionCheck cannot be reproduced; the Gemini API without a key says nothing about the region |
 | Instagram Music | in RegionRestrictionCheck — a closed-source binary |
 | the regional catalogues of RegionRestrictionCheck (HK, TW, JP, NA, SA, EU, OC, KR, SEA, AF) | the next step, ported region by region |
+
+## Your own checks
+
+The `services` section of the config ([CONFIG.md](CONFIG.md#services)) adds checks of your own addresses. Each is one `GET` request without keys or special headers, separately for each stack (IPv4 and IPv6). The host from `url` becomes a network policy rule of the `services` module and is visible in `--plan` and in the network ledger, like the built-in ones.
+
+The response is read in order:
+
+1. the body contains the `blocked` string — `no` ("blocked marker found");
+2. the status code does not fit (not in `expect`, or without `expect` — 400 and above) — `no` with the code; for 429 and 5xx — `error`, because such a response says nothing about availability;
+3. a `contains` string is set and the body lacks it — `no` ("marker not found");
+4. otherwise — `yes`.
+
+Redirects are not followed: a 301 or 302 is the answer itself, and no request goes to another host. To check the final page, give its address. A Cloudflare challenge page gives `?`, as with the built-in checks. In JSON such results are marked `"custom": true`.
+
+`--mask` hides the hosts of your own checks in error reasons and in the network ledger. A label set in `name` stays; a label that looks like a host (including the one taken from `url` by default) is replaced with `check N`.

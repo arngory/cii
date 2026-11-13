@@ -26,6 +26,7 @@
 - [x] Мультирегиональный набор: Netflix, Prime Video, Reddit, Wikipedia, 17 API ИИ-сервисов; уровень B — Disney+, Spotify, YouTube Premium, DAZN
 - [x] Дедупликация пересечений RegionRestrictionCheck, IPQuality и ipregion
 - [x] Региональные каталоги RegionRestrictionCheck: HK, TW, JP, NA, SA, EU, OC, KR, SEA, AF — по одному региону, с тестами на записанных ответах
+- [x] Свои проверки сервисов из конфига (`services`): адрес, ожидаемый код, маркеры в теле, группа
 
 ## 3а. Региональные каталоги — готово
 

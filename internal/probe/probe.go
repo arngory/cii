@@ -50,6 +50,7 @@ type Result struct {
 	Reason   string `json:"reason,omitempty"`
 	Detail   string `json:"detail,omitempty"`
 	Extended bool   `json:"extended,omitempty"`
+	Custom   bool   `json:"custom,omitempty"`
 	Facts    *Facts `json:"facts,omitempty"`
 }
 
@@ -74,6 +75,7 @@ type Check struct {
 	Service    string
 	Group      Group
 	Tier       Tier
+	Custom     bool
 	Requests   []Request
 	ExtraHosts []string
 	Transport  netx.Family
@@ -120,7 +122,7 @@ type Env struct {
 func Placeholders(checks []Check) []Result {
 	out := make([]Result, len(checks))
 	for i, c := range checks {
-		out[i] = Result{Group: c.Group, Service: c.Service, Status: Pending, Extended: c.Tier == TierB}
+		out[i] = Result{Group: c.Group, Service: c.Service, Status: Pending, Extended: c.Tier == TierB, Custom: c.Custom}
 	}
 	return out
 }
@@ -160,6 +162,7 @@ func complete(c Check, rs []Result) []Result {
 			rs[i].Service = c.Service
 		}
 		rs[i].Extended = c.Tier == TierB
+		rs[i].Custom = c.Custom
 	}
 	return rs
 }

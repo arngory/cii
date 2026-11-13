@@ -658,6 +658,9 @@
         "country": {
           "type": "string"
         },
+        "custom": {
+          "type": "boolean"
+        },
         "detail": {
           "type": "string"
         },
