@@ -405,7 +405,7 @@ type CheckStat struct {
 
 func Stats(reps []*Report) []CheckStat {
 	idx := map[string]int{}
-	var out []CheckStat
+	out := []CheckStat{}
 	rank := func(st probe.Status) int {
 		switch st {
 		case probe.Failed:

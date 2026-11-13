@@ -137,6 +137,9 @@ func TestStats(t *testing.T) {
 	if len(st) != 2 || st[0].Service != "Dead API" || st[0].Answered != 0 || st[0].Failed != 3 || st[1].Service != "Flaky API" || st[1].Answered != 2 || st[1].Unknown != 1 {
 		t.Errorf("stats = %+v", st)
 	}
+	if empty := Stats([]*Report{New("bench")}); empty == nil || len(empty) != 0 {
+		t.Errorf("stats without checks = %#v, want an empty non-nil slice", empty)
+	}
 	var b strings.Builder
 	WriteStats(&b, false, "en", 3, st)
 	if !strings.Contains(b.String(), "Dead API") || !strings.Contains(b.String(), "0/3") || !strings.Contains(b.String(), "2/3") {
