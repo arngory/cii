@@ -73,7 +73,7 @@ var menuTexts = map[string]map[string]string{
 	},
 }
 
-var choicePattern = regexp.MustCompile(`^(\d{1,2})(m?)$`)
+var choicePattern = regexp.MustCompile(`(?i)^(\d{1,2})(m?)$`)
 
 var errMenuExit = errors.New("exit")
 

@@ -111,6 +111,9 @@ func TestParseChoice(t *testing.T) {
 			t.Errorf("parseChoice(%q) = %v, %v; want %s", in, got, err, want)
 		}
 	}
+	if !choicePattern.MatchString("2M") || choicePattern.MatchString("route") {
+		t.Error("the command-line gate must accept 2M and leave command names alone")
+	}
 	if _, err := parseChoice("0"); !errors.Is(err, errMenuExit) {
 		t.Errorf("0 = %v", err)
 	}

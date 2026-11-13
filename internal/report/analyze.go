@@ -221,7 +221,7 @@ func (a *analysis) host(label string, h *Host) {
 	if blocked := pick(svc, func(res probe.Result) bool { return res.Status == probe.IPBlock }); len(blocked) > 0 {
 		a.add(Warn, a.t("Refuse this address or network, not the country: %s", names(blocked)), "")
 	}
-	lists := pick(h.Services, func(res probe.Result) bool { return res.Group == risk.DNSBL && res.Service != risk.PTRService })
+	lists := pick(h.Services, func(res probe.Result) bool { return res.Group == risk.DNSBL })
 	if listed := pick(lists, func(res probe.Result) bool { return res.Status == probe.No }); len(listed) > 0 {
 		a.add(Alert, a.t("Listed in %d DNSBL: %s", len(listed), names(listed)), a.t("Mail from this address is likely to be rejected."))
 	}
@@ -261,9 +261,15 @@ func (a *analysis) censor(rs []probe.Result) {
 		for _, h := range hits {
 			ev = append(ev, strings.TrimSuffix(strings.TrimPrefix(h.Service, "Port 53 interception ("), ")")+": "+cmp.Or(h.Detail, h.Reason))
 		}
-		detail := a.t("%s. Answers match the reference, so this is a transparent forwarder; DoH and DoT bypass it.", strings.Join(ev, "; "))
-		if len(spoofed) > 0 {
-			detail = a.t("%s. Some answers are also spoofed.", strings.Join(ev, "; "))
+		detail := strings.Join(ev, "; ")
+		clean := slices.ContainsFunc(dns, func(res probe.Result) bool {
+			return strings.HasSuffix(res.Service, "spoofing") && (res.Status == probe.Yes || res.Status == probe.OK)
+		})
+		switch {
+		case len(spoofed) > 0:
+			detail = a.t("%s. Some answers are also spoofed.", detail)
+		case clean:
+			detail = a.t("%s. Answers match the reference, so this is a transparent forwarder; DoH and DoT bypass it.", detail)
 		}
 		a.add(Alert, a.t("Port 53 DNS is intercepted on the path"), detail)
 	}

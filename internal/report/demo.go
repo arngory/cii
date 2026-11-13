@@ -47,7 +47,7 @@ func Demo(mode string) *Report {
 		{Group: services.AI, Service: "Kimi API (CN)", Status: probe.No, Reason: "region not supported"},
 		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.Yes, Country: "DE", Detail: "Residential; risk 0",
 			Facts: demoFacts("isp", "", 0, 0, clean)},
-		{Group: risk.DNSBL, Service: risk.PTRService, Status: probe.Yes, Detail: "p203-0-113-7.dip0.example.net"},
+		{Group: risk.Network, Service: risk.PTRService, Status: probe.Yes, Detail: "p203-0-113-7.dip0.example.net"},
 		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.Yes},
 		{Group: risk.DNSBL, Service: "psbl.surriel.com", Status: probe.Yes},
 		{Group: risk.DNSBL, Service: "dnsbl.dronebl.org", Status: probe.Yes},

@@ -46,6 +46,7 @@ func TestAnalyzeFindings(t *testing.T) {
 	r.IPv6 = &Host{Error: "the resolver returns no AAAA records for any echo service: IPv6 is off or filtered on this network"}
 	r.SetCensor([]probe.Result{
 		{Group: censor.DNS, Service: "Port 53 interception (OpenDNS)", Status: probe.No, Detail: "I am not an OpenDNS resolver."},
+		{Group: censor.DNS, Service: "Example 192.0.2.53 spoofing", Status: probe.Yes},
 		{Group: censor.DNS, Service: "Example 192.0.2.53 DoH", Status: probe.No},
 		{Group: censor.DPI, Service: "blocked.example HTTP", Status: probe.No},
 		{Group: censor.DPI, Service: "blocked.example HTTPS", Status: probe.No},
@@ -87,6 +88,10 @@ func TestAnalyzeFindings(t *testing.T) {
 	}
 	if strings.Contains(out, "Nothing unusual") || strings.Index(out, "alert") > strings.Index(out, "warn") {
 		t.Errorf("order or summary wrong:\n%s", out)
+	}
+	r.Censor = r.Censor[:1]
+	if alone := analysed(t, r, "en"); strings.Contains(alone, "transparent forwarder") || !strings.Contains(alone, "| OpenDNS: I am not an OpenDNS resolver.\n") {
+		t.Errorf("forwarder claimed without a clean spoofing check:\n%s", alone)
 	}
 	ru := analysed(t, r, "ru")
 	if !strings.Contains(ru, "DNS на 53-м порту перехватывается по пути") || strings.Contains(ru, "%!") {

@@ -58,6 +58,7 @@ func TestJudge(t *testing.T) {
 		{path("f2", 15169, 5, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 95}, Hop{TTL: 3, Addr: "198.51.100.2", RTTms: 4}), Direct, ""},
 		{&Path{Target: Target{Name: "u", Expect: 62041, Unicast: true}, RTTms: 180, ASN: 62041, Hops: []Hop{{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, {TTL: 2, Addr: "198.51.100.1", RTTms: 150}}}, Distant, "single-location service, +176 ms away"},
 		{&Path{Target: Target{Name: "u2", Expect: 62041, Unicast: true}, RTTms: 8, ASN: 62041}, Direct, ""},
+		{path("tail", 15169, 50, 15169, Hop{TTL: 1, Addr: "192.0.2.1", RTTms: 1}, Hop{TTL: 2, Addr: "198.51.100.1", RTTms: 3}), Regional, "+46 ms"},
 		{path("g", 13335, 0.4, 13335, Hop{TTL: 1}, Hop{TTL: 2, Addr: "1.1.1.1", RTTms: 0.4}), Intercepted, "local proxy"},
 		{path("h", 15169, 4, 64500), Direct, "cache inside your network"},
 		{path("i", 15169, 4, 20940), Direct, "served from AS20940, not AS15169"},

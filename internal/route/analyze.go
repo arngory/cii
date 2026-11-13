@@ -134,8 +134,5 @@ func maxJump(hops []Hop, dest float64) float64 {
 		}
 		prev = eff[i]
 	}
-	if prev >= 0 && dest-prev > jump {
-		jump = dest - prev
-	}
 	return jump
 }
