@@ -182,6 +182,9 @@ func (out *Report) scrubOwnChecks(r *Report, sc scrubber) {
 				res.Service = renamed[orig.Service]
 			}
 			res.Reason, res.Detail = sc.text(hide(orig.Reason), answerText), sc.text(hide(orig.Detail), answerText)
+			if title, ok := services.OwnGroup(orig.Group); ok && (hostLike(title) || hide(title) != title) {
+				res.Group = services.Custom
+			}
 			if res.Host != "" {
 				res.Host = Hidden
 			}
