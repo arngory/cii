@@ -76,8 +76,35 @@ jobs:
             if [ -z "$body" ]; then
               gh release edit "$TAG" --notes-file docs/RELEASE_NOTES_TEMPLATE.md
             fi
+            title=$(gh release view "$TAG" --json name --jq .name)
+            if [ -z "$title" ]; then
+              gh release edit "$TAG" --title "cii $TAG"
+            fi
           else
             gh release create "$TAG" dist/* \
-              --title "$TAG" \
+              --title "cii $TAG" \
               --notes-file docs/RELEASE_NOTES_TEMPLATE.md
           fi
+
+      - name: Update the Homebrew formula and Scoop manifest in the repository
+        continue-on-error: true
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            *-*) echo "pre-release: package manifests are not updated"; exit 0 ;;
+          esac
+          git fetch origin main
+          git checkout -B package-manifests origin/main
+          mkdir -p Formula bucket
+          cp dist/cii.rb Formula/cii.rb
+          cp dist/cii.json bucket/cii.json
+          git add Formula/cii.rb bucket/cii.json
+          if git diff --cached --quiet; then
+            echo "package manifests already up to date"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update Homebrew formula and Scoop manifest for $TAG"
+          git push origin HEAD:main

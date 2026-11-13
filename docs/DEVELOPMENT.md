@@ -37,6 +37,10 @@ go generate ./internal/refdata
 5. пакеты deb, rpm и apk (в них кладётся и `THIRD_PARTY_LICENSES.txt`);
 6. публикация релиза с бинарниками, пакетами, `*.mmdb.gz`, `data-manifest.json`, обоими файлами уведомлений и `SHA256SUMS`. Если релиз для тега уже создан вручную, файлы догружаются в него, а пустое описание заменяется шаблоном `docs/RELEASE_NOTES_TEMPLATE.md`.
 
+7. обновление `Formula/cii.rb` и `bucket/cii.json` в ветке `main` отдельным коммитом от `github-actions[bot]` — по ним работают `brew tap arngory/cii https://github.com/arngory/cii` и `scoop bucket add cii https://github.com/arngory/cii`. Для предварительных версий (тег с дефисом) шаг пропускается. Шаг не валит релиз: если ветка защищена от прямых пушей, файлы нужно обновить вручную из приложенных к релизу `cii.rb` и `cii.json`.
+
+`PKGBUILD` для AUR прикладывается к релизу, но не публикуется: для AUR нужна учётная запись и SSH-ключ владельца пакета.
+
 Генератор отказывается работать, если у модуля не найден файл лицензии или у базы нет атрибуции или ссылки на лицензию: новая зависимость без лицензии остановит релиз, а не уйдёт без уведомления.
 
 Секрет добавляется в Settings → Secrets and variables → Actions → New repository secret. Имя: `IPINFO_TOKEN`, значение: токен с https://ipinfo.io/dashboard. Внутри workflow токен передаётся в `CII_IPINFO_TOKEN` и не попадает в манифест.

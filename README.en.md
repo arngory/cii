@@ -20,7 +20,26 @@ Windows (PowerShell):
 iwr https://github.com/arngory/cii/releases/latest/download/cii-windows-amd64.exe -OutFile cii.exe; .\cii.exe
 ```
 
-This downloads the latest release binary from GitHub into the current directory and runs the full check. On a router, run it from `/tmp` so the binary only lives in memory. For mips/mipsle and other targets, pick the file name from the [release page](https://github.com/arngory/cii/releases/latest).
+This downloads the latest release binary from GitHub into the current directory and runs it. Without arguments cii shows a menu of modes and waits for a number:
+
+```
+   1  Standard check        address, IP quality, region, services, reputation, censorship
+   2  Extended check        standard + vendors' internal APIs, risk pages, DPI and geoblock lists
+   3  Everything            extended + routes + benchmark (minutes, 1 GiB on disk)
+   4  Quick                 address and local databases only
+   5  Censorship only       DNS, DPI, geoblocking, Telegram, connectivity checks
+   6  Routes only           paths to major networks (hops need root)
+   7  Benchmark only        system, disk, CPU, speed, iperf3
+   8  Show the last run     from the local log, no network
+   9  Analyse the last run  conclusions from the local log, no network
+  10  Update databases      DB-IP Lite and range lists from their publishers
+```
+
+An `m` after the number (`2m`) hides addresses and the provider, for a screenshot. Enter alone runs the standard check, `0` exits.
+
+To pick a mode up front, append the number or flags to the command, for example `./cii 2m` or `./cii --extended --mask`. `./cii ip` runs the standard check without asking. In scripts and pipes (when input or output is not a terminal) there is no menu and the standard check runs.
+
+On a router, run the command from `/tmp` so the binary only lives in memory. For mips/mipsle and other targets, pick the file name from the [release page](https://github.com/arngory/cii/releases/latest).
 
 Local DB-IP databases (country and ASN without asking services, hop labels in `cii route`) are fetched once:
 
@@ -105,6 +124,8 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 | `cii route` | routes only ([docs/ROUTE.md](docs/ROUTE.md)) |
 | `cii bench` | the benchmark only, with its own options ([docs/BENCH.md](docs/BENCH.md)) |
 | `cii show [LOG\|JSON\|-]` | print a past run again: the latest local log by default, or a log file, a `--json` file or `-` for standard input. `--mask`, `--json`, `--debug`, `--svg` and `--lang` apply; the title names the file and when the run was taken |
+| `cii analyze [LOG\|JSON\|-]` | conclusions from a finished run, checking nothing again: DNS interception and what follows from it, blocking, altered HTTP or TLS, a tunnel, address type and risk flags, blocklists, route detours. The latest log by default; `--mask`, `--json` and `--lang` apply. The `cii` report itself stays as is, without interpretation |
+| `cii stats [LOG…]` | which checks did not always answer, across all local logs: this shows a check that broke because the service changed |
 | `cii diff [OLD NEW]` | what changed between two runs; without arguments, the last two logs |
 | `cii data update [ID…]` | fetch offline databases from their publishers; `status` shows what is installed, `sources` what is available |
 | `cii version` | version |
@@ -141,6 +162,24 @@ Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks �
 **`--mask`** replaces with `•••` everything that identifies the address or network: addresses and prefixes in any form, AS numbers and holders, PTR, hop addresses, CDN node names (an ISP-hosted cache is often named after the ISP), VPN and datacenter names in answers. Country, city and all check results stay.
 
 ## Install and verify
+
+Homebrew (macOS and Linux):
+
+```bash
+brew tap arngory/cii https://github.com/arngory/cii
+```
+
+```bash
+brew install cii
+```
+
+Scoop (Windows):
+
+```powershell
+scoop bucket add cii https://github.com/arngory/cii; scoop install cii
+```
+
+The formula and manifest live in this repository (`Formula/`, `bucket/`) and are updated by the release workflow.
 
 Binaries for Linux (amd64, arm64, armv7, 386, mips/mipsle softfloat, riscv64), macOS and Windows, `deb`, `rpm` and `apk` packages, a Homebrew formula (`cii.rb`), a Scoop manifest (`cii.json`) and an AUR `PKGBUILD` are on the [release page](https://github.com/arngory/cii/releases/latest). Everything is built by GitHub Actions from this repository, and every file carries a provenance attestation:
 
