@@ -92,6 +92,15 @@ func TestLoadReportFromLogAndJSON(t *testing.T) {
 	if _, err := loadReport(bad); err == nil || !strings.Contains(err.Error(), "unsupported report schema") {
 		t.Errorf("foreign schema = %v", err)
 	}
+	if reps, err := loadReports([]string{bad, logPath, jsonPath}, false); err != nil || len(reps) != 2 {
+		t.Errorf("lenient load = %d reports, %v", len(reps), err)
+	}
+	if _, err := loadReports([]string{bad, logPath}, true); err == nil {
+		t.Error("a named unreadable file must be an error")
+	}
+	if _, err := loadReports([]string{bad}, false); err == nil {
+		t.Error("no readable logs must be an error")
+	}
 }
 
 func TestParseChoice(t *testing.T) {

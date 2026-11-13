@@ -870,27 +870,36 @@ func cmdAnalyze(args []string) error {
 	return nil
 }
 
+func loadReports(files []string, strict bool) ([]*report.Report, error) {
+	var reps []*report.Report
+	for _, f := range files {
+		r, err := loadReport(f)
+		switch {
+		case err == nil:
+			reps = append(reps, r)
+		case strict:
+			return nil, err
+		}
+	}
+	if len(reps) == 0 {
+		return nil, errors.New("no readable local logs; run cii first or pass log or JSON files")
+	}
+	return reps, nil
+}
+
 func cmdStats(args []string) error {
 	var c common
 	fs := flag.NewFlagSet("cii stats", flag.ContinueOnError)
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
-	files := fs.Args()
-	if len(files) == 0 {
-		logs, err := runlog.List(paths.LogDir())
-		if err != nil || len(logs) == 0 {
-			return errors.New("no local logs yet; run cii first or pass log or JSON files")
-		}
-		files = logs
+	files, named := fs.Args(), fs.NArg() > 0
+	if !named {
+		files, _ = runlog.List(paths.LogDir())
 	}
-	var reps []*report.Report
-	for _, f := range files {
-		r, err := loadReport(f)
-		if err != nil {
-			return err
-		}
-		reps = append(reps, r)
+	reps, err := loadReports(files, named)
+	if err != nil {
+		return err
 	}
 	stats := report.Stats(reps)
 	if c.json {
