@@ -360,7 +360,7 @@ func cmdWatch(ctx context.Context, args []string) error {
 		case err != nil && prev == nil:
 			return err
 		case err != nil:
-			fmt.Printf("%s  run %d failed: %v\n", time.Now().Format("15:04"), n, err)
+			fmt.Fprintf(os.Stderr, "%s  run %d failed: %v\n", time.Now().Format("15:04"), n, err)
 		case rep == nil:
 			return nil
 		case prev == nil:
@@ -388,9 +388,14 @@ func cmdWatch(ctx context.Context, args []string) error {
 }
 
 func watchStep(c *common, n int, prev, cur *report.Report) error {
-	_, logErr := writeLog(cur, c)
+	logPath, logErr := writeLog(cur, c)
 	if logErr != nil {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
+	}
+	if c.svg != "" {
+		if err := writeSVG(cur, c, logPath, logErr); err != nil {
+			return fmt.Errorf("--svg: %w", err)
+		}
 	}
 	if c.promFile != "" {
 		if err := writeMetricsFile(cur, c.promFile); err != nil {

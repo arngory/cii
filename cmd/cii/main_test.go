@@ -144,7 +144,7 @@ func TestWatchStep(t *testing.T) {
 	prev, cur := report.Demo("online"), report.Demo("online")
 	cur.GeneratedAt = cur.GeneratedAt.Add(30 * time.Minute)
 	cur.IPv4.Services[0].Status = "no"
-	c := &common{noColor: true, lang: "en", promFile: filepath.Join(dir, "cii.prom")}
+	c := &common{noColor: true, lang: "en", promFile: filepath.Join(dir, "cii.prom"), svg: filepath.Join(dir, "cii.svg")}
 	old := os.Stdout
 	rd, wr, _ := os.Pipe()
 	os.Stdout = wr
@@ -163,6 +163,9 @@ func TestWatchStep(t *testing.T) {
 	}
 	if prom, err := os.ReadFile(c.promFile); err != nil || !strings.Contains(string(prom), "cii_check_available") {
 		t.Errorf("metrics file: %v", err)
+	}
+	if svg, err := os.ReadFile(c.svg); err != nil || !strings.Contains(string(svg), "<svg") {
+		t.Errorf("svg not refreshed by watch: %v", err)
 	}
 	if logs, _ := runlog.List(filepath.Join(dir, "logs")); len(logs) != 2 {
 		t.Errorf("logs written = %d, want 2", len(logs))

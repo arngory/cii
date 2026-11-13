@@ -112,8 +112,9 @@ func (r *Report) Scrubbed() *Report {
 			}
 			path.Reason = strings.ReplaceAll(path.Reason, t.Host, Hidden)
 			path.Error = strings.ReplaceAll(path.Error, t.Host, Hidden)
-			t.Host = Hidden
+			t.Host, t.Expect = Hidden, 0
 		}
+		slices.SortFunc(own, func(a, b string) int { return len(b) - len(a) })
 		for i := range out.Network {
 			for _, host := range own {
 				if out.Network[i].Host == host {
