@@ -146,3 +146,25 @@ func TestStats(t *testing.T) {
 		t.Errorf("stats output:\n%s", b.String())
 	}
 }
+
+func TestCompare(t *testing.T) {
+	a, b := Demo("online"), Demo("online")
+	b.IPv4.Address = "198.51.100.9"
+	b.IPv4.Services[0].Status = probe.No
+	c, err := Compare([]*Report{a, b}, []string{"home", "vps"})
+	if err != nil || len(c.Exits) != 2 || c.Exits[0].Query != "A" || c.Exits[1].Query != "B" || !strings.HasPrefix(c.Exits[1].Via, "vps · ") {
+		t.Fatalf("Compare = %+v, %v", c, err)
+	}
+	if a.IPv4.Query != "" || a.IPv4.Via != "" {
+		t.Error("Compare modified a source report")
+	}
+	screen := strings.Join(c.Screen(Style{Unicode: true, Width: 150}, "", nil), "\n")
+	for _, want := range []string{"IP quality · A", "IP quality · B", "marks: A B", "✓✗ Netflix"} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("%q missing in\n%s", want, screen)
+		}
+	}
+	if _, err := Compare([]*Report{a, New("bench")}, []string{"a", "b"}); err == nil {
+		t.Error("a report without an address must be rejected")
+	}
+}

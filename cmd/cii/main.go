@@ -60,6 +60,7 @@ Usage:
   cii show [LOG|JSON|-]       print a past run again (default: the latest local log); works with --mask, --json, --debug, --svg, --lang
   cii analyze [LOG|JSON|-]    conclusions drawn from a run (default: the latest local log); nothing is checked again
   cii stats [LOG...]          which checks did not always answer across local logs
+  cii compare A B [C...]      reports from different machines side by side, plus the list of differences for two
   cii version
 
 Default command only:
@@ -145,6 +146,8 @@ func run(ctx context.Context, args []string) error {
 		return cmdAnalyze(args)
 	case "stats":
 		return cmdStats(args)
+	case "compare":
+		return cmdCompare(args)
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -890,6 +893,46 @@ func loadReports(files []string, strict bool) ([]*report.Report, error) {
 		return nil, errors.New("no readable local logs; run cii first or pass log or JSON files")
 	}
 	return reps, nil
+}
+
+func cmdCompare(args []string) error {
+	var c common
+	fs := flag.NewFlagSet("cii compare", flag.ContinueOnError)
+	c.registerSVG(fs)
+	if err := c.parse(fs, args); err != nil {
+		return err
+	}
+	if fs.NArg() < 2 || fs.NArg() > 6 {
+		return errors.New("usage: cii compare A B [C...] (two to six logs or JSON reports)")
+	}
+	reps, err := loadReports(fs.Args(), true)
+	if err != nil {
+		return err
+	}
+	names := make([]string, len(reps))
+	for i, f := range fs.Args() {
+		names[i] = strings.TrimSuffix(filepath.Base(f), filepath.Ext(f))
+	}
+	combined, err := report.Compare(reps, names)
+	if err != nil {
+		return err
+	}
+	if c.mask {
+		combined = combined.Scrubbed()
+		for i := range reps {
+			reps[i] = reps[i].Scrubbed()
+		}
+	}
+	c.noLog = true
+	c.from = "compare"
+	if err := output(combined, &c); err != nil {
+		return err
+	}
+	if len(reps) == 2 && !c.json {
+		fmt.Println()
+		report.WriteDiff(os.Stdout, c.color(), "A", "B", report.Diff(reps[0], reps[1]))
+	}
+	return nil
 }
 
 func cmdStats(args []string) error {

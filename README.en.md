@@ -127,6 +127,7 @@ Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address
 | `cii analyze [LOG\|JSON\|-]` | conclusions from a finished run, checking nothing again: DNS interception and what follows from it, blocking, altered HTTP or TLS, a tunnel, address type and risk flags, blocklists, route detours. The latest log by default; `--mask`, `--json` and `--lang` apply. The `cii` report itself stays as is, without interpretation |
 | `cii stats [LOG…]` | which checks did not always answer, across all local logs: this shows a check that broke because the service changed |
 | `cii diff [OLD NEW]` | what changed between two runs; without arguments, the last two logs |
+| `cii compare A B [C…]` | reports from different machines side by side (two to six logs or JSON files): an IP quality panel per point and one service grid with a mark for each; for two points the list of differences follows. `--mask`, `--json` and `--svg` apply |
 | `cii data update [ID…]` | fetch offline databases from their publishers; `status` shows what is installed, `sources` what is available |
 | `cii version` | version |
 
