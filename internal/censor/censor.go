@@ -27,7 +27,7 @@ const (
 	Telegram probe.Group = "telegram"
 )
 
-var Modes = []string{"dns", "telegram", "dpi", "geoblock", "portal"}
+var Modes = []string{"dns", "telegram", "dpi", "geoblock", "portal", "transport"}
 
 type Options struct {
 	Modes       []string
@@ -49,7 +49,7 @@ func canonicalMode(m string) ([]string, bool) {
 		return Modes, true
 	case "tg":
 		return []string{"telegram"}, true
-	case "dns", "telegram", "dpi", "geoblock", "portal":
+	case "dns", "telegram", "dpi", "geoblock", "portal", "transport":
 		return []string{m}, true
 	}
 	return nil, false
@@ -77,7 +77,7 @@ func selectedModes(opts Options) (map[string]bool, []string) {
 	return set, bad
 }
 
-var modeGroups = map[string]probe.Group{"dns": DNS, "telegram": Telegram, "dpi": DPI, "geoblock": Geoblock, "portal": Portal}
+var modeGroups = map[string]probe.Group{"dns": DNS, "telegram": Telegram, "dpi": DPI, "geoblock": Geoblock, "portal": Portal, "transport": Transport}
 
 func Placeholders(opts Options) []probe.Result {
 	modes, _ := selectedModes(opts)
@@ -179,6 +179,14 @@ func Rules(opts Options) []netx.Rule {
 			}
 		}
 	}
+	if modes["transport"] {
+		for _, s := range stunServers {
+			add(s.Host, "NAT type check (STUN binding request)")
+		}
+		for _, host := range quicTargets {
+			add(host, "QUIC reachability check (handshake on UDP "+quicPort+")")
+		}
+	}
 	if modes["telegram"] {
 		for _, dc := range telegramDCs {
 			add(dc.IP, "Telegram DC MTProto handshake")
@@ -238,7 +246,7 @@ func Run(ctx context.Context, n *netx.Net, opts Options) []probe.Result {
 	for _, m := range bad {
 		out = append(out, probe.Result{Service: "mode " + m, Status: probe.Failed, Reason: "unknown mode"})
 	}
-	parts := make([][]probe.Result, 4)
+	parts := make([][]probe.Result, 5)
 	var wg sync.WaitGroup
 	if modes["dns"] {
 		wg.Go(func() { parts[0] = r.dns(ctx) })
@@ -248,6 +256,9 @@ func Run(ctx context.Context, n *netx.Net, opts Options) []probe.Result {
 	}
 	if modes["portal"] {
 		wg.Go(func() { parts[3] = r.portal(ctx) })
+	}
+	if modes["transport"] {
+		wg.Go(func() { parts[4] = r.transport(ctx) })
 	}
 	lists, err := webLists(opts, modes)
 	if err != nil {

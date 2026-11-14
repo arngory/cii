@@ -509,7 +509,7 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 		checks = append(checks, risk.Checks(cfg.Keys, c.extended)...)
 	}
 	censorOn := !c.quick && !noCensor && !c.offline && len(exits) == 1
-	censorOpts := censor.Options{Modes: []string{"dns", "telegram", "portal"}, Protocol: "both"}
+	censorOpts := censor.Options{Modes: []string{"dns", "telegram", "portal", "transport"}, Protocol: "both"}
 	if c.extended {
 		censorOpts.Modes = nil
 	}
