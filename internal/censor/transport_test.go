@@ -259,3 +259,97 @@ func TestTransportRules(t *testing.T) {
 		t.Error("transport is not a known mode")
 	}
 }
+
+func TestBlockKeyControls(t *testing.T) {
+	noProxyEnv(t)
+	cert, _ := testCertificate(t)
+	listen := func(handle func(net.Conn)) string {
+		ln, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { ln.Close() })
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				go func() {
+					defer c.Close()
+					c.SetDeadline(time.Now().Add(2 * time.Second))
+					handle(c)
+				}()
+			}
+		}()
+		return ln.Addr().String()[len("127.0.0.1:"):]
+	}
+	var sawName, sawHost string
+	tlsOK := listen(func(c net.Conn) {
+		s := tls.Server(c, &tls.Config{Certificates: []tls.Certificate{cert}, GetConfigForClient: func(h *tls.ClientHelloInfo) (*tls.Config, error) {
+			sawName = "name:" + h.ServerName
+			return nil, nil
+		}})
+		s.Handshake()
+	})
+	tlsAlert := listen(func(c net.Conn) {
+		tls.Server(c, &tls.Config{GetConfigForClient: func(*tls.ClientHelloInfo) (*tls.Config, error) {
+			return nil, context.Canceled
+		}}).Handshake()
+	})
+	dropped := listen(func(net.Conn) {})
+	httpOK := listen(func(c net.Conn) {
+		buf := make([]byte, 512)
+		n, _ := c.Read(buf)
+		for _, line := range strings.Split(string(buf[:n]), "\r\n") {
+			if strings.HasPrefix(line, "Host: ") {
+				sawHost = line
+			}
+		}
+		c.Write([]byte("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"))
+	})
+	savedTLS, savedHTTP := tlsControlPort, httpControlPort
+	defer func() { tlsControlPort, httpControlPort = savedTLS, savedHTTP }()
+	n := netx.New(netx.Options{Family: netx.IPv4, Timeout: 700 * time.Millisecond}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "127.0.0.1", Purpose: "test"}), ledger.New())
+	r := newRunner(n, Options{})
+	ip := netip.MustParseAddr("127.0.0.1")
+	for port, want := range map[string]bool{tlsOK: true, tlsAlert: true, dropped: false} {
+		tlsControlPort = port
+		if got := r.tlsWithoutName(context.Background(), "127.0.0.1", ip); got != want {
+			t.Errorf("handshake without the name on port %s = %v, want %v", port, got, want)
+		}
+	}
+	if sawName != "name:" {
+		t.Errorf("the control handshake carried a server name: %q", sawName)
+	}
+	for port, want := range map[string]bool{httpOK: true, dropped: false} {
+		httpControlPort = port
+		if got := r.httpByAddress(context.Background(), "127.0.0.1", ip); got != want {
+			t.Errorf("request by address on port %s = %v, want %v", port, got, want)
+		}
+	}
+	if sawHost != "Host: 127.0.0.1" {
+		t.Errorf("the control request carried %q", sawHost)
+	}
+	if r.tlsWithoutName(context.Background(), "other.example", ip) || r.httpByAddress(context.Background(), "other.example", ip) {
+		t.Error("a control probe went to a host the policy does not declare")
+	}
+	for _, c := range []struct {
+		proto    string
+		answered bool
+		want     string
+	}{
+		{"HTTPS", true, "blocked by SNI: TLS handshake connection reset, while the same address answers a handshake without the name"},
+		{"HTTPS", false, "TLS handshake connection reset (likely DPI); the address does not answer a handshake without the name either"},
+		{"HTTP", true, "blocked by Host header: connection reset after request, while the same address answers a request without the name"},
+		{"HTTP", false, "blocked / connection reset after request (likely DPI); the address does not answer a request without the name either"},
+	} {
+		reason := "TLS handshake connection reset (likely DPI)"
+		if c.proto == "HTTP" {
+			reason = "blocked / connection reset after request (likely DPI)"
+		}
+		if got := keyedBlock(c.proto, "connection reset", reason, c.answered); got != c.want {
+			t.Errorf("%s answered=%v: %q", c.proto, c.answered, got)
+		}
+	}
+}

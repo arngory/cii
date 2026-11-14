@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"net/netip"
 	"slices"
 	"strings"
 
@@ -65,9 +66,23 @@ var analysisRU = map[string]string{
 	"Behind a VPN or proxy this is a DNS leak: the resolver's operator sees the names you look up. Without one it is just a resolver abroad.": "За VPN или прокси это утечка DNS: оператор резолвера видит имена, которые вы запрашиваете. Без них это просто резолвер за границей.",
 	"The resolver passes your subnet on to name servers (ECS)":                                                                                "Резолвер передаёт вашу подсеть серверам имён (ECS)",
 	"The sites' name servers learn the network a query came from, though not the exact address.":                                              "Серверы имён сайтов узнают сеть, из которой пришёл запрос, но не точный адрес.",
-	"DNS is answered by a local fake-IP proxy":                                                                                                "DNS отвечает локальный прокси в режиме fake-IP",
-	"Route probes were answered locally":                                                                                                      "На замеры маршрутов ответили локально",
-	"A local proxy, tunnel or sandbox ends the connections; path verdicts mean nothing here.":                                                 "Соединения завершает локальный прокси, туннель или песочница; вердикты маршрутов здесь ничего не значат.",
+	"Interface MTU is %s": "MTU интерфейса — %s",
+	"Below 1500 there is a tunnel or PPPoE on the way; large packets are fragmented or rely on path MTU discovery.": "Меньше 1500 — на пути туннель или PPPoE; большие пакеты фрагментируются или зависят от определения MTU пути.",
+	"UDP does not get through: no STUN server answered":                                                             "UDP не проходит: не ответил ни один STUN-сервер",
+	"Calls, WireGuard, QUIC and peer-to-peer connections rely on UDP.":                                              "От UDP зависят звонки, WireGuard, QUIC и прямые соединения между узлами.",
+	"NAT is symmetric": "NAT симметричный",
+	"Each destination gets its own port mapping, so peer-to-peer connections need a relay.":   "Для каждого адресата выдаётся свой порт, поэтому прямым соединениям между узлами нужен ретранслятор.",
+	"Carrier-grade NAT: the public address is shared with other subscribers":                  "NAT оператора (CGNAT): публичный адрес общий с другими абонентами",
+	"Inbound connections and port forwarding are not possible.":                               "Входящие соединения и проброс портов невозможны.",
+	"UDP leaves through another address than HTTP":                                            "UDP выходит через другой адрес, чем HTTP",
+	"Traffic is split between exits by protocol.":                                             "Трафик разделён между выходами по протоколу.",
+	"Blocked by name (SNI or Host), not by address: %s":                                       "Блокируются по имени (SNI или Host), а не по адресу: %s",
+	"The addresses themselves answer; only connections that carry the name are cut.":          "Сами адреса отвечают; обрываются только соединения, в которых названо имя.",
+	"QUIC (HTTP/3) does not get through: %s":                                                  "QUIC (HTTP/3) не проходит: %s",
+	"Browsers fall back to TCP; applications that need QUIC will not work.":                   "Браузеры перейдут на TCP; приложения, которым нужен QUIC, работать не будут.",
+	"DNS is answered by a local fake-IP proxy":                                                "DNS отвечает локальный прокси в режиме fake-IP",
+	"Route probes were answered locally":                                                      "На замеры маршрутов ответили локально",
+	"A local proxy, tunnel or sandbox ends the connections; path verdicts mean nothing here.": "Соединения завершает локальный прокси, туннель или песочница; вердикты маршрутов здесь ничего не значат.",
 	"Detours: %s":                  "Крюки: %s",
 	"Through transit networks: %s": "Через транзитные сети: %s",
 	"Unreachable: %s":              "Недоступны: %s",
@@ -146,6 +161,7 @@ func Analyze(r *Report, lang string) []Finding {
 	}
 	a.censor(r.Censor)
 	a.resolverExit(r)
+	a.transport(r)
 	if r.Route != nil {
 		a.route(r.Route)
 	}
@@ -371,6 +387,46 @@ func (a *analysis) resolverExit(r *Report) {
 	if slices.ContainsFunc(exits, func(res probe.Result) bool { return strings.Contains(res.Reason, "(ECS)") }) {
 		a.add(Info, a.t("The resolver passes your subnet on to name servers (ECS)"),
 			a.t("The sites' name servers learn the network a query came from, though not the exact address."))
+	}
+}
+
+func (a *analysis) transport(r *Report) {
+	var named, quicDown []string
+	for _, res := range r.Censor {
+		switch {
+		case strings.HasPrefix(res.Reason, "blocked by SNI") || strings.HasPrefix(res.Reason, "blocked by Host header"):
+			host := strings.TrimSuffix(strings.TrimSuffix(res.Service, " HTTPS"), " HTTP")
+			if !slices.Contains(named, host) {
+				named = append(named, host)
+			}
+		case res.Group != censor.Transport && res.Group != censor.Local:
+		case strings.HasPrefix(res.Service, "QUIC ") && res.Status == probe.No:
+			quicDown = append(quicDown, strings.TrimPrefix(res.Service, "QUIC "))
+		case res.Service == "Interface MTU":
+			if mtu, _, _ := strings.Cut(res.Reason, " "); len(mtu) < 4 || len(mtu) == 4 && mtu < "1500" {
+				a.add(Info, a.t("Interface MTU is %s", res.Reason), a.t("Below 1500 there is a tunnel or PPPoE on the way; large packets are fragmented or rely on path MTU discovery."))
+			}
+		case res.Service != "NAT (STUN)":
+		case res.Status == probe.No:
+			a.add(Warn, a.t("UDP does not get through: no STUN server answered"), a.t("Calls, WireGuard, QUIC and peer-to-peer connections rely on UDP."))
+		case res.Status == probe.Partial:
+			a.add(Info, a.t("NAT is symmetric"), a.t("Each destination gets its own port mapping, so peer-to-peer connections need a relay."))
+		}
+		if res.Service == "NAT (STUN)" && strings.Contains(res.Reason, "carrier-grade NAT") {
+			a.add(Info, a.t("Carrier-grade NAT: the public address is shared with other subscribers"), a.t("Inbound connections and port forwarding are not possible."))
+		}
+		if _, mapped, ok := strings.Cut(res.Detail, "→ "); ok && res.Service == "NAT (STUN)" && r.IPv4 != nil && r.IPv4.Address != "" {
+			first, _, _ := strings.Cut(mapped, ",")
+			if ap, err := netip.ParseAddrPort(first); err == nil && ap.Addr().Is4() && ap.Addr().String() != r.IPv4.Address {
+				a.add(Info, a.t("UDP leaves through another address than HTTP"), a.t("Traffic is split between exits by protocol."))
+			}
+		}
+	}
+	if len(named) > 0 {
+		a.add(Warn, a.t("Blocked by name (SNI or Host), not by address: %s", strings.Join(named, ", ")), a.t("The addresses themselves answer; only connections that carry the name are cut."))
+	}
+	if len(quicDown) > 0 {
+		a.add(Info, a.t("QUIC (HTTP/3) does not get through: %s", strings.Join(quicDown, ", ")), a.t("Browsers fall back to TCP; applications that need QUIC will not work."))
 	}
 }
 

@@ -67,7 +67,7 @@ Usage:
   cii version
 
 Default command only:
-  --no-censor        skip censorship checks (DNS and Telegram; DPI and geoblock with --extended)
+  --no-censor        skip censorship checks (DNS, Telegram, connectivity, NAT and QUIC; DPI and geoblock with --extended)
   --bench            also run the benchmark after the checks: disk, CPU, Cloudflare speed, iperf3
 
 Common flags:
@@ -1387,7 +1387,7 @@ func cmdCensor(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
 	c.register(fs)
 	c.registerExports(fs)
-	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal (comma-separated)")
+	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal, transport (comma-separated)")
 	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
 	fs.StringVar(&domain, "domain", "", "check a single domain")
 	fs.StringVar(&protocol, "protocol", "both", "http, https or both")

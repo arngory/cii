@@ -277,3 +277,53 @@ func TestResolverExitLines(t *testing.T) {
 		}
 	}
 }
+
+func TestAnalyzeTransport(t *testing.T) {
+	r := Demo("online")
+	r.Bench = nil
+	r.Censor = append(r.Censor,
+		probe.Result{Group: censor.Transport, Service: "NAT (STUN)", Status: probe.Partial, Detail: "100.64.3.9:40000 → 198.51.100.9:51000, 198.51.100.9:51001",
+			Reason: "symmetric NAT: each destination gets its own mapping, peer-to-peer needs a relay; carrier-grade NAT (local address from 100.64.0.0/10)"},
+		probe.Result{Group: censor.Transport, Service: "QUIC www.example.org", Status: probe.No, Reason: "no QUIC answer on UDP 443: blocked, filtered or not offered"},
+		probe.Result{Group: censor.Transport, Service: "QUIC www.example.net", Status: probe.Yes},
+		probe.Result{Group: censor.Local, Service: "Interface MTU", Status: probe.Yes, Reason: "1420 on wg0"},
+		probe.Result{Group: censor.DPI, Service: "blocked.example HTTPS", Status: probe.No,
+			Reason: "blocked by SNI: TLS handshake connection reset, while the same address answers a handshake without the name"},
+		probe.Result{Group: censor.DPI, Service: "blocked.example HTTP", Status: probe.No,
+			Reason: "blocked by Host header: connection reset after request, while the same address answers a request without the name"})
+	out := analysed(t, r, "en")
+	for _, want := range []string{
+		"info | NAT is symmetric |", "info | Carrier-grade NAT: the public address is shared with other subscribers |",
+		"info | UDP leaves through another address than HTTP |", "info | QUIC (HTTP/3) does not get through: www.example.org |",
+		"info | Interface MTU is 1420 on wg0 |", "warn | Blocked by name (SNI or Host), not by address: blocked.example |",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q missing:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "www.example.net") || strings.Count(out, "blocked.example") != 2 {
+		t.Errorf("a working QUIC target or a repeated host was reported:\n%s", out)
+	}
+	r.Censor = []probe.Result{
+		{Group: censor.Transport, Service: "NAT (STUN)", Status: probe.No, Reason: "no answer from STUN servers: UDP is blocked or filtered"},
+		{Group: censor.Local, Service: "Interface MTU", Status: probe.Yes, Reason: "1500 on eth0"},
+		{Group: censor.Local, Service: "Interface MTU", Status: probe.Yes, Reason: "9000 on eth1"},
+	}
+	ru := analysed(t, r, "ru")
+	if !strings.Contains(ru, "warn | UDP не проходит: не ответил ни один STUN-сервер") || strings.Contains(ru, "MTU") {
+		t.Errorf("blocked UDP or a full-size MTU:\n%s", ru)
+	}
+	screen := strings.Join(r.Screen(Style{Unicode: true, Width: 220}, "", nil), "\n")
+	if !strings.Contains(screen, "✗ Transport: NAT (STUN) no answer from STUN servers") {
+		t.Errorf("transport finding on screen:\n%s", screen)
+	}
+	r.Censor = []probe.Result{{Group: censor.Transport, Service: "NAT (STUN)", Status: probe.Yes, Detail: "192.168.1.5:40000 → 203.0.113.7:51000", Reason: "NAT with one mapping for every destination: peer-to-peer can work"}}
+	if same := analysed(t, r, "en"); strings.Contains(same, "UDP") || strings.Contains(same, "NAT") {
+		t.Errorf("an ordinary NAT with the same address was reported:\n%s", same)
+	}
+	var js strings.Builder
+	r.Scrubbed().WriteJSON(&js)
+	if strings.Contains(js.String(), "192.168.1.5") || strings.Contains(js.String(), "51000") {
+		t.Errorf("masked report keeps the NAT mapping:\n%s", js.String())
+	}
+}

@@ -465,7 +465,11 @@ func summaryLines(c paint, m marks, rs []probe.Result, iw int) []string {
 		for _, r := range hits {
 			sym, style := mark(c, m, r, true)
 			text := style(sym) + " " + groupTitle(g) + ": " + serviceName(r)
-			if d := cmp.Or(r.Detail, r.Reason); d != "" {
+			d := cmp.Or(r.Detail, r.Reason)
+			if g == censor.Transport || g == censor.Local {
+				d = cmp.Or(r.Reason, r.Detail)
+			}
+			if d != "" {
 				text += " " + c.dim(d)
 			}
 			findings = append(findings, text)
