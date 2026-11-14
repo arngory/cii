@@ -122,12 +122,14 @@ func parseSTUN(msg, id []byte) (netip.AddrPort, bool) {
 	return plain, plain.IsValid()
 }
 
+var errNotSent = errors.New("request was not sent")
+
 func stunQuery(conn net.PacketConn, server netip.AddrPort, wait time.Duration) (netip.AddrPort, error) {
 	msg, id := stunBinding()
 	buf := make([]byte, 1500)
 	for range stunAttempts {
 		if _, err := conn.WriteTo(msg, net.UDPAddrFromAddrPort(server)); err != nil {
-			return netip.AddrPort{}, err
+			return netip.AddrPort{}, fmt.Errorf("%w: %w", errNotSent, err)
 		}
 		conn.SetReadDeadline(time.Now().Add(wait))
 		for {
@@ -171,15 +173,24 @@ func (r *runner) nat(ctx context.Context) probe.Result {
 			failure = err
 			continue
 		}
-		sent++
-		if m, err := stunQuery(conn, netip.AddrPortFrom(ip, uint16(port)), wait); err == nil {
+		m, err := stunQuery(conn, netip.AddrPortFrom(ip, uint16(port)), wait)
+		switch {
+		case errors.Is(err, errNotSent):
+			failure = err
+		case err != nil:
+			sent++
+		default:
+			sent++
 			mapped = append(mapped, m)
 		}
 	}
 	switch {
+	case len(mapped) == 0 && ctx.Err() != nil:
+		res.Reason = "interrupted before a STUN server answered"
+		return res
 	case sent > 0:
 	case failure == nil:
-		res.Reason = "interrupted before any STUN server was asked"
+		res.Reason = "no STUN server is configured"
 		return res
 	case netx.AsBlocked(failure) != nil:
 		res.Status, res.Reason = errStatus(failure), describe(failure)
@@ -264,6 +275,8 @@ func (r *runner) quic(ctx context.Context, host string) probe.Result {
 	})
 	res.Detail = ip.String()
 	switch {
+	case err != nil && ctx.Err() != nil:
+		res.Reason = "interrupted during the QUIC handshake"
 	case err == nil:
 		qc.Abort(nil)
 		res.Status, res.Reason = probe.Yes, "QUIC handshake completed: HTTP/3 is reachable"

@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/binary"
+	"errors"
 	"math/big"
 	"net"
 	"net/netip"
@@ -179,11 +180,35 @@ func TestNATOverLoopback(t *testing.T) {
 	if res := newRunner(quiet, Options{}).nat(cancelled); res.Status != probe.Unknown || !strings.Contains(res.Reason, "interrupted") {
 		t.Errorf("cancelled run = %+v", res)
 	}
+	stunServers = []stunServer{stunTestServer(t, silent)}
+	late, stop := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, stop)
+	if res := newRunner(quiet, Options{}).nat(late); res.Status != probe.Unknown || !strings.Contains(res.Reason, "interrupted") {
+		t.Errorf("run cancelled while waiting = %+v", res)
+	}
+	closed, _ := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	closed.Close()
+	if _, err := stunQuery(closed, netip.MustParseAddrPort("127.0.0.1:9"), 50*time.Millisecond); !errors.Is(err, errNotSent) {
+		t.Errorf("a failed send = %v", err)
+	}
+	if _, err := stunQuery(quietConn(t), netip.MustParseAddrPort("127.0.0.1:9"), 50*time.Millisecond); err == nil || errors.Is(err, errNotSent) {
+		t.Errorf("an unanswered query = %v", err)
+	}
 	stunServers = []stunServer{{"127.0.0.1", "9"}}
 	n := netx.New(netx.Options{Family: netx.IPv4, Timeout: 200 * time.Millisecond}, netx.NewPolicy(), ledger.New())
 	if res := newRunner(n, Options{}).nat(context.Background()); res.Status != probe.Failed || !strings.Contains(res.Reason, "blocked by policy") {
 		t.Errorf("undeclared STUN server = %+v", res)
 	}
+}
+
+func quietConn(t *testing.T) net.PacketConn {
+	t.Helper()
+	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	return c
 }
 
 func testCertificate(t *testing.T) (tls.Certificate, *x509.CertPool) {
@@ -247,6 +272,13 @@ func TestQUICOverLoopback(t *testing.T) {
 	defer quiet.Close()
 	if res := run(quiet.LocalAddr().String()[len("127.0.0.1:"):], pool); res.Status != probe.No || !strings.Contains(res.Reason, "no QUIC answer") {
 		t.Errorf("silent port = %+v", res)
+	}
+	stopped, stop := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, stop)
+	quicPort, quicRoots = quiet.LocalAddr().String()[len("127.0.0.1:"):], pool
+	waiting := netx.New(netx.Options{Family: netx.IPv4, Timeout: 2 * time.Second}, netx.NewPolicy(Rules(Options{Modes: []string{"transport"}})...), ledger.New())
+	if res := newRunner(waiting, Options{}).quic(stopped, "127.0.0.1"); res.Status != probe.Unknown || !strings.Contains(res.Reason, "interrupted") {
+		t.Errorf("handshake cancelled by the run = %+v", res)
 	}
 	n := netx.New(netx.Options{Family: netx.IPv4, Timeout: 300 * time.Millisecond}, netx.NewPolicy(), ledger.New())
 	if res := newRunner(n, Options{}).quic(context.Background(), "127.0.0.1"); res.Status != probe.Failed || !strings.Contains(res.Reason, "blocked by policy") {
@@ -319,14 +351,11 @@ func TestBlockKeyControls(t *testing.T) {
 		}
 		c.Write([]byte("HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n"))
 	})
-	savedTLS, savedHTTP := tlsControlPort, httpControlPort
-	defer func() { tlsControlPort, httpControlPort = savedTLS, savedHTTP }()
 	n := netx.New(netx.Options{Family: netx.IPv4, Timeout: 700 * time.Millisecond}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "127.0.0.1", Purpose: "test"}), ledger.New())
 	r := newRunner(n, Options{})
 	ip := netip.MustParseAddr("127.0.0.1")
 	for port, want := range map[string]bool{tlsOK: true, tlsAlert: true, dropped: false} {
-		tlsControlPort = port
-		if got := r.tlsWithoutName(context.Background(), "127.0.0.1", ip); got != want {
+		if got := r.tlsWithoutName(context.Background(), "127.0.0.1", ip, port); got != want {
 			t.Errorf("handshake without the name on port %s = %v, want %v", port, got, want)
 		}
 	}
@@ -334,15 +363,14 @@ func TestBlockKeyControls(t *testing.T) {
 		t.Errorf("the control handshake carried a server name: %q", sawName)
 	}
 	for port, want := range map[string]bool{httpOK: true, dropped: false} {
-		httpControlPort = port
-		if got := r.httpByAddress(context.Background(), "127.0.0.1", ip); got != want {
+		if got := r.httpByAddress(context.Background(), "127.0.0.1", ip, port); got != want {
 			t.Errorf("request by address on port %s = %v, want %v", port, got, want)
 		}
 	}
-	if sawHost != "Host: 127.0.0.1" {
+	if sawHost != "Host: 127.0.0.1:"+httpOK {
 		t.Errorf("the control request carried %q", sawHost)
 	}
-	if r.tlsWithoutName(context.Background(), "other.example", ip) || r.httpByAddress(context.Background(), "other.example", ip) {
+	if r.tlsWithoutName(context.Background(), "other.example", ip, tlsOK) || r.httpByAddress(context.Background(), "other.example", ip, httpOK) {
 		t.Error("a control probe went to a host the policy does not declare")
 	}
 	for _, c := range []struct {
@@ -387,7 +415,7 @@ func TestFetchRecordsTheHostThatFailed(t *testing.T) {
 	n := netx.New(netx.Options{Family: netx.IPv4, Timeout: time.Second}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "127.0.0.1", Purpose: "test"}), ledger.New())
 	r := newRunner(n, Options{})
 	target, _ := parseTarget(ln.Addr().String())
-	if o := r.fetchOnce(context.Background(), "http", target, false); o.Err != nil || o.Status != 204 || o.Host != "127.0.0.1" || o.Host != target.Host {
+	if o := r.fetchOnce(context.Background(), "http", target, false); o.Err != nil || o.Status != 204 || o.Host != "127.0.0.1" || o.Host != target.Host || ":"+o.Port != ln.Addr().String()[len("127.0.0.1"):] {
 		t.Errorf("outcome = %+v, target %+v", o, target)
 	}
 	ln.Close()

@@ -73,6 +73,7 @@ type outcome struct {
 	Err      error
 	Phase    phase
 	Host     string
+	Port     string
 }
 
 func sameOrSub(host, base string) bool {
@@ -131,7 +132,7 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 	ctx, cancel := r.timeoutCtx(ctx)
 	defer cancel()
 	var mu sync.Mutex
-	ph, last := phaseNone, ""
+	ph, last, lastPort := phaseNone, "", ""
 	set := func(p phase, reset bool) {
 		mu.Lock()
 		if reset || p > ph {
@@ -142,12 +143,12 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 	trace := &httptrace.ClientTrace{
 		GetConn: func(hostPort string) {
 			set(phaseConnect, true)
-			host, _, err := net.SplitHostPort(hostPort)
+			host, port, err := net.SplitHostPort(hostPort)
 			if err != nil {
-				host = hostPort
+				host, port = hostPort, ""
 			}
 			mu.Lock()
-			last = strings.Trim(strings.TrimSuffix(strings.ToLower(host), "."), "[]")
+			last, lastPort = strings.Trim(strings.TrimSuffix(strings.ToLower(host), "."), "[]"), port
 			mu.Unlock()
 		},
 		DNSStart: func(httptrace.DNSStartInfo) { set(phaseDNS, true) },
@@ -185,7 +186,7 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 	}
 	resp, err := c.Do(req)
 	mu.Lock()
-	o := outcome{Phase: ph, Host: last}
+	o := outcome{Phase: ph, Host: last, Port: lastPort}
 	mu.Unlock()
 	if err != nil {
 		o.Err = err
@@ -343,11 +344,11 @@ func (r *runner) checkDomain(ctx context.Context, group probe.Group, t target) [
 	}
 	var out []probe.Result
 	addr, _ := netip.ParseAddr(ip)
-	add := func(proto string, o outcome, cut bool, control func(context.Context, string, netip.Addr) bool) {
+	add := func(proto string, o outcome, cut bool, control func(context.Context, string, netip.Addr, string) bool) {
 		res := classifyHTTP(t.Host, o)
-		if cut && !viaProxy && addr.IsValid() && res.Status == probe.No && o.Host == t.Host {
+		if cut && !viaProxy && addr.IsValid() && res.Status == probe.No && o.Host == t.Host && o.Port != "" {
 			release := r.acquire()
-			answered := control(ctx, t.Host, addr)
+			answered := control(ctx, t.Host, addr, o.Port)
 			release()
 			res.Reason = keyedBlock(proto, describe(o.Err), res.Reason, answered)
 		}
@@ -364,11 +365,6 @@ func (r *runner) checkDomain(ctx context.Context, group probe.Group, t target) [
 	return out
 }
 
-var (
-	tlsControlPort  = "443"
-	httpControlPort = "80"
-)
-
 func keyedBlock(proto, why, reason string, answered bool) string {
 	switch {
 	case answered && proto == "HTTPS":
@@ -381,10 +377,10 @@ func keyedBlock(proto, why, reason string, answered bool) string {
 	return reason + "; the address does not answer a request without the name either"
 }
 
-func (r *runner) tlsWithoutName(ctx context.Context, host string, ip netip.Addr) bool {
+func (r *runner) tlsWithoutName(ctx context.Context, host string, ip netip.Addr, port string) bool {
 	ctx, cancel := r.timeoutCtx(ctx)
 	defer cancel()
-	c, err := r.n.DialAddr(ctx, Module, "tcp", host, ip, tlsControlPort)
+	c, err := r.n.DialAddr(ctx, Module, "tcp", host, ip, port)
 	if err != nil {
 		return false
 	}
@@ -397,10 +393,10 @@ func (r *runner) tlsWithoutName(ctx context.Context, host string, ip netip.Addr)
 	return err == nil || errors.As(err, &remote) && remote.Op == "remote error"
 }
 
-func (r *runner) httpByAddress(ctx context.Context, host string, ip netip.Addr) bool {
+func (r *runner) httpByAddress(ctx context.Context, host string, ip netip.Addr, port string) bool {
 	ctx, cancel := r.timeoutCtx(ctx)
 	defer cancel()
-	c, err := r.n.DialAddr(ctx, Module, "tcp", host, ip, httpControlPort)
+	c, err := r.n.DialAddr(ctx, Module, "tcp", host, ip, port)
 	if err != nil {
 		return false
 	}
@@ -411,6 +407,9 @@ func (r *runner) httpByAddress(ctx context.Context, host string, ip netip.Addr) 
 	name := ip.String()
 	if ip.Is6() {
 		name = "[" + name + "]"
+	}
+	if port != "80" {
+		name += ":" + port
 	}
 	if _, err := fmt.Fprintf(c, "GET / HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\nConnection: close\r\n\r\n", name, r.n.Options().UserAgent); err != nil {
 		return false
