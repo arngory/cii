@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 
@@ -20,11 +21,11 @@ type metricsServer struct {
 }
 
 func listenMetrics(addr string) (*metricsServer, error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil || port == "" {
-		return nil, fmt.Errorf("--listen %q: expected host:port, e.g. 127.0.0.1:9433", addr)
+	bind, err := netip.ParseAddrPort(addr)
+	if err != nil {
+		return nil, fmt.Errorf("--listen %q: expected an address and a port, e.g. 127.0.0.1:9433", addr)
 	}
-	ln, err := net.Listen("tcp", net.JoinHostPort(host, port))
+	ln, err := net.Listen("tcp", bind.String())
 	if err != nil {
 		return nil, fmt.Errorf("--listen: %w", err)
 	}

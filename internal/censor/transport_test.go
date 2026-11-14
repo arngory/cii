@@ -168,6 +168,17 @@ func TestNATOverLoopback(t *testing.T) {
 	if res, _ := run(stunTestServer(t, silent)); res.Status != probe.No {
 		t.Errorf("silent server = %+v", res)
 	}
+	stunServers = []stunServer{{"cii-no-such-name.invalid", "3478"}}
+	if res, _ := run(stunServers...); res.Status != probe.Unknown || !strings.Contains(res.Reason, "no STUN server could be asked") {
+		t.Errorf("unresolvable STUN server = %+v", res)
+	}
+	stunServers = []stunServer{stunTestServer(t, echo)}
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	quiet := netx.New(netx.Options{Family: netx.IPv4, Timeout: 200 * time.Millisecond}, netx.NewPolicy(Rules(Options{Modes: []string{"transport"}})...), ledger.New())
+	if res := newRunner(quiet, Options{}).nat(cancelled); res.Status != probe.Unknown || !strings.Contains(res.Reason, "interrupted") {
+		t.Errorf("cancelled run = %+v", res)
+	}
 	stunServers = []stunServer{{"127.0.0.1", "9"}}
 	n := netx.New(netx.Options{Family: netx.IPv4, Timeout: 200 * time.Millisecond}, netx.NewPolicy(), ledger.New())
 	if res := newRunner(n, Options{}).nat(context.Background()); res.Status != probe.Failed || !strings.Contains(res.Reason, "blocked by policy") {
@@ -351,5 +362,36 @@ func TestBlockKeyControls(t *testing.T) {
 		if got := keyedBlock(c.proto, "connection reset", reason, c.answered); got != c.want {
 			t.Errorf("%s answered=%v: %q", c.proto, c.answered, got)
 		}
+	}
+}
+
+func TestFetchRecordsTheHostThatFailed(t *testing.T) {
+	noProxyEnv(t)
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			buf := make([]byte, 512)
+			c.Read(buf)
+			c.Write([]byte("HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n"))
+			c.Close()
+		}
+	}()
+	n := netx.New(netx.Options{Family: netx.IPv4, Timeout: time.Second}, netx.NewPolicy(netx.Rule{Module: Module, Pattern: "127.0.0.1", Purpose: "test"}), ledger.New())
+	r := newRunner(n, Options{})
+	target, _ := parseTarget(ln.Addr().String())
+	if o := r.fetchOnce(context.Background(), "http", target, false); o.Err != nil || o.Status != 204 || o.Host != "127.0.0.1" || o.Host != target.Host {
+		t.Errorf("outcome = %+v, target %+v", o, target)
+	}
+	ln.Close()
+	if o := r.fetchOnce(context.Background(), "http", target, false); o.Err == nil || o.Host != "127.0.0.1" {
+		t.Errorf("failed outcome = %+v", o)
 	}
 }

@@ -157,6 +157,7 @@ func (r *runner) nat(ctx context.Context) probe.Result {
 	wait := min(r.n.Options().Timeout, stunWaitCeiling)
 	var mapped []netip.AddrPort
 	var failure error
+	sent := 0
 	for _, s := range stunServers {
 		if ctx.Err() != nil {
 			break
@@ -170,12 +171,21 @@ func (r *runner) nat(ctx context.Context) probe.Result {
 			failure = err
 			continue
 		}
+		sent++
 		if m, err := stunQuery(conn, netip.AddrPortFrom(ip, uint16(port)), wait); err == nil {
 			mapped = append(mapped, m)
 		}
 	}
-	if len(mapped) == 0 && failure != nil && (netx.AsBlocked(failure) != nil || errors.Is(failure, netx.ErrProxyRaw)) {
+	switch {
+	case sent > 0:
+	case failure == nil:
+		res.Reason = "interrupted before any STUN server was asked"
+		return res
+	case netx.AsBlocked(failure) != nil:
 		res.Status, res.Reason = errStatus(failure), describe(failure)
+		return res
+	default:
+		res.Reason = "no STUN server could be asked: " + describe(failure)
 		return res
 	}
 	var local netip.AddrPort

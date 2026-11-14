@@ -10,7 +10,7 @@ import (
 )
 
 func TestMetricsServer(t *testing.T) {
-	for _, bad := range []string{"", "9433", "127.0.0.1", "127.0.0.1:", "256.0.0.1:9433", "127.0.0.1:http-ish-port"} {
+	for _, bad := range []string{"", "9433", "127.0.0.1", "127.0.0.1:", "256.0.0.1:9433", "127.0.0.1:http-ish-port", ":9433", "localhost:9433", "metrics.example:9433"} {
 		if m, err := listenMetrics(bad); err == nil {
 			m.close()
 			t.Errorf("--listen %q was accepted", bad)

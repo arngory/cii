@@ -72,6 +72,7 @@ type outcome struct {
 	Location string
 	Err      error
 	Phase    phase
+	Host     string
 }
 
 func sameOrSub(host, base string) bool {
@@ -130,7 +131,7 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 	ctx, cancel := r.timeoutCtx(ctx)
 	defer cancel()
 	var mu sync.Mutex
-	ph := phaseNone
+	ph, last := phaseNone, ""
 	set := func(p phase, reset bool) {
 		mu.Lock()
 		if reset || p > ph {
@@ -139,7 +140,16 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 		mu.Unlock()
 	}
 	trace := &httptrace.ClientTrace{
-		GetConn:  func(string) { set(phaseConnect, true) },
+		GetConn: func(hostPort string) {
+			set(phaseConnect, true)
+			host, _, err := net.SplitHostPort(hostPort)
+			if err != nil {
+				host = hostPort
+			}
+			mu.Lock()
+			last = strings.Trim(strings.TrimSuffix(strings.ToLower(host), "."), "[]")
+			mu.Unlock()
+		},
 		DNSStart: func(httptrace.DNSStartInfo) { set(phaseDNS, true) },
 		DNSDone: func(i httptrace.DNSDoneInfo) {
 			if i.Err == nil {
@@ -175,7 +185,7 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 	}
 	resp, err := c.Do(req)
 	mu.Lock()
-	o := outcome{Phase: ph}
+	o := outcome{Phase: ph, Host: last}
 	mu.Unlock()
 	if err != nil {
 		o.Err = err
@@ -335,7 +345,7 @@ func (r *runner) checkDomain(ctx context.Context, group probe.Group, t target) [
 	addr, _ := netip.ParseAddr(ip)
 	add := func(proto string, o outcome, cut bool, control func(context.Context, string, netip.Addr) bool) {
 		res := classifyHTTP(t.Host, o)
-		if cut && !viaProxy && addr.IsValid() && res.Status == probe.No {
+		if cut && !viaProxy && addr.IsValid() && res.Status == probe.No && o.Host == t.Host {
 			release := r.acquire()
 			answered := control(ctx, t.Host, addr)
 			release()

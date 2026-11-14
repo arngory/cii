@@ -102,7 +102,7 @@ Classification:
 
 The phase at which the request broke off is determined via `httptrace`, not from the error text.
 
-The control requests without the name are sent only after the main request has already broken off, and only to the address obtained for that same domain. The TLS handshake simply carries no SNI extension, and the HTTP request has the address itself in `Host`; no other site's name is put anywhere, and no data follows the handshake. If the address does not answer without the name either, the reason says so: the block is then by address or port, or the server itself requires the name. With a proxy the control requests are not run.
+The control requests without the name are sent only after the main request has already broken off, and only to the address obtained for that same domain; if the connection that broke off was to a subdomain after a redirect, there is no control request. The TLS handshake simply carries no SNI extension, and the HTTP request has the address itself in `Host`; no other site's name is put anywhere, and no data follows the handshake. If the address does not answer without the name either, the reason says so: the block is then by address or port, or the server itself requires the name. With a proxy the control requests are not run.
 
 ## Transport
 
@@ -120,6 +120,7 @@ The `transport` mode shows what happens to UDP: without it calls, WireGuard, QUI
 | `partial` symmetric NAT | the servers saw different ports: each destination gets its own mapping, peer-to-peer connections need a relay |
 | `yes` mapping type is unknown | one server answered, there is nothing to compare with |
 | `no` | none answered: UDP is blocked or filtered |
+| `?` | no request went to any server (the name did not resolve, the run was interrupted): this says nothing about UDP |
 
 The `carrier-grade NAT` note is added when the local address is from 100.64.0.0/10. An operator's NAT behind a home router is not visible this way: the machine has the router's local address. The details hold the local and the external address with the port; `--mask` hides them.
 
