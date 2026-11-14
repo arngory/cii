@@ -1,0 +1,106 @@
+=== GET https://stat.ripe.net/data/rir-stats-country/data.json?resource=203.0.113.7&sourceapp=cii 200
+Content-Type: application/json
+
+{"data":{"located_resources":[{"resource":"203.0.113.0/24","location":"DE"}]}}
+=== GET https://stat.ripe.net/data/prefix-overview/data.json?resource=203.0.113.7&sourceapp=cii 200
+Content-Type: application/json
+
+{"data":{"resource":"203.0.113.0/24","announced":true,"asns":[{"asn":64500,"holder":"EXAMPLE-NET"}]}}
+=== GET https://api.db-ip.com/v2/free/203.0.113.7 200
+Content-Type: application/json
+
+{"ipAddress":"203.0.113.7","countryCode":"DE","countryName":"Germany"}
+=== GET https://rdap.db.ripe.net/ip/203.0.113.7 200
+Content-Type: application/rdap+json
+
+{"handle":"203.0.113.0 - 203.0.113.255","country":"DE","name":"EXAMPLE-NET"}
+=== GET https://ipinfo.io/203.0.113.7/json 200
+Content-Type: application/json
+
+{"ip":"203.0.113.7","country":"DE"}
+=== GET https://ipapi.co/203.0.113.7/json/ 200
+Content-Type: application/json
+
+{"ip":"203.0.113.7","country_code":"DE"}
+=== GET https://ifconfig.co/country-iso?ip=203.0.113.7 200
+Content-Type: text/plain
+
+DE
+=== GET https://api.ip2location.io/?ip=203.0.113.7 200
+Content-Type: application/json
+
+{"ip":"203.0.113.7","country_code":"DE","is_proxy":false}
+=== GET https://api.country.is/203.0.113.7 200
+Content-Type: application/json
+
+{"ip":"203.0.113.7","country":"DE"}
+=== GET https://get.geojs.io/v1/ip/country.json?ip=203.0.113.7 200
+Content-Type: application/json
+
+[{"country":"DE","ip":"203.0.113.7"}]
+=== GET https://api.ipbase.com/v2/info?ip=203.0.113.7 429
+Content-Type: application/json
+
+{"message":"rate limit"}
+=== GET https://api.ipquery.io/203.0.113.7 200
+Content-Type: application/json
+
+{"ip":"203.0.113.7","location":{"country_code":"DE"},"risk":{"is_mobile":false,"is_vpn":false,"is_tor":false,"is_proxy":false,"is_datacenter":false,"risk_score":0}}
+=== GET https://ipwho.is/203.0.113.7 200
+Content-Type: application/json
+
+{"ip":"203.0.113.7","success":true,"country_code":"AT"}
+=== GET http://ip-api.com/json/203.0.113.7?fields=status,countryCode,proxy,hosting,mobile 200
+Content-Type: application/json
+
+{"status":"success","countryCode":"DE","proxy":false,"hosting":false,"mobile":false}
+=== GET https://www.cloudflare.com/cdn-cgi/trace 200
+Content-Type: text/plain
+
+fl=1f1
+ip=203.0.113.7
+colo=FRA
+loc=DE
+=== GET https://data.services.jetbrains.com/geo 200
+Content-Type: application/json
+
+{"code":"DE","name":"Germany"}
+=== GET https://gspe1-ssl.ls.apple.com/pep/gcc 200
+Content-Type: text/plain
+
+DE
+=== HEAD https://store.steampowered.com/ 200
+Set-Cookie: steamCountry=DE%7C0123456789abcdef; Path=/; Secure
+
+=== GET https://www.netflix.com/title/81280792 200
+Content-Type: text/html
+
+<html><script>{"requestCountry":{"supportedLocales":[],"id":"DE"}}</script></html>
+=== GET https://www.netflix.com/title/70143836 200
+Content-Type: text/html
+
+<html><script>{"requestCountry":{"supportedLocales":[],"id":"DE"}}</script></html>
+=== GET https://www.reddit.com/ 200
+Content-Type: text/html
+
+<html>reddit</html>
+=== GET https://en.wikipedia.org/w/api.php?action=query&meta=userinfo&uiprop=blockinfo&format=json 200
+Content-Type: application/json
+
+{"batchcomplete":"","query":{"userinfo":{"id":0,"name":"203.0.113.7","anon":""}}}
+=== GET https://api.openai.com/v1/models 401
+Content-Type: application/json
+
+{"error":{"message":"Missing bearer authentication"}}
+=== GET https://api.anthropic.com/v1/models 401
+Content-Type: application/json
+
+{"type":"error","error":{"type":"authentication_error"}}
+=== GET https://api.moonshot.cn/v1/models 403
+Content-Type: text/html
+
+<html>forbidden</html>
+=== GET https://proxycheck.io/v3/203.0.113.7?tag=0 200
+Content-Type: application/json
+
+{"status":"ok","203.0.113.7":{"network":{"asn":"AS64500","type":"Residential"},"location":{"country_code":"DE"},"detections":{"proxy":false,"vpn":false,"tor":false,"hosting":false,"compromised":false,"scraper":false,"risk":0,"first_seen":null,"last_seen":null},"operator":null}}

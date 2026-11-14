@@ -62,6 +62,16 @@ sha256sum -c --ignore-missing SHA256SUMS
 gh attestation verify cii-linux-amd64 --repo arngory/cii
 ```
 
+The release carries an SBOM, `cii.cdx.json` (CycloneDX): what the binary is built from. Its attestation and the provenance of the image are verified the same way:
+
+```bash
+gh attestation verify cii-linux-amd64 --repo arngory/cii --predicate-type https://cyclonedx.org/bom
+```
+
+```bash
+gh attestation verify oci://ghcr.io/arngory/cii:latest --repo arngory/cii
+```
+
 From source: `make build` (needs the Go version from `go.mod`).
 
 ## Completion and man

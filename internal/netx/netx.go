@@ -51,6 +51,7 @@ type Options struct {
 	Proxy     *url.URL
 	Timeout   time.Duration
 	UserAgent string
+	Transport http.RoundTripper
 }
 
 func DefaultUserAgent() string {
@@ -61,7 +62,7 @@ type Net struct {
 	opts     Options
 	policy   *Policy
 	ledger   *ledger.Ledger
-	tr       *http.Transport
+	tr       http.RoundTripper
 	proxy    sync.Map
 	proxied  bool
 	resolved sync.Map
@@ -116,6 +117,10 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	if opts.Proxy == nil {
 		pf := envProxyConfig().ProxyFunc()
 		proxy = func(r *http.Request) (*url.URL, error) { return pf(r.URL) }
+	}
+	if opts.Transport != nil {
+		n.tr = opts.Transport
+		return n
 	}
 	n.tr = &http.Transport{
 		Proxy: func(r *http.Request) (*url.URL, error) {

@@ -62,6 +62,16 @@ sha256sum -c --ignore-missing SHA256SUMS
 gh attestation verify cii-linux-amd64 --repo arngory/cii
 ```
 
+К релизу приложен SBOM `cii.cdx.json` (CycloneDX): из чего собран бинарник. Его аттестацию и происхождение образа проверяют так же:
+
+```bash
+gh attestation verify cii-linux-amd64 --repo arngory/cii --predicate-type https://cyclonedx.org/bom
+```
+
+```bash
+gh attestation verify oci://ghcr.io/arngory/cii:latest --repo arngory/cii
+```
+
 Сборка из исходников: `make build` (нужен Go из `go.mod`).
 
 ## Автодополнение и man

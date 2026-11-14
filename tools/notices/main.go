@@ -24,8 +24,10 @@ func main() {
 		err = licenses(os.Args[2])
 	case len(os.Args) == 4 && os.Args[1] == "data":
 		err = dataNotice(os.Args[2], os.Args[3])
+	case len(os.Args) == 4 && os.Args[1] == "sbom":
+		err = sbom(os.Args[2], os.Args[3])
 	default:
-		err = fmt.Errorf("usage: notices licenses <out> | notices data <data-dir> <out>")
+		err = fmt.Errorf("usage: notices licenses <out> | notices data <data-dir> <out> | notices sbom <version> <out>")
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "notices:", err)

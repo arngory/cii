@@ -40,11 +40,14 @@ jobs:
           for f in data/*.mmdb; do gzip -9 -c "$f" > "dist/$(basename "$f").gz"; done
           cp data/manifest.json dist/data-manifest.json
 
-      - name: License and attribution notices
+      - name: License and attribution notices, SBOM
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           go run ./tools/notices licenses dist/THIRD_PARTY_LICENSES.txt
           go run ./tools/notices data data dist/DATA-NOTICE.txt
+          go run ./tools/notices sbom "$TAG" dist/cii.cdx.json
 
       - name: Build deb, rpm and apk packages
         env:
@@ -64,6 +67,13 @@ jobs:
       - uses: actions/attest-build-provenance@v2
         with:
           subject-path: "dist/*"
+
+      - name: Attest the SBOM for the binaries
+        continue-on-error: true
+        uses: actions/attest-sbom@v2
+        with:
+          subject-path: "dist/cii-*"
+          sbom-path: dist/cii.cdx.json
 
       - name: Publish release
         env:
@@ -88,6 +98,7 @@ jobs:
           fi
 
       - name: Publish the container image
+        id: image
         continue-on-error: true
         env:
           TAG: ${{ github.ref_name }}
@@ -114,7 +125,19 @@ jobs:
             --label "org.opencontainers.image.licenses=AGPL-3.0-only" \
             --label "org.opencontainers.image.description=$DESCRIPTION" \
             --annotation "index:org.opencontainers.image.description=$DESCRIPTION" \
+            --metadata-file "$ctx/metadata.json" \
             --push "$ctx"
+          digest=$(jq -r '."containerimage.digest" // empty' "$ctx/metadata.json")
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest the container image
+        if: steps.image.outputs.digest != ''
+        continue-on-error: true
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
 
       - name: Update the Homebrew formula and Scoop manifest in the repository
         continue-on-error: true
