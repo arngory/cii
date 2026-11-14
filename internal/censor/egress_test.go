@@ -64,9 +64,7 @@ func TestEgressNeedsDeclaredNames(t *testing.T) {
 			t.Errorf("%s is not declared in the dns mode rules", name)
 		}
 	}
-	for _, k := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
-		t.Setenv(k, "")
-	}
+	noProxyEnv(t)
 	r := newRunner(netx.New(netx.Options{}, netx.NewPolicy(), ledger.New()), Options{})
 	for _, res := range r.egress(context.Background()) {
 		if res.Status != probe.Failed || res.Reason == "" {

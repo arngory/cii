@@ -60,19 +60,16 @@ func (r *runner) transport(ctx context.Context) []probe.Result {
 }
 
 func (r *runner) resolveFamily(ctx context.Context, host string) (netip.Addr, error) {
-	ctx, cancel := r.timeoutCtx(ctx)
-	defer cancel()
-	addrs, err := r.n.LookupHost(ctx, Module, host)
-	if err != nil {
+	pa, err := r.systemAnswer(ctx, host)
+	switch {
+	case err != nil:
 		return netip.Addr{}, err
+	case pa.NXDomain:
+		return netip.Addr{}, errors.New("no such host")
+	case len(pa.IPs) == 0:
+		return netip.Addr{}, fmt.Errorf("no %s address", r.n.Options().Family)
 	}
-	want6 := r.n.Options().Family == netx.IPv6
-	for _, s := range addrs {
-		if ip, err := netip.ParseAddr(s); err == nil && ip.Unmap().Is6() == want6 {
-			return ip.Unmap(), nil
-		}
-	}
-	return netip.Addr{}, fmt.Errorf("no %s address", r.n.Options().Family)
+	return netip.ParseAddr(pa.IPs[0])
 }
 
 func stunBinding() (msg, id []byte) {
@@ -124,14 +121,22 @@ func parseSTUN(msg, id []byte) (netip.AddrPort, bool) {
 
 var errNotSent = errors.New("request was not sent")
 
-func stunQuery(conn net.PacketConn, server netip.AddrPort, wait time.Duration) (netip.AddrPort, error) {
+func stunQuery(ctx context.Context, conn net.PacketConn, server netip.AddrPort, wait time.Duration) (netip.AddrPort, error) {
 	msg, id := stunBinding()
 	buf := make([]byte, 1500)
+	stop := context.AfterFunc(ctx, func() { conn.SetReadDeadline(time.Now()) })
+	defer stop()
 	for range stunAttempts {
+		if err := ctx.Err(); err != nil {
+			return netip.AddrPort{}, err
+		}
 		if _, err := conn.WriteTo(msg, net.UDPAddrFromAddrPort(server)); err != nil {
 			return netip.AddrPort{}, fmt.Errorf("%w: %w", errNotSent, err)
 		}
 		conn.SetReadDeadline(time.Now().Add(wait))
+		if ctx.Err() != nil {
+			conn.SetReadDeadline(time.Now())
+		}
 		for {
 			n, from, err := conn.ReadFrom(buf)
 			if err != nil {
@@ -173,7 +178,7 @@ func (r *runner) nat(ctx context.Context) probe.Result {
 			failure = err
 			continue
 		}
-		m, err := stunQuery(conn, netip.AddrPortFrom(ip, uint16(port)), wait)
+		m, err := stunQuery(ctx, conn, netip.AddrPortFrom(ip, uint16(port)), wait)
 		switch {
 		case errors.Is(err, errNotSent):
 			failure = err

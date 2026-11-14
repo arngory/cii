@@ -188,10 +188,16 @@ func TestNATOverLoopback(t *testing.T) {
 	}
 	closed, _ := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	closed.Close()
-	if _, err := stunQuery(closed, netip.MustParseAddrPort("127.0.0.1:9"), 50*time.Millisecond); !errors.Is(err, errNotSent) {
+	if _, err := stunQuery(context.Background(), closed, netip.MustParseAddrPort("127.0.0.1:9"), 50*time.Millisecond); !errors.Is(err, errNotSent) {
 		t.Errorf("a failed send = %v", err)
 	}
-	if _, err := stunQuery(quietConn(t), netip.MustParseAddrPort("127.0.0.1:9"), 50*time.Millisecond); err == nil || errors.Is(err, errNotSent) {
+	soon, halt := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, halt)
+	began := time.Now()
+	if _, err := stunQuery(soon, quietConn(t), netip.MustParseAddrPort("127.0.0.1:9"), 5*time.Second); err == nil || time.Since(began) > 2*time.Second {
+		t.Errorf("a cancelled query returned %v after %s", err, time.Since(began))
+	}
+	if _, err := stunQuery(context.Background(), quietConn(t), netip.MustParseAddrPort("127.0.0.1:9"), 50*time.Millisecond); err == nil || errors.Is(err, errNotSent) {
 		t.Errorf("an unanswered query = %v", err)
 	}
 	stunServers = []stunServer{{"127.0.0.1", "9"}}

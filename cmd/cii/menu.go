@@ -107,13 +107,6 @@ func interactive() bool {
 	return term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
 }
 
-func menuWidth() int {
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
-		return w
-	}
-	return 80
-}
-
 func menuPrompt(lang string, width int) string {
 	t := menuTexts[lang]
 	if len([]rune(t["prompt"])) >= width {
@@ -142,7 +135,7 @@ func menuLines(lang string, width int) []string {
 
 func printMenu(lang string) {
 	t := menuTexts[lang]
-	width := menuWidth()
+	width := terminalWidth()
 	c := func(code, s string) string {
 		if !report.ColorEnabled() {
 			return s
@@ -178,7 +171,7 @@ func runMenu(ctx context.Context) error {
 		}
 	}()
 	for range 3 {
-		fmt.Print(menuPrompt(lang, menuWidth()))
+		fmt.Print(menuPrompt(lang, terminalWidth()))
 		var line string
 		var ok bool
 		select {
