@@ -169,8 +169,8 @@ func TestNATOverLoopback(t *testing.T) {
 	if res, _ := run(stunTestServer(t, silent)); res.Status != probe.No {
 		t.Errorf("silent server = %+v", res)
 	}
-	stunServers = []stunServer{{"cii-no-such-name.invalid", "3478"}}
-	if res, _ := run(stunServers...); res.Status != probe.Unknown || !strings.Contains(res.Reason, "no STUN server could be asked") {
+	stunServers = []stunServer{{"::1", "3478"}}
+	if res, _ := run(stunServers...); res.Status != probe.Unknown || !strings.Contains(res.Reason, "no STUN server could be asked: no ipv4 address") {
 		t.Errorf("unresolvable STUN server = %+v", res)
 	}
 	stunServers = []stunServer{stunTestServer(t, echo)}
