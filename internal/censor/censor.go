@@ -294,14 +294,8 @@ func describe(err error) string {
 		return "disabled while a proxy is in effect"
 	case netx.AsBlocked(err) != nil:
 		return "blocked by policy: " + netx.AsBlocked(err).Host
-	case netx.IsTimeout(err):
-		return "timeout"
-	case netx.IsRefused(err):
-		return "connection refused"
-	case netx.IsReset(err):
-		return "connection reset"
-	case netx.IsUnreachable(err):
-		return "network unreachable"
+	case netx.Short(err) != "":
+		return netx.Short(err)
 	case isX509(err):
 		return "invalid certificate"
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):

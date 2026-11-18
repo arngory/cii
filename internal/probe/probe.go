@@ -289,9 +289,8 @@ func reason(err error) string {
 	if be := netx.AsBlocked(err); be != nil {
 		return "blocked by policy: " + be.Host
 	}
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		return "timeout"
+	if s := netx.Short(err); s != "" {
+		return s
 	}
 	err = netx.Redact(err)
 	var ue *url.Error

@@ -3,10 +3,14 @@ package probe
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 	"unicode/utf8"
 
@@ -186,6 +190,28 @@ func TestChallenged(t *testing.T) {
 	} {
 		if got := Challenged(&c.r); got != c.want {
 			t.Errorf("Challenged(%d %q) = %v", c.r.Status, c.r.Body, got)
+		}
+	}
+}
+
+func TestReasonIsShortForNetworkErrors(t *testing.T) {
+	dial := func(errno syscall.Errno) error {
+		return &url.Error{Op: "Get", URL: "https://www.example.org/", Err: &net.OpError{Op: "dial", Net: "tcp6",
+			Addr: &net.TCPAddr{IP: net.ParseIP("2001:db8::80"), Port: 443}, Err: os.NewSyscallError("connect", errno)}}
+	}
+	for err, want := range map[error]string{
+		dial(syscall.EHOSTUNREACH): netx.ReasonUnreachable,
+		dial(syscall.ENETUNREACH):  netx.ReasonUnreachable,
+		dial(syscall.ECONNREFUSED): "connection refused",
+		dial(syscall.ECONNRESET):   "connection reset",
+		context.DeadlineExceeded:   "timeout",
+		&url.Error{Op: "Get", URL: "https://www.example.org/", Err: errors.New("tls: failed to verify certificate")}: "tls: failed to verify certificate",
+	} {
+		if got := reason(err); got != want {
+			t.Errorf("reason(%v) = %q, want %q", err, got, want)
+		}
+		if strings.Contains(reason(err), "2001:db8") {
+			t.Errorf("reason keeps the dialled address: %q", reason(err))
 		}
 	}
 }
