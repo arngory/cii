@@ -1,8 +1,10 @@
 package report
 
 import (
+	"cmp"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -120,6 +122,74 @@ func xmlEscape(s string) string {
 	return strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;", `"`, "&quot;").Replace(s)
 }
 
+const svgForeground = "#e6edf3"
+
+func (st svgStyle) stroke() string {
+	key := `stroke="` + cmp.Or(st.fg, svgForeground) + `"`
+	if st.dim {
+		key += ` stroke-opacity="0.6"`
+	}
+	return key
+}
+
+func (st svgStyle) paint() string {
+	key := `fill="` + cmp.Or(st.fg, svgForeground) + `"`
+	if st.dim {
+		key += ` fill-opacity="0.6"`
+	}
+	return key
+}
+
+type segment struct{ x1, y1, x2, y2 float64 }
+
+func svgPath(segs []segment) string {
+	var flat, upright []segment
+	for _, s := range segs {
+		if s.y1 == s.y2 {
+			flat = append(flat, s)
+		} else {
+			upright = append(upright, s)
+		}
+	}
+	slices.SortFunc(flat, func(a, b segment) int { return cmp.Or(cmp.Compare(a.y1, b.y1), cmp.Compare(a.x1, b.x1)) })
+	slices.SortFunc(upright, func(a, b segment) int { return cmp.Or(cmp.Compare(a.x1, b.x1), cmp.Compare(a.y1, b.y1)) })
+	var d strings.Builder
+	const touch = 0.01
+	for i := 0; i < len(flat); {
+		s := flat[i]
+		for i++; i < len(flat) && flat[i].y1 == s.y1 && flat[i].x1 <= s.x2+touch; i++ {
+			s.x2 = max(s.x2, flat[i].x2)
+		}
+		fmt.Fprintf(&d, "M%.1f %.1fH%.1f", s.x1, s.y1, s.x2)
+	}
+	for i := 0; i < len(upright); {
+		s := upright[i]
+		for i++; i < len(upright) && upright[i].x1 == s.x1 && upright[i].y1 <= s.y2+touch; i++ {
+			s.y2 = max(s.y2, upright[i].y2)
+		}
+		fmt.Fprintf(&d, "M%.1f %.1fV%.1f", s.x1, s.y1, s.y2)
+	}
+	return d.String()
+}
+
+func boxGeometry(r rune) (left, right, up, down bool, ok bool) {
+	switch r {
+	case '─':
+		return true, true, false, false, true
+	case '│':
+		return false, false, true, true, true
+	case '┌':
+		return false, true, false, true, true
+	case '┐':
+		return true, false, false, true, true
+	case '└':
+		return false, true, true, false, true
+	case '┘':
+		return true, false, true, false, true
+	}
+	return false, false, false, false, false
+}
+
 func WriteSVG(w io.Writer, lines []string) error {
 	cols := 0
 	for _, l := range lines {
@@ -127,12 +197,21 @@ func WriteSVG(w io.Writer, lines []string) error {
 	}
 	width := float64(svgPad*2) + float64(cols)*svgCharWidth
 	height := svgPad*2 + len(lines)*svgLineHeight
-	var b strings.Builder
+	var b, shapes strings.Builder
+	strokes := map[string][]segment{}
+	var strokeOrder []string
+	addSegment := func(key string, s segment) {
+		if _, ok := strokes[key]; !ok {
+			strokeOrder = append(strokeOrder, key)
+		}
+		strokes[key] = append(strokes[key], s)
+	}
 	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%.0f" height="%d" viewBox="0 0 %.0f %d">`+"\n", width, height, width, height)
-	fmt.Fprintf(&b, `<rect width="100%%" height="100%%" rx="8" fill="#0d1117"/>`+"\n")
-	fmt.Fprintf(&b, `<g font-family="'JetBrains Mono','DejaVu Sans Mono',Menlo,Consolas,monospace" font-size="%d" fill="#e6edf3" xml:space="preserve" style="white-space:pre;font-variant-ligatures:none">`+"\n", svgFontSize)
+	fmt.Fprintf(&b, `<rect x="0" y="0" width="%.0f" height="%d" rx="8" ry="8" fill="#0d1117"/>`+"\n", width, height)
+	fmt.Fprintf(&b, `<g font-family="monospace" font-size="%d" fill="%s" xml:space="preserve" style="white-space:pre;font-variant-ligatures:none">`+"\n", svgFontSize, svgForeground)
 	for i, l := range lines {
 		y := svgPad + i*svgLineHeight
+		top, mid, bottom := float64(y), float64(y)+svgLineHeight/2, float64(y+svgLineHeight)
 		for _, r := range svgRuns(l) {
 			x := float64(svgPad) + float64(r.col)*svgCharWidth
 			n := utf8.RuneCountInString(r.text)
@@ -149,13 +228,53 @@ func WriteSVG(w io.Writer, lines []string) error {
 			if r.st.dim {
 				attrs += ` fill-opacity="0.6"`
 			}
-			for _, w := range words(r.text) {
+			text := []rune(r.text)
+			for k, ch := range text {
+				left, cx := x+float64(k)*svgCharWidth, x+float64(k)*svgCharWidth+svgCharWidth/2
+				right := left + svgCharWidth
+				if l, rt, up, down, ok := boxGeometry(ch); ok {
+					key := r.st.stroke()
+					switch {
+					case l && rt:
+						addSegment(key, segment{left, mid, right, mid})
+					case l:
+						addSegment(key, segment{left, mid, cx, mid})
+					case rt:
+						addSegment(key, segment{cx, mid, right, mid})
+					}
+					switch {
+					case up && down:
+						addSegment(key, segment{cx, top, cx, bottom})
+					case up:
+						addSegment(key, segment{cx, top, cx, mid})
+					case down:
+						addSegment(key, segment{cx, mid, cx, bottom})
+					}
+					text[k] = ' '
+					continue
+				}
+				side := svgCharWidth - 2
+				switch ch {
+				case '■':
+					fmt.Fprintf(&shapes, `<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" %s/>`, cx-side/2, mid-side/2, side, side, r.st.paint())
+					text[k] = ' '
+				case '□':
+					fmt.Fprintf(&shapes, `<rect x="%.1f" y="%.1f" width="%.1f" height="%.1f" fill="none" %s/>`, cx-side/2+0.5, mid-side/2+0.5, side-1, side-1, r.st.stroke())
+					text[k] = ' '
+				}
+			}
+			for _, w := range words(string(text)) {
 				fmt.Fprintf(&b, `<text x="%.1f" y="%d"%s>%s</text>`, x+float64(w.col)*svgCharWidth, y+svgLineHeight-5, attrs, xmlEscape(w.text))
 			}
 		}
 		b.WriteString("\n")
 	}
-	b.WriteString("</g>\n</svg>\n")
+	b.WriteString("</g>\n")
+	b.WriteString(shapes.String())
+	for _, key := range strokeOrder {
+		fmt.Fprintf(&b, `<path fill="none" stroke-width="1" stroke-linecap="square" %s d="%s"/>`+"\n", key, svgPath(strokes[key]))
+	}
+	b.WriteString("</svg>\n")
 	_, err := io.WriteString(w, b.String())
 	return err
 }

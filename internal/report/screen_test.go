@@ -164,7 +164,7 @@ func TestQualityRouteAndPTR(t *testing.T) {
 		return strings.Join(r.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
 	}
 	out := build(false)
-	for _, s := range []string{"Route    203.0.112.0/20 · AS64500 Example", "PTR      host-203-0-113-7.example.net", "62 ■■□□□ low"} {
+	for _, s := range []string{"Route     203.0.112.0/20 · AS64500 Example", "PTR       host-203-0-113-7.example.net", "62 ■■□□□ low"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("%q missing\n%s", s, out)
 		}
@@ -173,7 +173,7 @@ func TestQualityRouteAndPTR(t *testing.T) {
 		t.Errorf("PTR repeated in the lists panel\n%s", out)
 	}
 	masked := build(true)
-	if strings.Contains(masked, "113-7") || strings.Contains(masked, "203.0.112.0") || strings.Contains(masked, "Route") || strings.Contains(masked, "AS64500") || !strings.Contains(masked, "PTR      •••") || !strings.Contains(masked, "Address  •••") {
+	if strings.Contains(masked, "113-7") || strings.Contains(masked, "203.0.112.0") || strings.Contains(masked, "Route") || strings.Contains(masked, "AS64500") || !strings.Contains(masked, "PTR       •••") || !strings.Contains(masked, "Address   •••") {
 		t.Errorf("masked output leaks\n%s", masked)
 	}
 }
@@ -186,7 +186,7 @@ func TestScreenExits(t *testing.T) {
 	}
 	r := &Report{Exits: []*Host{exit("exit 1", "socks5://a.example:1080", "yes"), exit("exit 2", "http://b.example:3128", "no")}}
 	out := strings.Join(r.Screen(Style{Unicode: true, Width: 160}, "", nil), "\n")
-	for _, s := range []string{"IP quality · exit 1", "IP quality · exit 2", "Via      socks5://a.example:1080", "marks: exit 1 exit 2", "✓✗ Netflix"} {
+	for _, s := range []string{"IP quality · exit 1", "IP quality · exit 2", "Via       socks5://a.example:1080", "marks: exit 1 exit 2", "✓✗ Netflix"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("%q missing\n%s", s, out)
 		}

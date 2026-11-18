@@ -187,7 +187,7 @@ func TestRecordedRun(t *testing.T) {
 	rep.IPv4 = host
 	rep.Network = led.Entries()
 	screen := strings.Join(rep.Screen(report.Style{Unicode: true, Width: 160}, "", nil), "\n")
-	for _, want := range []string{"203.0.113.7", "DE Germany", "Cloudflare FRA DE", "Registry DE  ✓ geo-consistent", "✓ Netflix", "✓ OpenAI API"} {
+	for _, want := range []string{"203.0.113.7", "DE Germany", "Cloudflare FRA DE", "Registry  DE  ✓ geo-consistent", "✓ Netflix", "✓ OpenAI API"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("%q missing on screen:\n%s", want, screen)
 		}

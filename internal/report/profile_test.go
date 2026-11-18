@@ -68,7 +68,7 @@ func TestProfileOutput(t *testing.T) {
 	r := &Report{Tool: Tool{Name: "cii"}, IPv4: sampleProfileHost()}
 	out := strings.Join(r.Screen(Style{Width: 200, Unicode: true}, "", nil), "\n")
 	for _, s := range []string{
-		"Registry US  ⚠ geo-discrepant",
+		"Registry  US  ⚠ geo-discrepant",
 		"ipquery.io    [ISP ]   ",
 		"ip-api.com    [HOST]   ",
 		"ipquery.io      3 ■□□□□ very low",
@@ -119,5 +119,22 @@ func TestProfileCompanyColumn(t *testing.T) {
 	}
 	if p := h.Profile; len(p.Company) != 1 || p.Company[0].Value != "business" || p.Company[0].Sources[0] != "ipinfo.io" {
 		t.Errorf("company votes = %+v", p.Company)
+	}
+}
+
+func TestQualityLabelsKeepAGap(t *testing.T) {
+	h := &Host{Address: "203.0.113.7", Disagree: []string{"ipify: 203.0.113.8"}, Via: "proxy"}
+	for _, lang := range []string{"en", "ru"} {
+		r := &Report{Tool: Tool{Name: "cii"}, IPv4: h}
+		out := strings.Join(r.Screen(Style{Width: 120, Unicode: true, Lang: lang}, "", nil), "\n")
+		for _, name := range qualityLabels {
+			label := Translate(lang, name)
+			if i := strings.Index(out, label); i >= 0 && !strings.HasPrefix(out[i+len(label):], " ") {
+				t.Errorf("%s: label %q runs into its value:\n%s", lang, label, out)
+			}
+		}
+		if !strings.Contains(out, Translate(lang, "Also seen")+" ⚠") {
+			t.Errorf("%s: no gap before the warning:\n%s", lang, out)
+		}
 	}
 }

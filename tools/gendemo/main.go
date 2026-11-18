@@ -15,7 +15,7 @@ const (
 	socialHeight = 640
 	socialCols   = 118
 	socialHead   = `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d">
-<rect width="100%%" height="100%%" fill="#010409"/>
+<rect x="0" y="0" width="%d" height="%d" fill="#010409"/>
 <g font-family="'JetBrains Mono','DejaVu Sans Mono',Menlo,Consolas,monospace" fill="#e6edf3">
 <text x="64" y="150" font-size="112" font-weight="bold">cii</text>
 <text x="64" y="212" font-size="28" fill-opacity="0.8">complete information</text>
@@ -40,7 +40,7 @@ func social() ([]byte, error) {
 		return nil, fmt.Errorf("unexpected start of the demo picture")
 	}
 	var b bytes.Buffer
-	fmt.Fprintf(&b, socialHead, socialWidth, socialHeight, socialWidth, socialHeight)
+	fmt.Fprintf(&b, socialHead, socialWidth, socialHeight, socialWidth, socialHeight, socialWidth, socialHeight)
 	fmt.Fprintf(&b, "viewBox=\"%s\">", demo[m[2]:m[3]])
 	b.Write(demo[m[1]:])
 	b.WriteString("</svg>\n")

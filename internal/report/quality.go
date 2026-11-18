@@ -83,6 +83,8 @@ var factorShort = map[probe.Flag]string{
 	probe.Proxy: "prx", probe.VPN: "VPN", probe.Tor: "Tor", probe.Hosting: "hst", probe.Abuser: "abu", probe.Bot: "bot",
 }
 
+var qualityLabels = []string{"Address", "Via", "Also seen", "ASN", "Place", "Route", "PTR", "Registry"}
+
 func sectionRule(c paint, m marks, title string, iw int) string {
 	return c.bold(title) + " " + c.dim(strings.Repeat(m.rule, max(0, iw-utf8.RuneCountInString(title)-1)))
 }
@@ -91,7 +93,11 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	if h.Address == "" {
 		return []string{c.dim(m.tr(unavailableReason(h)))}
 	}
-	field := func(name, value string) string { return c.dim(pad(m.tr(name), 9)) + value }
+	labelW := 0
+	for _, name := range qualityLabels {
+		labelW = max(labelW, utf8.RuneCountInString(m.tr(name)))
+	}
+	field := func(name, value string) string { return c.dim(pad(m.tr(name), labelW+1)) + value }
 	lines := []string{field("Address", c.green(h.Address))}
 	if h.Via != "" {
 		lines = append(lines, field("Via", h.Via))
