@@ -1,16 +1,16 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Complete information about the current IP address",
   "homepage": "https://github.com/arngory/cii",
   "license": "AGPL-3.0-only",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/arngory/cii/releases/download/v0.3.0/cii-windows-amd64.exe#/cii.exe",
-      "hash": "293706503469b741b45e097a77d049dda29d72344aeff4d011f4054f6f7a1eb9"
+      "url": "https://github.com/arngory/cii/releases/download/v0.4.0/cii-windows-amd64.exe#/cii.exe",
+      "hash": "7d2c6825031b5870ef97be5402fd0931deb6ac6616a83cf2aa510a37f4b4bbc8"
     },
     "arm64": {
-      "url": "https://github.com/arngory/cii/releases/download/v0.3.0/cii-windows-arm64.exe#/cii.exe",
-      "hash": "a04a956716583b3142179d096ad8c500475aa4aa791f40e24e18ee96ff3e6a7e"
+      "url": "https://github.com/arngory/cii/releases/download/v0.4.0/cii-windows-arm64.exe#/cii.exe",
+      "hash": "e8904369856588249de78f4d795ea42ba0de1a9b59e64a94b984a5cc38e5e11e"
     }
   },
   "bin": "cii.exe"
