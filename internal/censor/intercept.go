@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -105,6 +106,11 @@ func localChecks(n *netx.Net) []probe.Result {
 			}
 		}
 		out = append(out, res)
+	}
+	if !n.Proxied() && !n.Options().Source.IsValid() {
+		if ifc, _, ok := netx.RouteInterface(n.Options().Family); ok && ifc.MTU > 0 {
+			out = append(out, probe.Result{Group: Local, Service: "Interface MTU", Status: probe.Yes, Reason: strconv.Itoa(ifc.MTU) + " on " + ifc.Name})
+		}
 	}
 	return out
 }

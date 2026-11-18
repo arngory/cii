@@ -26,20 +26,17 @@ func TestOfflineChecksOnlyDownloadedLists(t *testing.T) {
 	}
 	write("manifest.json", `{"aws":{"id":"aws"},"gcp":{"id":"gcp"}}`)
 	write("aws.txt", "198.51.100.0/24\tAWS EC2 eu-central-1\n")
-	missing := "; not downloaded: tor-exits, oracle, cloudflare, digitalocean, spamhaus-drop"
-	clean := Offline(base, netip.MustParseAddr("203.0.113.7"), 0)
-	if len(clean) != 2 || clean[0].Service != "PeeringDB" || clean[0].Status != probe.Unknown || !strings.Contains(clean[0].Reason, "risk:peeringdb") {
+	missing := "; not downloaded: tor-exits, oracle, cloudflare, digitalocean, spamhaus-drop, peeringdb"
+	clean := Offline(base, netip.MustParseAddr("203.0.113.7"), 64500)
+	if len(clean) != 1 || clean[0].Service != "Known ranges" || clean[0].Status != probe.Yes || clean[0].Detail != "not in: aws"+missing {
 		t.Fatalf("clean = %+v", clean)
 	}
-	if clean[1].Status != probe.Yes || clean[1].Detail != "not in: aws"+missing {
-		t.Errorf("clean ranges = %+v", clean[1])
-	}
 	hit := Offline(base, netip.MustParseAddr("198.51.100.9"), 0)
-	if len(hit) != 2 || hit[1].Status != probe.Partial || hit[1].Detail != "AWS EC2 eu-central-1"+missing {
+	if len(hit) != 1 || hit[0].Status != probe.Partial || hit[0].Detail != "AWS EC2 eu-central-1"+missing {
 		t.Errorf("hit = %+v", hit)
 	}
 	write("manifest.json", `{"gcp":{"id":"gcp"}}`)
-	if got := Offline(base, netip.MustParseAddr("203.0.113.7"), 0); len(got) != 1 || got[0].Service != "PeeringDB" {
+	if got := Offline(base, netip.MustParseAddr("203.0.113.7"), 0); len(got) != 0 {
 		t.Errorf("listed but missing file = %+v", got)
 	}
 }
@@ -66,11 +63,22 @@ func TestOfflineDROPAndPeeringDB(t *testing.T) {
 		t.Errorf("DROP hit = %+v", rs[1])
 	}
 	clean := Offline(base, netip.MustParseAddr("203.0.113.7"), 64999)
-	if len(clean) != 2 || clean[0].Status != probe.Unknown || clean[0].Reason != "this AS is not registered in PeeringDB" || !strings.HasPrefix(clean[1].Detail, "not in: spamhaus-drop; not downloaded:") {
+	if len(clean) != 2 || clean[0].Status != probe.Yes || clean[0].Detail != "AS64999 has no PeeringDB record" || clean[0].Facts != nil ||
+		!strings.HasPrefix(clean[1].Detail, "not in: spamhaus-drop; not downloaded:") || strings.Contains(clean[1].Detail, "peeringdb") {
 		t.Errorf("clean = %+v", clean)
 	}
 	if noASN := Offline(base, netip.MustParseAddr("203.0.113.7"), 0); !strings.Contains(noASN[0].Reason, "ASN unknown") {
 		t.Errorf("no ASN = %+v", noASN[0])
+	}
+	if err := os.Remove(filepath.Join(dir, "peeringdb.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if gone := Offline(base, netip.MustParseAddr("203.0.113.7"), 64999); gone[0].Status != probe.Unknown || !strings.Contains(gone[0].Reason, "unreadable") {
+		t.Errorf("listed but missing PeeringDB file = %+v", gone[0])
+	}
+	write("peeringdb.txt", "AS1\t"+strings.Repeat("x", 1<<20)+"\n")
+	if long := Offline(base, netip.MustParseAddr("203.0.113.7"), 64999); long[0].Status != probe.Unknown {
+		t.Errorf("unreadable PeeringDB file = %+v", long[0])
 	}
 }
 

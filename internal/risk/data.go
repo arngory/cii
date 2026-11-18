@@ -446,29 +446,30 @@ func Offline(base string, ip netip.Addr, asn uint) []probe.Result {
 		return nil
 	}
 	var out []probe.Result
-	pdb := probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Unknown}
+	var matches []Match
+	var checked, missing []string
 	_, havePDB := m["peeringdb"]
 	switch {
 	case !havePDB:
-		pdb.Reason = "not downloaded: cii data update risk:peeringdb"
 	case asn == 0:
-		pdb.Reason = "ASN unknown: needs the DB-IP ASN database (cii data update)"
+		out = append(out, probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Unknown, Reason: "ASN unknown: needs the DB-IP ASN database (cii data update)"})
 	default:
-		if r, found := networkType(filepath.Join(dataDir(base), "peeringdb.txt"), asn); found {
-			pdb = r
-		} else {
-			pdb.Reason = "this AS is not registered in PeeringDB"
+		r, found, err := networkType(filepath.Join(dataDir(base), "peeringdb.txt"), asn)
+		switch {
+		case err != nil:
+			out = append(out, probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Unknown, Reason: "PeeringDB data unreadable: cii data update risk:peeringdb"})
+		case found:
+			out = append(out, r)
+		default:
+			out = append(out, probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Yes, Detail: fmt.Sprintf("AS%d has no PeeringDB record", asn)})
 		}
 	}
-	out = append(out, pdb)
-	var matches []Match
-	var checked, missing []string
 	for _, s := range DataSources {
-		if s.ByASN {
-			continue
-		}
 		if _, ok := m[s.ID]; !ok {
 			missing = append(missing, s.ID)
+			continue
+		}
+		if s.ByASN {
 			continue
 		}
 		found, err := lookupFile(filepath.Join(dataDir(base), s.ID+".txt"), s, ip)
@@ -506,10 +507,10 @@ var peeringdbUsage = map[string]string{
 	"Enterprise": "business", "Non-Profit": "business", "Educational/Research": "education", "Government": "government",
 }
 
-func networkType(path string, asn uint) (probe.Result, bool) {
+func networkType(path string, asn uint) (probe.Result, bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return probe.Result{}, false
+		return probe.Result{}, false, err
 	}
 	defer f.Close()
 	want := fmt.Sprintf("AS%d\t", asn)
@@ -526,7 +527,7 @@ func networkType(path string, asn uint) (probe.Result, bool) {
 				facts.Usage = u
 			}
 		}
-		return probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Yes, Detail: fmt.Sprintf("AS%d %s", asn, types), Facts: facts.OrNil()}, true
+		return probe.Result{Group: Network, Service: "PeeringDB", Status: probe.Yes, Detail: fmt.Sprintf("AS%d %s", asn, types), Facts: facts.OrNil()}, true, nil
 	}
-	return probe.Result{}, false
+	return probe.Result{}, false, sc.Err()
 }

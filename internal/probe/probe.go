@@ -50,6 +50,8 @@ type Result struct {
 	Reason   string `json:"reason,omitempty"`
 	Detail   string `json:"detail,omitempty"`
 	Extended bool   `json:"extended,omitempty"`
+	Custom   bool   `json:"custom,omitempty"`
+	Host     string `json:"host,omitempty"`
 	Facts    *Facts `json:"facts,omitempty"`
 }
 
@@ -74,6 +76,8 @@ type Check struct {
 	Service    string
 	Group      Group
 	Tier       Tier
+	Custom     bool
+	Host       string
 	Requests   []Request
 	ExtraHosts []string
 	Transport  netx.Family
@@ -120,7 +124,7 @@ type Env struct {
 func Placeholders(checks []Check) []Result {
 	out := make([]Result, len(checks))
 	for i, c := range checks {
-		out[i] = Result{Group: c.Group, Service: c.Service, Status: Pending, Extended: c.Tier == TierB}
+		out[i] = Result{Group: c.Group, Service: c.Service, Status: Pending, Extended: c.Tier == TierB, Custom: c.Custom, Host: c.Host}
 	}
 	return out
 }
@@ -160,6 +164,8 @@ func complete(c Check, rs []Result) []Result {
 			rs[i].Service = c.Service
 		}
 		rs[i].Extended = c.Tier == TierB
+		rs[i].Custom = c.Custom
+		rs[i].Host = c.Host
 	}
 	return rs
 }
@@ -283,9 +289,8 @@ func reason(err error) string {
 	if be := netx.AsBlocked(err); be != nil {
 		return "blocked by policy: " + be.Host
 	}
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		return "timeout"
+	if s := netx.Short(err); s != "" {
+		return s
 	}
 	err = netx.Redact(err)
 	var ue *url.Error

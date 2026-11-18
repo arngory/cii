@@ -8,6 +8,22 @@ import (
 	"syscall"
 )
 
+const ReasonUnreachable = "network unreachable"
+
+func Short(err error) string {
+	switch {
+	case IsTimeout(err):
+		return "timeout"
+	case IsRefused(err):
+		return "connection refused"
+	case IsReset(err):
+		return "connection reset"
+	case IsUnreachable(err):
+		return ReasonUnreachable
+	}
+	return ""
+}
+
 func IsRefused(err error) bool     { return isErrno(err, errnoRefused) }
 func IsReset(err error) bool       { return isErrno(err, errnoReset) }
 func IsUnreachable(err error) bool { return isErrno(err, errnoUnreachable) }

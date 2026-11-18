@@ -61,11 +61,13 @@ Usage:
   cii analyze [LOG|JSON|-]    conclusions drawn from a run (default: the latest local log); nothing is checked again
   cii stats [LOG...]          which checks did not always answer across local logs
   cii compare A B [C...]      reports from different machines side by side, plus the list of differences for two
-  cii watch [flags]           repeat the check every --every (default 30m, minimum 5m) and print what changed; --count N stops after N runs
+  cii watch [flags]           repeat the check every --every (default 30m, minimum 5m) and print what changed; --count N stops after N runs; --listen HOST:PORT serves metrics
+  cii completion SHELL        print a completion script for bash, zsh or fish
+  cii man                     print this text as a manual page (roff)
   cii version
 
 Default command only:
-  --no-censor        skip censorship checks (DNS and Telegram; DPI and geoblock with --extended)
+  --no-censor        skip censorship checks (DNS, Telegram, connectivity, NAT and QUIC; DPI and geoblock with --extended)
   --bench            also run the benchmark after the checks: disk, CPU, Cloudflare speed, iperf3
 
 Common flags:
@@ -85,6 +87,7 @@ Common flags:
   --no-log           do not write the local log (default: %s)
   --mask             hide addresses, prefixes, ASNs and AS holders (for screenshots)
   --svg FILE         also save the final screen as an SVG image (cii, lookup, censor, bench, route, show, compare)
+  --html FILE        also save the final screen as a self-contained HTML page (same commands as --svg)
   --prom             print the report as Prometheus metrics instead of the screen (not for lookup)
   --prom-file FILE   also write those metrics to FILE atomically, e.g. for the node_exporter textfile collector
   --demo             show the report on invented sample data without touching the network (cii only)
@@ -153,6 +156,11 @@ func run(ctx context.Context, args []string) error {
 		return cmdCompare(args)
 	case "watch":
 		return cmdWatch(ctx, args)
+	case "completion":
+		return cmdCompletion(args)
+	case "man":
+		fmt.Print(manPage())
+		return nil
 	case "version":
 		fmt.Println(version.Name, version.Version)
 		return nil
@@ -166,7 +174,7 @@ func run(ctx context.Context, args []string) error {
 
 type common struct {
 	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo, prom, quiet bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, from, promFile                           string
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, html, from, promFile                     string
 	timeout                                                                                              time.Duration
 }
 
@@ -196,6 +204,7 @@ func (c *common) register(fs *flag.FlagSet) {
 
 func (c *common) registerSVG(fs *flag.FlagSet) {
 	fs.StringVar(&c.svg, "svg", "", "also write the final screen as an SVG image to this file")
+	fs.StringVar(&c.html, "html", "", "also write the final screen as an HTML page to this file")
 }
 
 func (c *common) registerExports(fs *flag.FlagSet) {
@@ -279,7 +288,7 @@ func (c *common) baseOptions() (netx.Options, error) {
 
 func (c *common) parse(fs *flag.FlagSet, args []string) error {
 	c.register(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	return c.check()
@@ -309,6 +318,9 @@ func cmdIP(ctx context.Context, args []string) error {
 	if c.demo {
 		c.noLog = true
 		rep := report.Demo("online")
+		if !f.bench {
+			rep.Bench = nil
+		}
 		if c.mask {
 			rep = rep.Scrubbed()
 		}
@@ -330,11 +342,13 @@ func cmdWatch(ctx context.Context, args []string) error {
 	var c common
 	var f ipFlags
 	every, count := watchDefault, 0
+	var listen string
 	fs := flag.NewFlagSet("cii watch", flag.ContinueOnError)
 	f.register(fs)
 	c.registerExports(fs)
 	fs.DurationVar(&every, "every", every, "pause between runs, 5m or more")
 	fs.IntVar(&count, "count", count, "stop after this many runs (0: until interrupted)")
+	fs.StringVar(&listen, "listen", "", "serve the latest metrics for Prometheus at http://HOST:PORT/metrics")
 	if err := c.parse(fs, args); err != nil {
 		return err
 	}
@@ -346,7 +360,16 @@ func cmdWatch(ctx context.Context, args []string) error {
 	case count < 0:
 		return errors.New("--count must not be negative")
 	case c.prom:
-		return errors.New("--prom prints a single report; with watch use --prom-file")
+		return errors.New("--prom prints a single report; with watch use --prom-file or --listen")
+	}
+	var metrics *metricsServer
+	if listen != "" && !c.plan {
+		var err error
+		if metrics, err = listenMetrics(listen); err != nil {
+			return err
+		}
+		defer metrics.close()
+		fmt.Fprintf(os.Stderr, "cii: metrics at http://%s/metrics\n", metrics.addr)
 	}
 	var prev *report.Report
 	for n := 1; ; n++ {
@@ -374,6 +397,11 @@ func cmdWatch(ctx context.Context, args []string) error {
 			}
 			prev = rep
 		}
+		if metrics != nil && err == nil {
+			if err := metrics.set(rep); err != nil {
+				return fmt.Errorf("--listen: %w", err)
+			}
+		}
 		if ctx.Err() != nil || count > 0 && n >= count {
 			return nil
 		}
@@ -392,10 +420,8 @@ func watchStep(c *common, n int, prev, cur *report.Report) error {
 	if logErr != nil {
 		fmt.Fprintln(os.Stderr, "cii: log not written:", logErr)
 	}
-	if c.svg != "" {
-		if err := writeSVG(cur, c, logPath, logErr); err != nil {
-			return fmt.Errorf("--svg: %w", err)
-		}
+	if err := writeScreens(cur, c, logPath, logErr); err != nil {
+		return err
 	}
 	if c.promFile != "" {
 		if err := writeMetricsFile(cur, c.promFile); err != nil {
@@ -470,6 +496,11 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 	riskOn := !c.quick && !c.noRisk
 	if !c.quick {
 		checks = append(region.Select(cfg.Keys, c.extended), services.Select(cfg.Keys, c.extended)...)
+		own, err := services.CustomChecks(cfg.Services)
+		if err != nil {
+			return nil, err
+		}
+		checks = append(checks, own...)
 		if catalogs, err = c.catalogs(); err != nil {
 			return nil, err
 		}
@@ -478,7 +509,7 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 		checks = append(checks, risk.Checks(cfg.Keys, c.extended)...)
 	}
 	censorOn := !c.quick && !noCensor && !c.offline && len(exits) == 1
-	censorOpts := censor.Options{Modes: []string{"dns", "telegram", "portal"}, Protocol: "both"}
+	censorOpts := censor.Options{Modes: []string{"dns", "telegram", "portal", "transport"}, Protocol: "both"}
 	if c.extended {
 		censorOpts.Modes = nil
 	}
@@ -518,6 +549,7 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 		return nil, err
 	}
 	defer dbs.Close()
+	censorOpts.Locate = locator(dbs)
 
 	mode := "online"
 	if c.offline {
@@ -733,6 +765,20 @@ func (c *common) catalogsFor(allowed, verdict []string) []string {
 	return out
 }
 
+func locator(dbs *geodb.Set) func(netip.Addr) (country, network string) {
+	return func(ip netip.Addr) (country, network string) {
+		for _, g := range dbs.Lookup(ip) {
+			if country == "" {
+				country = g.Country
+			}
+			if network == "" && g.ASN != 0 {
+				network = strings.TrimSpace(fmt.Sprintf("AS%d %s", g.ASN, g.ASOrg))
+			}
+		}
+		return country, network
+	}
+}
+
 func firstASN(geo []geodb.Record) uint {
 	for _, g := range geo {
 		if g.ASN != 0 {
@@ -765,10 +811,8 @@ func output(r *report.Report, c *common) error {
 	if err := printReport(r, c, logPath, logErr); err != nil {
 		return err
 	}
-	if c.svg != "" {
-		if err := writeSVG(r, c, logPath, logErr); err != nil {
-			return fmt.Errorf("--svg: %w", err)
-		}
+	if err := writeScreens(r, c, logPath, logErr); err != nil {
+		return err
 	}
 	if c.promFile != "" {
 		if err := writeMetricsFile(r, c.promFile); err != nil {
@@ -880,13 +924,32 @@ func footer(r *report.Report, unicode bool, lang, logPath string, logErr error) 
 	return parts
 }
 
-func writeSVG(r *report.Report, c *common, logPath string, logErr error) error {
+func writeScreens(r *report.Report, c *common, logPath string, logErr error) error {
+	if c.svg == "" && c.html == "" {
+		return nil
+	}
 	style := report.Style{Color: true, Unicode: true, Width: terminalWidth(), Lang: c.language()}
-	f, err := os.Create(c.svg)
+	lines := r.Screen(style, screenTitle(r, c), footer(r, true, c.language(), logPath, logErr))
+	if c.svg != "" {
+		if err := writeFile(c.svg, func(w io.Writer) error { return report.WriteSVG(w, lines) }); err != nil {
+			return fmt.Errorf("--svg: %w", err)
+		}
+	}
+	if c.html != "" {
+		page := func(w io.Writer) error { return report.WriteHTML(w, screenTitle(r, c), c.language(), lines) }
+		if err := writeFile(c.html, page); err != nil {
+			return fmt.Errorf("--html: %w", err)
+		}
+	}
+	return nil
+}
+
+func writeFile(path string, write func(io.Writer) error) error {
+	f, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	if err := report.WriteSVG(f, r.Screen(style, screenTitle(r, c), footer(r, true, c.language(), logPath, logErr))); err != nil {
+	if err := write(f); err != nil {
 		f.Close()
 		return err
 	}
@@ -1324,12 +1387,12 @@ func cmdCensor(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("cii censor", flag.ContinueOnError)
 	c.register(fs)
 	c.registerExports(fs)
-	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal (comma-separated)")
+	fs.StringVar(&mode, "mode", "all", "all, dns, dpi, geoblock, telegram, portal, transport (comma-separated)")
 	fs.StringVar(&domainsFile, "domains", "", "file with one domain per line instead of the built-in lists")
 	fs.StringVar(&domain, "domain", "", "check a single domain")
 	fs.StringVar(&protocol, "protocol", "both", "http, https or both")
 	fs.IntVar(&retries, "retries", 0, "extra attempts per target")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := c.check(); err != nil {
@@ -1363,9 +1426,15 @@ func cmdCensor(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	dbs, err := geodb.Open(c.dir())
+	if err != nil {
+		return err
+	}
+	defer dbs.Close()
+	opts.Locate = locator(dbs)
 	led := ledger.New()
 	n := netx.New(netOpts, policy, led)
-	s := &session{mode: "censor", mask: c.mask, led: led, censor: censor.Placeholders(opts)}
+	s := &session{mode: "censor", mask: c.mask, dbs: dbs, led: led, censor: censor.Placeholders(opts)}
 	screen := startScreen(&c, s)
 	defer screen.stop()
 	rs := censor.Run(ctx, n, opts)
@@ -1391,7 +1460,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	fs.StringVar(&opts.Servers, "servers", opts.Servers, "iperf3 servers: global, ru, all or host:ports[:provider[:location]],...")
 	fs.DurationVar(&opts.Duration, "duration", opts.Duration, "duration of each network transfer")
 	fs.BoolVar(&opts.SystemTools, "system", false, "also run installed iperf3 and fio")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := c.check(); err != nil {
@@ -1482,7 +1551,7 @@ func cmdRoute(ctx context.Context, args []string) error {
 	fs.BoolVar(&tcpOnly, "tcp", false, "skip ICMP tracing, measure TCP connect time only")
 	fs.IntVar(&opts.Rounds, "rounds", opts.Rounds, "ICMP probe rounds (1-15)")
 	fs.IntVar(&opts.MaxTTL, "max-hops", opts.MaxTTL, "maximum hops (1-31)")
-	if err := fs.Parse(args); err != nil {
+	if err := parseFlags(fs, args); err != nil {
 		return err
 	}
 	if err := c.check(); err != nil {

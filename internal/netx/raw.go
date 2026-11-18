@@ -122,6 +122,10 @@ func (n *Net) LookupHost(ctx context.Context, module, name string) ([]string, er
 	return out, err
 }
 
+func (n *Net) LookupTXT(ctx context.Context, module, name string) ([]string, error) {
+	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupTXT(ctx, name) })
+}
+
 func resolvedKey(module, host string) string { return module + "\x00" + normalizeHost(host) }
 
 var ErrAddrNotOfHost = errors.New("address was not resolved for this host")

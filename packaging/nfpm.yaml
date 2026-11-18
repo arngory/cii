@@ -24,3 +24,18 @@ contents:
     dst: /usr/share/licenses/cii/THIRD_PARTY_LICENSES.txt
   - src: README.md
     dst: /usr/share/doc/cii/README.md
+  - src: build/share/cii.1.gz
+    dst: /usr/share/man/man1/cii.1.gz
+  - src: build/share/cii.bash
+    dst: /usr/share/bash-completion/completions/cii
+  - src: build/share/_cii
+    dst: /usr/share/zsh/vendor-completions/_cii
+    packager: deb
+  - src: build/share/_cii
+    dst: /usr/share/zsh/site-functions/_cii
+    packager: rpm
+  - src: build/share/_cii
+    dst: /usr/share/zsh/site-functions/_cii
+    packager: apk
+  - src: build/share/cii.fish
+    dst: /usr/share/fish/vendor_completions.d/cii.fish

@@ -1,6 +1,7 @@
 package report
 
 import (
+	"bytes"
 	"net/netip"
 	"time"
 
@@ -47,18 +48,21 @@ func Demo(mode string) *Report {
 		{Group: services.AI, Service: "Kimi API (CN)", Status: probe.No, Reason: "region not supported"},
 		{Group: risk.Reputation, Service: "proxycheck.io", Status: probe.Yes, Country: "DE", Detail: "Residential; risk 0",
 			Facts: demoFacts("isp", "", 0, 0, clean)},
+		{Group: risk.Reputation, Service: "ipinfo.io", Status: probe.Yes, Country: "DE", Detail: "ASN type isp", Extended: true,
+			Facts: demoFacts("isp", "isp", -1, 0, clean)},
 		{Group: risk.Network, Service: risk.PTRService, Status: probe.Yes, Detail: "p203-0-113-7.dip0.example.net"},
 		{Group: risk.DNSBL, Service: "bl.spamcop.net", Status: probe.Yes},
 		{Group: risk.DNSBL, Service: "psbl.surriel.com", Status: probe.Yes},
 		{Group: risk.DNSBL, Service: "dnsbl.dronebl.org", Status: probe.Yes},
 		{Group: risk.Mail, Service: "Outbound SMTP (25)", Status: probe.No, Detail: "connection timed out, port 25 likely filtered"},
 		{Group: risk.Network, Service: "PeeringDB", Status: probe.Yes, Detail: "AS3320 Cable/DSL/ISP"},
-		{Group: risk.Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: tor-exits, aws, gcp, oracle, cloudflare"},
+		{Group: risk.Network, Service: "Known ranges", Status: probe.Yes, Detail: "not in: tor-exits, aws, gcp"},
 	})
 	v4.SetRegion(region.Summarize([]probe.Result{
-		{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "DE", Facts: demoFacts("isp", "", 0, 0, clean)},
-		{Group: region.GeoIP, Service: "ip-api.com", Status: probe.OK, Country: "DE", Facts: demoFacts("isp", "", -1, 0, clean)},
-		{Group: region.GeoIP, Service: "ip2location.io", Status: probe.OK, Country: "DE", Facts: demoFacts("isp", "", -1, 0, map[probe.Flag]bool{probe.Proxy: false})},
+		{Group: region.GeoIP, Service: "ipquery.io", Status: probe.OK, Country: "DE", Facts: demoFacts("", "", 0, 0, clean)},
+		{Group: region.GeoIP, Service: "ip-api.com", Status: probe.OK, Country: "DE",
+			Facts: demoFacts("", "", -1, 0, map[probe.Flag]bool{probe.Proxy: false, probe.Hosting: false})},
+		{Group: region.GeoIP, Service: "ip2location.io", Status: probe.OK, Country: "DE", Facts: demoFacts("", "", -1, 0, map[probe.Flag]bool{probe.Proxy: false})},
 		{Group: region.GeoIP, Service: "ipinfo.io", Status: probe.OK, Country: "DE"},
 		{Group: region.Platform, Service: "Cloudflare", Status: probe.OK, Country: "DE"},
 		{Group: region.Platform, Service: "Google", Status: probe.OK, Country: "DE"},
@@ -73,6 +77,8 @@ func Demo(mode string) *Report {
 			{Group: censor.DNS, Service: "Cloudflare 1.1.1.1", Status: probe.Yes},
 			{Group: censor.DNS, Service: "Google 8.8.8.8", Status: probe.Yes},
 			{Group: censor.DNS, Service: "Port 53 interception (OpenDNS)", Status: probe.Yes},
+			{Group: censor.DNS, Service: censor.EgressPrefix + " (Akamai)", Status: probe.Yes, Country: "DE",
+				Reason: "the resolver that asks on your behalf", Detail: "203.0.113.53 AS3320 Deutsche Telekom AG"},
 			{Group: censor.Telegram, Service: "DC2", Status: probe.Yes},
 			{Group: censor.Telegram, Service: "DC4", Status: probe.Yes},
 			{Group: censor.Portal, Service: "Google", Status: probe.Yes},
@@ -91,4 +97,32 @@ func Demo(mode string) *Report {
 	}
 	r.Network = []ledger.Entry{{Module: "ipdetect", Host: "www.cloudflare.com", Proto: "https", Requests: 1, Purpose: "public IP echo (cloudflare)"}}
 	return r
+}
+
+const (
+	demoWide   = 118
+	demoNarrow = 60
+)
+
+type DemoImage struct {
+	File, Lang string
+	Width      int
+}
+
+func DemoSVG(lang string, width int) ([]byte, error) {
+	r := Demo("online")
+	r.Bench = nil
+	lines := r.Screen(Style{Color: true, Unicode: true, Width: width, Lang: lang}, r.Tool.Name+" demo", []string{Legend(r, true, lang)})
+	var b bytes.Buffer
+	err := WriteSVG(&b, lines)
+	return b.Bytes(), err
+}
+
+func DemoImages() []DemoImage {
+	return []DemoImage{
+		{"demo-en.svg", "en", demoWide},
+		{"demo-ru.svg", "ru", demoWide},
+		{"demo-en-narrow.svg", "en", demoNarrow},
+		{"demo-ru-narrow.svg", "ru", demoNarrow},
+	}
 }

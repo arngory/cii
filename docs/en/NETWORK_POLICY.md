@@ -14,6 +14,8 @@
 8. **The proxy is not bypassed.** All HTTP goes through the proxy if one is set with the `--proxy` flag or the environment variables `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` (honouring `NO_PROXY`). In both cases raw connections and DNS queries (DNSBL, the SMTP probe, iperf3, censorship checks, the ICMP and TCP measurements of `cii route`) are forbidden and shown as "unknown" with the reason: otherwise they would go past the proxy and reveal the real address. The decision "the proxy is in effect" is made once at startup and is the same for all modules.
 9. **Secrets do not leak.** Tokens are stripped from URLs in errors, logs and `manifest.json`.
 
+cii accepts incoming connections in one case: `cii watch --listen HOST:PORT` opens an HTTP `/metrics` address on the address you give and serves only the metrics of the latest run there. Without this flag cii listens on nothing.
+
 An unavoidable caveat: the availability of a service can only be checked by sending a request to it. So the check targets and the echo services see your IP — just as on an ordinary visit with a browser. The list of echo services can be replaced with your own, see [CONFIG.md](CONFIG.md).
 
 ## Check admissibility tiers (ToS/FUP)

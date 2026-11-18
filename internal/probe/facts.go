@@ -108,7 +108,7 @@ func NormalizeUsage(raw string) string {
 		return "hosting"
 	case s == "isp" || s == "residential" || has("fixed line", " isp"):
 		return "isp"
-	case s == "business" || s == "commercial" || s == "corporate" || s == "organization":
+	case s == "business" || s == "commercial" || s == "corporate" || s == "organization" || s == "banking":
 		return "business"
 	case s == "education" || s == "edu" || has("university", "school", "library"):
 		return "education"

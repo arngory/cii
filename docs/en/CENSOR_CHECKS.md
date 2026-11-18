@@ -16,7 +16,7 @@ cii censor --mode dns,telegram
 cii censor --domains my-list.txt --protocol https
 ```
 
-Modes (`--mode`, comma-separated, default `all`): `dns`, `dpi`, `geoblock`, `telegram` (`tg`), `portal`. In the main `cii` run without `--extended`, `dns`, `telegram` and `portal` are run; with `--extended` — all of them. The `--domains FILE` and `--domain HOST` flags replace the built-in lists with your own; `--protocol` is `http`, `https` or `both` (any other value is an error); `--retries N` is the number of extra attempts per target (default 0: one attempt). The common cii flags (`-4`/`-6`, `--iface`, `--source`, `--timeout`, `--json`, `--debug`, `--mask`) work as usual.
+Modes (`--mode`, comma-separated, default `all`): `dns`, `dpi`, `geoblock`, `telegram` (`tg`), `portal`, `transport`. In the main `cii` run without `--extended`, `dns`, `telegram`, `portal` and `transport` are run; with `--extended` — all of them. The `--domains FILE` and `--domain HOST` flags replace the built-in lists with your own; `--protocol` is `http`, `https` or `both` (any other value is an error); `--retries N` is the number of extra attempts per target (default 0: one attempt). The common cii flags (`-4`/`-6`, `--iface`, `--source`, `--timeout`, `--json`, `--debug`, `--mask`) work as usual.
 
 ## DNS
 
@@ -38,6 +38,13 @@ Lines in the output: `Name IP` (UDP), `Name IP DoH`, `Name IP DoT`, then `DNS hi
 - `Port 53 interception (Google)` — a CHAOS-class query for `id.server` to 8.8.8.8 (over IPv6 — 2001:4860:4860::8888). Google does not support such queries. Any TXT answer did not come from Google: `✗`.
 
 No answer or a timeout — `?`: unreachability is not yet interception. With a proxy neither check is run, like all plain DNS.
+
+**DNS exit.** Which resolver your queries really leave to the internet through: the address in the system settings (the router, 127.0.0.53) does not show that. The system resolver is asked for two names whose authoritative servers answer with the address of whoever asked them:
+
+- `Resolver exit (Akamai)` — the A record of `whoami.akamai.net`;
+- `Resolver exit (Google)` — the TXT record of `o-o.myaddr.l.google.com`; if the resolver passes the client subnet on (EDNS Client Subnet), Google returns it too, and "ECS" appears in the reason.
+
+The country and network of the address found come from the local databases, without asking services. On screen this is the "DNS exit" line in the censorship panel; details are in `--debug`. The report itself gives no judgement; `cii analyze` notes when the resolver is in a different country from the address: behind a VPN or proxy this is a DNS leak, without one it is just a resolver abroad. An address from 198.18.0.0/15 means a local fake-IP resolver answered: `?`. With a proxy the check is not run: the proxy resolves names. `--mask` hides the resolver's address and network; the country stays.
 
 ## Local
 
@@ -86,12 +93,40 @@ Classification:
 | `no` redirected to block page | a redirect to known block pages (`warning.rt.ru`, `zapret-info.gov.ru`, `*.rkn.gov.ru`), to a private address or to a host with the markers `block`, `zapret`, `warning`, `forbidden`, `restrict`, `censor`, `rkn` |
 | `no` denied / legal | 403 or 451 |
 | `no` TLS handshake … (likely DPI) | a drop or a timeout at the TLS stage — the characteristic signature of DPI |
+| `no` blocked by SNI | TLS broke off, but the same address answers a handshake without the server name: the block looks at the name (SNI), not the address |
+| `no` blocked by Host header | HTTP broke off after the request, but the same address answers a request whose `Host` is the address itself: the block looks at the `Host` header |
 | `no` invalid certificate | certificate substitution (MITM or a stub page) |
 | `no` blocked by port | the connection to the port was not established |
 | `⊘` blocked by IP | both 80 and 443 are unreachable — the address is probably on a blocklist |
 | `?` | a redirect to a different site, another response code, the domain did not resolve |
 
 The phase at which the request broke off is determined via `httptrace`, not from the error text.
+
+The control requests without the name are sent only after the main request has already broken off, and only to the address obtained for that same domain; if the connection that broke off was to a subdomain after a redirect, there is no control request. The TLS handshake simply carries no SNI extension, and the HTTP request has the address itself in `Host`; no other site's name is put anywhere, and no data follows the handshake. If the address does not answer without the name either, the reason says so: the block is then by address or port, or the server itself requires the name. With a proxy the control requests are not run.
+
+## Transport
+
+The `transport` mode shows what happens to UDP: without it calls, WireGuard, QUIC and peer-to-peer connections do not work.
+
+| Check | How |
+|---|---|
+| `NAT (STUN)` | a STUN Binding request (RFC 5389) from one local port to `stun.cloudflare.com:3478` and `stun.l.google.com:19302`; the servers answer with the address and port the request came from |
+| `QUIC www.google.com`, `QUIC www.cloudflare.com` | a QUIC v1 handshake on UDP 443 with ALPN `h3` and the usual certificate check; after the handshake the connection is closed, there are no HTTP/3 requests |
+
+| NAT result | Meaning |
+|---|---|
+| `yes` no NAT | the local address matched the external one |
+| `yes` one mapping for every destination | both servers saw the same address and port: peer-to-peer connections are possible |
+| `partial` symmetric NAT | the servers saw different ports: each destination gets its own mapping, peer-to-peer connections need a relay |
+| `yes` mapping type is unknown | one server answered, there is nothing to compare with |
+| `no` | none answered: UDP is blocked or filtered |
+| `?` | no request went to any server (the name did not resolve, the run was interrupted): this says nothing about UDP |
+
+The `carrier-grade NAT` note is added when the local address is from 100.64.0.0/10. An operator's NAT behind a home router is not visible this way: the machine has the router's local address. The details hold the local and the external address with the port; `--mask` hides them.
+
+`QUIC` is `yes` if the handshake completed; `no` with the reason: no answer (UDP 443 is closed or QUIC is filtered), the certificate failed the check, another error. With a proxy the mode is not run: UDP does not go through an HTTP proxy.
+
+In the Local group, next to the default route, `Interface MTU` shows the MTU of the interface the traffic leaves through. This is a local value, not the path MTU: measuring that with probes that forbid fragmentation is not done yet.
 
 ## Telegram
 

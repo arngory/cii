@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/arngory/cii/internal/censor"
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/risk"
 )
@@ -407,6 +408,25 @@ func Progress(r *Report) (done, total int) {
 
 const maxFindings = 8
 
+func extends(long, short string) bool {
+	rest, ok := strings.CutPrefix(long, short)
+	return ok && (rest == "" || strings.ContainsAny(rest[:1], " ,;"))
+}
+
+func resolverExits(rs []probe.Result) []string {
+	var out []string
+	for _, r := range rs {
+		if !strings.HasPrefix(r.Service, censor.EgressPrefix) || r.Status != probe.Yes {
+			continue
+		}
+		exit := strings.TrimSpace(r.Country + " " + r.Detail)
+		if exit != "" && !slices.ContainsFunc(out, func(have string) bool { return extends(have, exit) || extends(exit, have) }) {
+			out = append(out, exit)
+		}
+	}
+	return out
+}
+
 func summaryLines(c paint, m marks, rs []probe.Result, iw int) []string {
 	var groups []probe.Group
 	labelW := 0
@@ -445,11 +465,18 @@ func summaryLines(c paint, m marks, rs []probe.Result, iw int) []string {
 		for _, r := range hits {
 			sym, style := mark(c, m, r, true)
 			text := style(sym) + " " + groupTitle(g) + ": " + serviceName(r)
-			if d := cmp.Or(r.Detail, r.Reason); d != "" {
+			d := cmp.Or(r.Detail, r.Reason)
+			if g == censor.Transport || g == censor.Local {
+				d = cmp.Or(r.Reason, r.Detail)
+			}
+			if d != "" {
 				text += " " + c.dim(d)
 			}
 			findings = append(findings, text)
 		}
+	}
+	for _, exit := range resolverExits(rs) {
+		lines = append(lines, c.dim(m.tr("DNS exit"))+"  "+exit)
 	}
 	if len(findings) > maxFindings {
 		more := len(findings) - maxFindings

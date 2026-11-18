@@ -144,7 +144,7 @@ func TestWatchStep(t *testing.T) {
 	prev, cur := report.Demo("online"), report.Demo("online")
 	cur.GeneratedAt = cur.GeneratedAt.Add(30 * time.Minute)
 	cur.IPv4.Services[0].Status = "no"
-	c := &common{noColor: true, lang: "en", promFile: filepath.Join(dir, "cii.prom"), svg: filepath.Join(dir, "cii.svg")}
+	c := &common{noColor: true, lang: "en", promFile: filepath.Join(dir, "cii.prom"), svg: filepath.Join(dir, "cii.svg"), html: filepath.Join(dir, "cii.html")}
 	old := os.Stdout
 	rd, wr, _ := os.Pipe()
 	os.Stdout = wr
@@ -167,7 +167,31 @@ func TestWatchStep(t *testing.T) {
 	if svg, err := os.ReadFile(c.svg); err != nil || !strings.Contains(string(svg), "<svg") {
 		t.Errorf("svg not refreshed by watch: %v", err)
 	}
+	if page, err := os.ReadFile(c.html); err != nil || !strings.Contains(string(page), "<pre>") || !strings.Contains(string(page), "Netflix") {
+		t.Errorf("html not refreshed by watch: %v", err)
+	}
 	if logs, _ := runlog.List(filepath.Join(dir, "logs")); len(logs) != 2 {
 		t.Errorf("logs written = %d, want 2", len(logs))
+	}
+}
+
+func TestMenuFitsNarrowTerminals(t *testing.T) {
+	for _, lang := range []string{"en", "ru"} {
+		for _, width := range []int{40, 50, 60} {
+			for _, l := range menuLines(lang, width) {
+				if n := len([]rune(l)); n > width {
+					t.Errorf("%s width %d: menu line is %d wide: %q", lang, width, n, l)
+				}
+			}
+			if n := len([]rune(menuPrompt(lang, width))); n >= width {
+				t.Errorf("%s width %d: prompt is %d wide", lang, width, n)
+			}
+		}
+		if wide := menuLines(lang, 140); !strings.Contains(wide[0], menu[0].hint[lang]) {
+			t.Errorf("%s: hints missing on a wide terminal: %q", lang, wide[0])
+		}
+	}
+	if got := wrapWords("one two three four", 10); len(got) != 2 || got[0] != "one two" || got[1] != "three four" {
+		t.Errorf("wrapWords = %q", got)
 	}
 }

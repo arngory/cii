@@ -72,6 +72,7 @@ func TestJudge(t *testing.T) {
 		{path("h", 15169, 4, 64500), Direct, "cache inside your network"},
 		{path("i", 15169, 4, 20940), Direct, "served from AS20940, not AS15169"},
 		{&Path{Target: Target{Name: "j"}, Error: "timeout"}, Unreachable, "timeout"},
+		{&Path{Target: Target{Name: "k"}, absent: true, Error: noAddress(netx.IPv6)}, Absent, "publishes no IPv6 address"},
 	}
 	for _, c := range cases {
 		judge(c.p, 4, 64500)
@@ -112,6 +113,9 @@ func TestResults(t *testing.T) {
 	if rs[1].Status != probe.No || rs[1].Detail != "90.0 ms detour: +86 ms over the fastest path" {
 		t.Errorf("detour = %+v", rs[1])
 	}
+	if abs := (&Report{Paths: []Path{{Target: Target{Name: "X"}, Verdict: Absent, Reason: noAddress(netx.IPv6)}}}).Results()[0]; abs.Status != probe.Unknown {
+		t.Errorf("absent = %+v", abs)
+	}
 	if rs[2].Status != probe.Failed || rs[2].Reason != "timeout" || rs[2].Group != Resolver {
 		t.Errorf("unreachable = %+v", rs[2])
 	}
@@ -138,7 +142,7 @@ func TestResolveLiteralFamily(t *testing.T) {
 	n6 := netx.New(netx.Options{Family: netx.IPv6}, netx.NewPolicy(Rules(Targets)...), ledger.New())
 	p := &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9"}}
 	resolve(context.Background(), n6, p)
-	if p.addr.IsValid() || p.Error != "no ipv6 address" {
+	if p.addr.IsValid() || !p.absent || p.Error != "the service publishes no IPv6 address" {
 		t.Errorf("IPv4 literal on IPv6 = %v %q", p.addr, p.Error)
 	}
 	p = &Path{Target: Target{Name: "Quad9", Host: "9.9.9.9", Host6: "2620:fe::fe"}}

@@ -239,6 +239,7 @@ var groupTitles = map[probe.Group]string{
 	censor.Telegram:    "Telegram",
 	censor.Local:       "Local",
 	censor.Portal:      "Portal",
+	censor.Transport:   "Transport",
 	services.Streaming: "Streaming",
 	services.AI:        "AI",
 	services.Web:       "Web",

@@ -7,6 +7,7 @@ import (
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
+	"github.com/arngory/cii/internal/route"
 	"github.com/arngory/cii/internal/services"
 )
 
@@ -93,5 +94,33 @@ func TestRegionNotesEdgeCountry(t *testing.T) {
 	}
 	if got := strings.Join(text, " | "); !strings.Contains(got, "ChatGPT says PL (= CDN edge Cloudflare WAW)") {
 		t.Errorf("region parts = %s", got)
+	}
+}
+
+func TestSmallScreens(t *testing.T) {
+	r := Demo("online")
+	r.Route = &route.Report{Method: "icmp", FloorMs: 0.9, Paths: []route.Path{
+		{Target: route.Target{Name: "Telegram DC2", Group: route.Messaging}, RTTms: 30.5, Verdict: route.Distant, Reason: "single-location service, +30 ms away"},
+		{Target: route.Target{Name: "Google", Group: route.Search}, RTTms: 1, Verdict: route.Direct},
+	}}
+	for _, lang := range []string{"en", "ru"} {
+		for _, width := range []int{50, 60, 80} {
+			for _, line := range r.Screen(Style{Unicode: true, Width: width, Lang: lang}, "cii test", []string{"footer"}) {
+				if visibleLen(line) > width {
+					t.Errorf("%s width %d: line too long: %q", lang, width, line)
+				}
+				if strings.Contains(line, "…") {
+					t.Errorf("%s width %d: content clipped: %q", lang, width, line)
+				}
+			}
+		}
+	}
+	narrow := strings.Join(r.Screen(Style{Unicode: true, Width: 50}, "", nil), "\n")
+	if !strings.Contains(narrow, "cc prx VPN Tor hst abu bot") || !strings.Contains(narrow, "ip2location.io  DE") {
+		t.Errorf("narrow factor table:\n%s", narrow)
+	}
+	wide := strings.Join(r.Screen(Style{Unicode: true, Width: 80}, "", nil), "\n")
+	if !strings.Contains(wide, "cc proxy   VPN   Tor  host abuse   bot") {
+		t.Errorf("wide factor table changed:\n%s", wide)
 	}
 }

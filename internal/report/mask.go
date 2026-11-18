@@ -9,10 +9,12 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/arngory/cii/internal/censor"
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 	"github.com/arngory/cii/internal/route"
+	"github.com/arngory/cii/internal/services"
 )
 
 const Hidden = "•••"
@@ -22,6 +24,8 @@ var (
 	asnLike    = regexp.MustCompile(`(?i)\bAS[ -]?\d{1,10}\b`)
 	asnPrefix  = regexp.MustCompile(`^AS\d+\s*`)
 	legacyMask = regexp.MustCompile(`(?i)\b(?:\d{1,3}\.\d{1,3}\.\*\.\*|[0-9a-f]{1,4}:[0-9a-f]{1,4}:\*:\*)`)
+	ownReason  = regexp.MustCompile(`^(?:HTTP \d{3}|marker not found|blocked marker found|rate limited|timeout|no (?:ipv4|ipv6|any) connectivity|Cloudflare challenge, availability not tested)$`)
+	ownFailure = []string{"no such host", "connection refused", "connection reset", "network is unreachable", "no route to host", "certificate", "blocked by policy", "timeout"}
 	nibbleLike = regexp.MustCompile(`(?i)\b(?:[0-9a-f]\.){8,}(?:ip6\.arpa\b)?`)
 	namedNotes = regexp.MustCompile(`\b(VPN) \([^()]+\)|\b(datacenter) [^;,]+`)
 	addrType   = reflect.TypeFor[netip.Addr]()
@@ -97,23 +101,32 @@ func (r *Report) Scrubbed() *Report {
 			}
 		}
 	}
+	out.scrubOwnChecks(r)
+	for i := range out.Censor {
+		if strings.HasPrefix(out.Censor[i].Service, censor.EgressPrefix) && out.Censor[i].Detail != "" {
+			out.Censor[i].Detail = Hidden
+		}
+	}
 	if out.Route != nil {
 		var own []string
 		n := 0
 		for i := range out.Route.Paths {
-			path := &out.Route.Paths[i]
-			t := &path.Target
-			if t.Group != route.Custom {
-				continue
+			orig, path := r.Route.Paths[i], &out.Route.Paths[i]
+			reason, failure := orig.Reason, orig.Error
+			if len(orig.Transit) > 0 {
+				reason = strings.Replace(reason, "via "+strings.Join(orig.Transit, ", "), "via a transit network", 1)
 			}
-			n++
-			own = append(own, t.Host)
-			if t.Name == t.Host {
-				t.Name = fmt.Sprintf("target %d", n)
+			if t := &path.Target; t.Group == route.Custom {
+				n++
+				own = append(own, t.Host)
+				if t.Name == t.Host {
+					t.Name = fmt.Sprintf("target %d", n)
+				}
+				reason = strings.ReplaceAll(reason, t.Host, Hidden)
+				failure = strings.ReplaceAll(failure, t.Host, Hidden)
+				t.Host, t.Expect = Hidden, 0
 			}
-			path.Reason = sc.text(strings.ReplaceAll(r.Route.Paths[i].Reason, t.Host, Hidden), answerText)
-			path.Error = sc.text(strings.ReplaceAll(r.Route.Paths[i].Error, t.Host, Hidden), answerText)
-			t.Host, t.Expect = Hidden, 0
+			path.Reason, path.Error = sc.text(reason, answerText), sc.text(failure, answerText)
 		}
 		slices.SortFunc(own, func(a, b string) int { return len(b) - len(a) })
 		for i := range out.Network {
@@ -126,6 +139,88 @@ func (r *Report) Scrubbed() *Report {
 		}
 	}
 	return out
+}
+
+func ownCheckHosts(r *Report) []string {
+	var own []string
+	for _, h := range r.hosts() {
+		for _, res := range h.Services {
+			if host := strings.ToLower(res.Host); res.Custom && host != "" && !slices.Contains(own, host) {
+				own = append(own, host)
+			}
+		}
+	}
+	slices.SortFunc(own, func(a, b string) int { return len(b) - len(a) })
+	return own
+}
+
+func ownCheckReason(reason string) string {
+	if reason == "" || ownReason.MatchString(reason) {
+		return reason
+	}
+	for _, kind := range ownFailure {
+		if strings.Contains(reason, kind) {
+			return kind
+		}
+	}
+	return "request failed"
+}
+
+func hostLike(s string) bool {
+	return !strings.ContainsFunc(s, unicode.IsSpace) && strings.ContainsAny(s, ".:")
+}
+
+func (out *Report) scrubOwnChecks(r *Report) {
+	own := ownCheckHosts(r)
+	hide := func(s string) string { return s }
+	if len(own) > 0 {
+		quoted := make([]string, len(own))
+		for i, h := range own {
+			quoted[i] = regexp.QuoteMeta(h)
+		}
+		anyCase := regexp.MustCompile(`(?i)` + strings.Join(quoted, "|"))
+		hide = func(s string) string { return anyCase.ReplaceAllLiteralString(s, Hidden) }
+	}
+	renamed := map[string]string{}
+	origin := r.hosts()
+	for hi, h := range out.hosts() {
+		for i := range h.Services {
+			orig, res := origin[hi].Services[i], &h.Services[i]
+			if !orig.Custom {
+				continue
+			}
+			if hostLike(orig.Service) || hide(orig.Service) != orig.Service {
+				if renamed[orig.Service] == "" {
+					renamed[orig.Service] = fmt.Sprintf("check %d", len(renamed)+1)
+				}
+				res.Service = renamed[orig.Service]
+			}
+			res.Reason, res.Detail = ownCheckReason(orig.Reason), ""
+			if title, ok := services.OwnGroup(orig.Group); ok && (hostLike(title) || hide(title) != title) {
+				res.Group = services.Custom
+			}
+			if res.Host != "" {
+				res.Host = Hidden
+			}
+		}
+	}
+	for i := range out.Network {
+		e := &out.Network[i]
+		if e.Module != services.Module {
+			continue
+		}
+		if slices.Contains(own, strings.ToLower(e.Host)) {
+			e.Host = Hidden
+		}
+		purposes := strings.Split(e.Purpose, "; ")
+		for k, p := range purposes {
+			if name, ok := strings.CutPrefix(p, services.Module+": "); ok && renamed[name] != "" {
+				p = services.Module + ": " + renamed[name]
+			}
+			purposes[k] = hide(p)
+		}
+		e.Purpose = strings.Join(purposes, "; ")
+	}
 }
 
 func (r *Report) hosts() []*Host {

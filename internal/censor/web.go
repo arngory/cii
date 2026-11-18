@@ -72,6 +72,8 @@ type outcome struct {
 	Location string
 	Err      error
 	Phase    phase
+	Host     string
+	Port     string
 }
 
 func sameOrSub(host, base string) bool {
@@ -130,7 +132,7 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 	ctx, cancel := r.timeoutCtx(ctx)
 	defer cancel()
 	var mu sync.Mutex
-	ph := phaseNone
+	ph, last, lastPort := phaseNone, "", ""
 	set := func(p phase, reset bool) {
 		mu.Lock()
 		if reset || p > ph {
@@ -139,7 +141,16 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 		mu.Unlock()
 	}
 	trace := &httptrace.ClientTrace{
-		GetConn:  func(string) { set(phaseConnect, true) },
+		GetConn: func(hostPort string) {
+			set(phaseConnect, true)
+			host, port, err := net.SplitHostPort(hostPort)
+			if err != nil {
+				host, port = hostPort, ""
+			}
+			mu.Lock()
+			last, lastPort = strings.Trim(strings.TrimSuffix(strings.ToLower(host), "."), "[]"), port
+			mu.Unlock()
+		},
 		DNSStart: func(httptrace.DNSStartInfo) { set(phaseDNS, true) },
 		DNSDone: func(i httptrace.DNSDoneInfo) {
 			if i.Err == nil {
@@ -175,7 +186,7 @@ func (r *runner) fetchOnce(ctx context.Context, scheme string, t target, follow 
 	}
 	resp, err := c.Do(req)
 	mu.Lock()
-	o := outcome{Phase: ph}
+	o := outcome{Phase: ph, Host: last, Port: lastPort}
 	mu.Unlock()
 	if err != nil {
 		o.Err = err
@@ -332,17 +343,78 @@ func (r *runner) checkDomain(ctx context.Context, group probe.Group, t target) [
 			Reason: "blocked by IP: TCP 80 and 443 unreachable", Detail: ip}}
 	}
 	var out []probe.Result
-	add := func(proto string, o outcome) {
+	addr, _ := netip.ParseAddr(ip)
+	add := func(proto string, o outcome, cut bool, control func(context.Context, string, netip.Addr, string) bool) {
 		res := classifyHTTP(t.Host, o)
+		if cut && !viaProxy && addr.IsValid() && res.Status == probe.No && o.Host == t.Host && o.Port != "" {
+			release := r.acquire()
+			answered := control(ctx, t.Host, addr, o.Port)
+			release()
+			res.Reason = keyedBlock(proto, describe(o.Err), res.Reason, answered)
+		}
 		res.Group, res.Service = group, t.Host+" "+proto
 		res.Detail = joinDetail(ip, res.Detail)
 		out = append(out, res)
 	}
 	if doHTTP {
-		add("HTTP", httpO)
+		add("HTTP", httpO, httpO.Err != nil && httpO.Phase >= phaseRequest, r.httpByAddress)
 	}
 	if doHTTPS {
-		add("HTTPS", httpsO)
+		add("HTTPS", httpsO, httpsO.Err != nil && httpsO.Phase == phaseTLS && !isX509(httpsO.Err), r.tlsWithoutName)
 	}
 	return out
+}
+
+func keyedBlock(proto, why, reason string, answered bool) string {
+	switch {
+	case answered && proto == "HTTPS":
+		return "blocked by SNI: TLS handshake " + why + ", while the same address answers a handshake without the name"
+	case answered:
+		return "blocked by Host header: " + why + " after request, while the same address answers a request without the name"
+	case proto == "HTTPS":
+		return reason + "; the address does not answer a handshake without the name either"
+	}
+	return reason + "; the address does not answer a request without the name either"
+}
+
+func (r *runner) tlsWithoutName(ctx context.Context, host string, ip netip.Addr, port string) bool {
+	ctx, cancel := r.timeoutCtx(ctx)
+	defer cancel()
+	c, err := r.n.DialAddr(ctx, Module, "tcp", host, ip, port)
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	if dl, ok := ctx.Deadline(); ok {
+		c.SetDeadline(dl)
+	}
+	err = tls.Client(c, &tls.Config{InsecureSkipVerify: true}).HandshakeContext(ctx)
+	var remote *net.OpError
+	return err == nil || errors.As(err, &remote) && remote.Op == "remote error"
+}
+
+func (r *runner) httpByAddress(ctx context.Context, host string, ip netip.Addr, port string) bool {
+	ctx, cancel := r.timeoutCtx(ctx)
+	defer cancel()
+	c, err := r.n.DialAddr(ctx, Module, "tcp", host, ip, port)
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	if dl, ok := ctx.Deadline(); ok {
+		c.SetDeadline(dl)
+	}
+	name := ip.String()
+	if ip.Is6() {
+		name = "[" + name + "]"
+	}
+	if port != "80" {
+		name += ":" + port
+	}
+	if _, err := fmt.Fprintf(c, "GET / HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: */*\r\nConnection: close\r\n\r\n", name, r.n.Options().UserAgent); err != nil {
+		return false
+	}
+	head := make([]byte, 5)
+	_, err = io.ReadFull(c, head)
+	return err == nil && string(head) == "HTTP/"
 }

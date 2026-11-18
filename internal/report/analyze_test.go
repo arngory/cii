@@ -1,6 +1,9 @@
 package report
 
 import (
+	"fmt"
+	"github.com/arngory/cii/internal/netx"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -212,5 +215,183 @@ func TestWritePrometheus(t *testing.T) {
 	r.Scrubbed().WritePrometheus(&b)
 	if strings.Contains(b.String(), "203.0.113") || strings.Contains(b.String(), "3320") {
 		t.Errorf("masked metrics leak:\n%s", b.String())
+	}
+}
+
+func TestAnalyzeResolverExit(t *testing.T) {
+	r := Demo("online")
+	r.Bench = nil
+	exit := func(country, reason string) probe.Result {
+		return probe.Result{Group: censor.DNS, Service: censor.EgressPrefix + " (Google)", Status: probe.Yes, Country: country,
+			Reason: reason, Detail: "198.51.100.53 AS64500 Example DNS"}
+	}
+	if same := analysed(t, r, "en"); strings.Contains(same, "resolver") {
+		t.Errorf("a resolver in the address country was reported:\n%s", same)
+	}
+	r.Censor = append(r.Censor, exit("NL", "the resolver that asks on your behalf; it passes the client subnet on (ECS)"))
+	abroad := analysed(t, r, "en")
+	for _, want := range []string{
+		"info | DNS queries leave through a resolver in NL, while the address is in DE | Behind a VPN or proxy this is a DNS leak",
+		"info | The resolver passes your subnet on to name servers (ECS)",
+	} {
+		if !strings.Contains(abroad, want) {
+			t.Errorf("%q missing:\n%s", want, abroad)
+		}
+	}
+	r.Censor = append(r.Censor, probe.Result{Group: censor.Local, Service: "Default route", Status: probe.Partial, Reason: "through tunnel wg0"})
+	if tunnel := analysed(t, r, "ru"); !strings.Contains(tunnel, "warn | DNS-запросы уходят через резолвер в NL, а адрес находится в DE") {
+		t.Errorf("a leak behind a tunnel should be a warning:\n%s", tunnel)
+	}
+	screen := strings.Join(r.Screen(Style{Unicode: true, Width: 220}, "", nil), "\n")
+	for _, want := range []string{"DNS exit  DE 203.0.113.53 AS3320 Deutsche Telekom", "DNS exit  NL 198.51.100.53 AS64500 Example DNS"} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("%q missing on screen:\n%s", want, screen)
+		}
+	}
+	masked := strings.Join(r.Scrubbed().Screen(Style{Unicode: true, Width: 220}, "", nil), "\n")
+	var js strings.Builder
+	r.Scrubbed().WriteJSON(&js)
+	for _, leak := range []string{"198.51.100", "203.0.113", "Example DNS", "64500", "Telekom"} {
+		if strings.Contains(masked, leak) || strings.Contains(js.String(), leak) {
+			t.Errorf("masked report leaks %q", leak)
+		}
+	}
+	if !strings.Contains(masked, "DNS exit  DE •••") || !strings.Contains(masked, "DNS exit  NL •••") {
+		t.Errorf("masked screen lost the resolver country:\n%s", masked)
+	}
+}
+
+func TestResolverExitLines(t *testing.T) {
+	exit := func(service, country, detail string) probe.Result {
+		return probe.Result{Group: censor.DNS, Service: censor.EgressPrefix + service, Status: probe.Yes, Country: country, Detail: detail}
+	}
+	for name, c := range map[string]struct {
+		rs   []probe.Result
+		want []string
+	}{
+		"bare addresses": {[]probe.Result{exit(" (Akamai)", "", "203.0.113.53"), exit(" (Google)", "", "203.0.113.5")}, []string{"203.0.113.53", "203.0.113.5"}},
+		"same resolver":  {[]probe.Result{exit(" (Akamai)", "DE", "203.0.113.53 AS64500 Example"), exit(" (Google)", "DE", "203.0.113.53 AS64500 Example")}, []string{"DE 203.0.113.53 AS64500 Example"}},
+		"client subnet": {[]probe.Result{exit(" (Akamai)", "", "203.0.113.53"), exit(" (Google)", "", "203.0.113.53; client subnet 192.0.2.0/24")},
+			[]string{"203.0.113.53"}},
+		"not answered": {[]probe.Result{{Group: censor.DNS, Service: censor.EgressPrefix + " (Akamai)", Status: probe.Unknown, Detail: "198.18.0.7"}}, nil},
+	} {
+		if got := resolverExits(c.rs); !slices.Equal(got, c.want) {
+			t.Errorf("%s = %q, want %q", name, got, c.want)
+		}
+	}
+}
+
+func TestAnalyzeTransport(t *testing.T) {
+	r := Demo("online")
+	r.Bench = nil
+	r.Censor = append(r.Censor,
+		probe.Result{Group: censor.Transport, Service: "NAT (STUN)", Status: probe.Partial, Detail: "100.64.3.9:40000 → 198.51.100.9:51000, 198.51.100.9:51001",
+			Reason: "symmetric NAT: each destination gets its own mapping, peer-to-peer needs a relay; carrier-grade NAT (local address from 100.64.0.0/10)"},
+		probe.Result{Group: censor.Transport, Service: "QUIC www.example.org", Status: probe.No, Reason: "no QUIC answer on UDP 443: blocked, filtered or not offered"},
+		probe.Result{Group: censor.Transport, Service: "QUIC www.example.net", Status: probe.Yes},
+		probe.Result{Group: censor.Local, Service: "Interface MTU", Status: probe.Yes, Reason: "1420 on wg0"},
+		probe.Result{Group: censor.DPI, Service: "blocked.example HTTPS", Status: probe.No,
+			Reason: "blocked by SNI: TLS handshake connection reset, while the same address answers a handshake without the name"},
+		probe.Result{Group: censor.DPI, Service: "blocked.example HTTP", Status: probe.No,
+			Reason: "blocked by Host header: connection reset after request, while the same address answers a request without the name"})
+	out := analysed(t, r, "en")
+	for _, want := range []string{
+		"info | NAT is symmetric |", "info | Carrier-grade NAT: the public address is shared with other subscribers |",
+		"info | UDP leaves through another address than HTTP |", "info | QUIC (HTTP/3) does not get through: www.example.org |",
+		"info | Interface MTU is 1420 on wg0 |", "warn | Blocked by name (SNI or Host), not by address: blocked.example |",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%q missing:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "www.example.net") || strings.Count(out, "blocked.example") != 2 {
+		t.Errorf("a working QUIC target or a repeated host was reported:\n%s", out)
+	}
+	r.Censor = []probe.Result{
+		{Group: censor.Transport, Service: "NAT (STUN)", Status: probe.No, Reason: "no answer from STUN servers: UDP is blocked or filtered"},
+		{Group: censor.Local, Service: "Interface MTU", Status: probe.Yes, Reason: "1500 on eth0"},
+		{Group: censor.Local, Service: "Interface MTU", Status: probe.Yes, Reason: "9000 on eth1"},
+	}
+	ru := analysed(t, r, "ru")
+	if !strings.Contains(ru, "warn | UDP не проходит: не ответил ни один STUN-сервер") || strings.Contains(ru, "MTU") {
+		t.Errorf("blocked UDP or a full-size MTU:\n%s", ru)
+	}
+	screen := strings.Join(r.Screen(Style{Unicode: true, Width: 220}, "", nil), "\n")
+	if !strings.Contains(screen, "✗ Transport: NAT (STUN) no answer from STUN servers") {
+		t.Errorf("transport finding on screen:\n%s", screen)
+	}
+	r.Censor = []probe.Result{{Group: censor.Transport, Service: "NAT (STUN)", Status: probe.Yes, Detail: "192.168.1.5:40000 → 203.0.113.7:51000", Reason: "NAT with one mapping for every destination: peer-to-peer can work"}}
+	if same := analysed(t, r, "en"); strings.Contains(same, "UDP") || strings.Contains(same, "NAT") {
+		t.Errorf("an ordinary NAT with the same address was reported:\n%s", same)
+	}
+	var js strings.Builder
+	r.Scrubbed().WriteJSON(&js)
+	if strings.Contains(js.String(), "192.168.1.5") || strings.Contains(js.String(), "51000") {
+		t.Errorf("masked report keeps the NAT mapping:\n%s", js.String())
+	}
+}
+
+func TestUnreachableStack(t *testing.T) {
+	stack := func(failed, ok int) *Host {
+		h := &Host{Address: "2001:db8::7"}
+		var rs []probe.Result
+		for i := range failed {
+			rs = append(rs, probe.Result{Group: services.AI, Service: fmt.Sprintf("API %d", i), Status: probe.Failed, Reason: netx.ReasonUnreachable})
+		}
+		for i := range ok {
+			rs = append(rs, probe.Result{Group: services.Web, Service: fmt.Sprintf("Site %d", i), Status: probe.Yes})
+		}
+		rs = append(rs, probe.Result{Group: risk.Network, Service: "Known ranges", Status: probe.Yes},
+			probe.Result{Group: services.Web, Service: "Slow", Status: probe.Failed, Reason: "timeout"})
+		h.SetServices(rs)
+		return h
+	}
+	for name, c := range map[string]struct {
+		host   *Host
+		screen string
+		find   string
+	}{
+		"none":    {stack(12, 0), "Reach     ⚠ no route to 12 of 13 destinations", "warn | IPv6 is only partly routed: no route to 12 of 13 destinations"},
+		"partial": {stack(8, 20), "Reach     ⚠ no route to 8 of 29 destinations", "warn | IPv6 is only partly routed: no route to 8 of 29 destinations"},
+		"few":     {stack(4, 0), "", ""},
+		"rare":    {stack(6, 40), "", ""},
+	} {
+		r := &Report{Tool: Tool{Name: "cii"}, IPv4: &Host{Address: "203.0.113.7"}, IPv6: c.host}
+		screen := strings.Join(r.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
+		out := analysed(t, r, "en")
+		if c.screen == "" {
+			if strings.Contains(screen, "Reach") || strings.Contains(out, "routed") || strings.Contains(out, "no working route") {
+				t.Errorf("%s: reported\n%s\n%s", name, screen, out)
+			}
+			continue
+		}
+		if !strings.Contains(screen, c.screen) {
+			t.Errorf("%s: %q missing\n%s", name, c.screen, screen)
+		}
+		if !strings.Contains(out, c.find) || strings.Contains(out, "IPv6: IPv6") {
+			t.Errorf("%s: %q missing\n%s", name, c.find, out)
+		}
+	}
+	all := stack(9, 0)
+	all.Services = all.Services[:9]
+	all.SetServices(all.Services)
+	r := &Report{Tool: Tool{Name: "cii"}, IPv6: all}
+	if out := analysed(t, r, "en"); !strings.Contains(out, "alert | IPv6 has an address but no working route: all 9 checks failed") {
+		t.Errorf("no route at all:\n%s", out)
+	}
+	if ru := analysed(t, r, "ru"); !strings.Contains(ru, "IPv6: адрес есть, но рабочего маршрута нет — все 9 проверок") || strings.Contains(ru, "IPv6: IPv6") {
+		t.Errorf("russian:\n%s", ru)
+	}
+	screen := strings.Join(r.Screen(Style{Unicode: true, Width: 200, Lang: "ru"}, "", nil), "\n")
+	if !strings.Contains(screen, "Связь     ⚠ нет маршрута ни к одному из 9 адресатов") {
+		t.Errorf("russian screen:\n%s", screen)
+	}
+}
+
+func TestLeadingNumber(t *testing.T) {
+	for in, want := range map[string]int{"1420 on wg0": 1420, "1500 on eth0": 1500, "9000": 9000, "on eth0": math.MaxInt, "": math.MaxInt, "0 on lo": math.MaxInt, "-5 x": math.MaxInt} {
+		if got := leadingNumber(in); got != want {
+			t.Errorf("leadingNumber(%q) = %d, want %d", in, got, want)
+		}
 	}
 }

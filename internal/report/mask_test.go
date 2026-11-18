@@ -12,6 +12,7 @@ import (
 	"github.com/arngory/cii/internal/region"
 	"github.com/arngory/cii/internal/risk"
 	"github.com/arngory/cii/internal/route"
+	"github.com/arngory/cii/internal/services"
 )
 
 func maskedSample() *Report {
@@ -121,12 +122,19 @@ func TestScrubbedRouteOnly(t *testing.T) {
 	}}}
 	var js strings.Builder
 	r.Scrubbed().WriteJSON(&js)
+	if !strings.Contains(js.String(), `"reason": "via a transit network"`) {
+		t.Errorf("masked transit reason should read as plain text:\n%s", js.String())
+	}
 	for _, leak := range []string{"Arelion", "Example Access", "198.51.100", "1299", "64500"} {
 		if strings.Contains(js.String(), leak) {
 			t.Errorf("route-only masked report leaks %q", leak)
 		}
 	}
 	r.Route.Paths = append(r.Route.Paths,
+		route.Path{Target: route.Target{Name: "office", Host: "office.example.net", Group: route.Custom}, Verdict: route.Transit,
+			Reason:  "via AS1299 Arelion, AS3356 Lumen, AS6453 Tata Communications; served from AS64999, not AS64998",
+			Transit: []string{"AS1299 Arelion", "AS3356 Lumen", "AS6453 Tata Communications"},
+			Hops:    []route.Hop{{TTL: 4, ASN: 3356, Org: "Level 3 Parent, LLC"}}},
 		route.Path{Target: route.Target{Name: "home", Host: "vps.example.org", Expect: 64512, Group: route.Custom}},
 		route.Path{Target: route.Target{Name: "example.org", Host: "example.org", Group: route.Custom}},
 		route.Path{Target: route.Target{Name: "192.0.2.77", Host: "192.0.2.77", Group: route.Custom}},
@@ -146,17 +154,80 @@ func TestScrubbedRouteOnly(t *testing.T) {
 	}
 	js.Reset()
 	r.Scrubbed().WriteJSON(&js)
-	for _, leak := range []string{"vps.example.org", "192.0.2.77", "nx.example.org", "192.0.2.53", "example.org", "64512", "nx.", "box.", ".example", "nip.io"} {
+	for _, leak := range []string{"vps.example.org", "192.0.2.77", "nx.example.org", "192.0.2.53", "example.org", "64512", "nx.", "box.", ".example", "nip.io", "Lumen", "Tata", "Level 3", "64999", "64998", "office.example"} {
 		if strings.Contains(js.String(), leak) {
 			t.Errorf("own route target leaks %q", leak)
 		}
 	}
-	for _, keep := range []string{`"name": "home"`, `"name": "target 3"`, "www.google.com"} {
+	for _, keep := range []string{`"name": "home"`, `"name": "target 4"`, "www.google.com", `"reason": "via a transit network; served from •••, not •••"`} {
 		if !strings.Contains(js.String(), keep) {
 			t.Errorf("masked route report lost %s", keep)
 		}
 	}
 	if !strings.Contains(js.String(), `"name": "Google"`) {
 		t.Errorf("target name lost:\n%s", js.String())
+	}
+}
+
+func TestScrubbedOwnServiceChecks(t *testing.T) {
+	r := New("full")
+	h := &Host{Address: "203.0.113.7"}
+	own := func(group probe.Group, name, host string, status probe.Status, reason string) probe.Result {
+		return probe.Result{Group: group, Service: name, Custom: true, Host: host, Status: status, Reason: reason}
+	}
+	h.SetServices([]probe.Result{
+		own(services.Custom, "wiki.example.org", "wiki.example.org", probe.Failed, "dial tcp: lookup wiki.example.org: no such host"),
+		own("custom:Work", "Shop", "shop.example.org", probe.No, "HTTP 403"),
+		own(services.Custom, "192.0.2.10", "192.0.2.10", probe.Failed, "no ipv4 connectivity"),
+		own(services.Custom, "Odd", "wiki.example.org", probe.Failed, "unexpected reply from gateway-7 at site alpha"),
+		own(services.Custom, "Bare", "wiki.example.org", probe.Failed, "x509: certificate is valid for localhost, router-backup, not wiki.example.org"),
+		own(services.Custom, "shop.example.org mirror", "shop.example.org", probe.Yes, ""),
+		own(services.Custom, "Portal", "portal.example.net", probe.Failed, "lookup Portal.Example.NET: no such host"),
+		own(services.Custom, "intra.corp.example", "198.51.100.5", probe.Yes, ""),
+		own(services.Custom, "xn--b1aajm.example", "xn--b1aajm.example", probe.Failed, "lookup xn--b1aajm.example: no such host"),
+		own(services.Custom, "Films", "www.netflix.com", probe.Yes, ""),
+		own(services.Custom, "Cert", "wiki.example.org", probe.Failed, "tls: failed to verify certificate: x509: certificate is valid for *.Corp.Example, corp.example, not wiki.example.org"),
+		own("custom:files.corp.example", "Files", "files.corp.example", probe.Yes, ""),
+		own("custom:Shop.Example.org mirrors", "Mirror", "shop.example.org", probe.Yes, ""),
+		{Group: services.Streaming, Service: "Netflix", Status: probe.Yes},
+		{Group: services.Streaming, Service: "Prime Video", Status: probe.Yes},
+	})
+	r.IPv4 = h
+	v6 := &Host{Address: "2001:db8::7"}
+	v6.SetServices([]probe.Result{own(services.Custom, "wiki.example.org", "wiki.example.org", probe.Yes, "")})
+	r.IPv6 = v6
+	r.Network = []ledger.Entry{
+		{Module: "services", Host: "wiki.example.org", Proto: "https", Purpose: "services: wiki.example.org"},
+		{Module: "services", Host: "shop.example.org", Proto: "https", Purpose: "services: Shop; services: shop.example.org mirror"},
+		{Module: "services", Host: "www.netflix.com", Proto: "https", Purpose: "services: Netflix; services: Films"},
+		{Module: "services", Host: "www.primevideo.com", Proto: "https", Purpose: "services: Prime Video"},
+		{Module: "services", Host: "portal.example.net", Proto: "https", Purpose: "services: Portal"},
+		{Module: "services", Host: "198.51.100.5", Proto: "https", Purpose: "services: intra.corp.example"},
+		{Module: "services", Host: "xn--b1aajm.example", Proto: "dns", Purpose: "services: xn--b1aajm.example"},
+		{Module: "region", Host: "wiki.example.org", Proto: "https", Purpose: "region: other"},
+	}
+	m := r.Scrubbed()
+	var js strings.Builder
+	if err := m.WriteJSON(&js); err != nil {
+		t.Fatal(err)
+	}
+	out := strings.ReplaceAll(js.String(), `"host": "wiki.example.org"`, "")
+	for _, leak := range []string{"wiki.example", "shop.example", "192.0.2.10", "portal.example", "corp.example", "198.51.100", "xn--", "netflix.com", "localhost", "router", "gateway", "alpha"} {
+		if strings.Contains(strings.ToLower(out), leak) {
+			t.Errorf("own service check leaks %q:\n%s", leak, out)
+		}
+	}
+	for _, keep := range []string{`"service": "check 1"`, `"service": "check 2"`, `"service": "check 3"`, `"service": "check 4"`, `"service": "check 5"`,
+		`"service": "Shop"`, `"service": "Films"`, `"service": "Files"`, `"service": "Mirror"`, `"group": "custom:Work"`, `"service": "Netflix"`, `"reason": "HTTP 403"`, `"reason": "certificate"`, `"reason": "no such host"`, `"reason": "no ipv4 connectivity"`, `"reason": "request failed"`,
+		"www.primevideo.com", `"purpose": "services: Shop; services: check 3"`, `"purpose": "services: check 4"`, `"purpose": "region: other"`} {
+		if !strings.Contains(out, keep) {
+			t.Errorf("masked report lost %s:\n%s", keep, out)
+		}
+	}
+	if m.IPv6.Services[0].Service != m.IPv4.Services[0].Service || m.IPv6.Services[0].Host != Hidden {
+		t.Errorf("one check got two names or kept its host: %+v and %+v", m.IPv4.Services[0], m.IPv6.Services[0])
+	}
+	if r.IPv4.Services[0].Service != "wiki.example.org" || r.IPv4.Services[0].Host != "wiki.example.org" || r.Network[0].Host != "wiki.example.org" {
+		t.Errorf("Scrubbed modified the original report")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -26,7 +27,7 @@ const (
 	Telegram probe.Group = "telegram"
 )
 
-var Modes = []string{"dns", "telegram", "dpi", "geoblock", "portal"}
+var Modes = []string{"dns", "telegram", "dpi", "geoblock", "portal", "transport"}
 
 type Options struct {
 	Modes       []string
@@ -34,6 +35,7 @@ type Options struct {
 	Domain      string
 	Protocol    string
 	Retries     int
+	Locate      func(netip.Addr) (country, network string)
 }
 
 func ValidMode(m string) bool {
@@ -47,7 +49,7 @@ func canonicalMode(m string) ([]string, bool) {
 		return Modes, true
 	case "tg":
 		return []string{"telegram"}, true
-	case "dns", "telegram", "dpi", "geoblock", "portal":
+	case "dns", "telegram", "dpi", "geoblock", "portal", "transport":
 		return []string{m}, true
 	}
 	return nil, false
@@ -75,7 +77,7 @@ func selectedModes(opts Options) (map[string]bool, []string) {
 	return set, bad
 }
 
-var modeGroups = map[string]probe.Group{"dns": DNS, "telegram": Telegram, "dpi": DPI, "geoblock": Geoblock, "portal": Portal}
+var modeGroups = map[string]probe.Group{"dns": DNS, "telegram": Telegram, "dpi": DPI, "geoblock": Geoblock, "portal": Portal, "transport": Transport}
 
 func Placeholders(opts Options) []probe.Result {
 	modes, _ := selectedModes(opts)
@@ -167,12 +169,22 @@ func Rules(opts Options) []netx.Rule {
 			add(openDNSServer[fam], "port 53 interception check (TXT which.opendns.com)")
 			add(googleServer[fam], "port 53 interception check (CHAOS id.server)")
 		}
+		add(akamaiWhoami, "resolver exit check via system resolver (A whoami)")
+		add(googleWhoami, "resolver exit check via system resolver (TXT whoami)")
 	}
 	if modes["portal"] {
 		for _, e := range portalEndpoints {
 			if u, err := url.Parse(e.URL); err == nil {
 				add(u.Hostname(), "connectivity check "+e.Name)
 			}
+		}
+	}
+	if modes["transport"] {
+		for _, s := range stunServers {
+			add(s.Host, "NAT type check (STUN binding request)")
+		}
+		for _, host := range quicTargets {
+			add(host, "QUIC reachability check (handshake on UDP "+quicPort+")")
 		}
 	}
 	if modes["telegram"] {
@@ -234,7 +246,7 @@ func Run(ctx context.Context, n *netx.Net, opts Options) []probe.Result {
 	for _, m := range bad {
 		out = append(out, probe.Result{Service: "mode " + m, Status: probe.Failed, Reason: "unknown mode"})
 	}
-	parts := make([][]probe.Result, 4)
+	parts := make([][]probe.Result, 5)
 	var wg sync.WaitGroup
 	if modes["dns"] {
 		wg.Go(func() { parts[0] = r.dns(ctx) })
@@ -244,6 +256,9 @@ func Run(ctx context.Context, n *netx.Net, opts Options) []probe.Result {
 	}
 	if modes["portal"] {
 		wg.Go(func() { parts[3] = r.portal(ctx) })
+	}
+	if modes["transport"] {
+		wg.Go(func() { parts[4] = r.transport(ctx) })
 	}
 	lists, err := webLists(opts, modes)
 	if err != nil {
@@ -279,14 +294,8 @@ func describe(err error) string {
 		return "disabled while a proxy is in effect"
 	case netx.AsBlocked(err) != nil:
 		return "blocked by policy: " + netx.AsBlocked(err).Host
-	case netx.IsTimeout(err):
-		return "timeout"
-	case netx.IsRefused(err):
-		return "connection refused"
-	case netx.IsReset(err):
-		return "connection reset"
-	case netx.IsUnreachable(err):
-		return "network unreachable"
+	case netx.Short(err) != "":
+		return netx.Short(err)
 	case isX509(err):
 		return "invalid certificate"
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):

@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="536" height="1040" viewBox="0 0 536 1040">
+<rect x="0" y="0" width="536" height="1040" rx="8" ry="8" fill="#0d1117"/>
+<g font-family="monospace" font-size="14" fill="#e6edf3" xml:space="preserve" style="white-space:pre;font-variant-ligatures:none">
+<text x="16.0" y="29">cii</text><text x="49.6" y="29">demo</text>
+<text x="41.2" y="47" font-weight="bold">IP</text><text x="66.4" y="47" font-weight="bold">quality</text><text x="133.6" y="47" font-weight="bold">·</text><text x="150.4" y="47" font-weight="bold">IPv4</text>
+<text x="32.8" y="65" fill-opacity="0.6">Address</text><text x="116.8" y="65" fill="#3fb950">203.0.113.7</text>
+<text x="32.8" y="83" fill-opacity="0.6">ASN</text><text x="116.8" y="83">AS3320</text><text x="175.6" y="83">Deutsche</text><text x="251.2" y="83">Telekom</text><text x="318.4" y="83">AG</text>
+<text x="32.8" y="101" fill-opacity="0.6">Place</text><text x="116.8" y="101">DE</text><text x="142.0" y="101">Germany</text>
+<text x="32.8" y="119" fill-opacity="0.6">Route</text><text x="116.8" y="119">203.0.113.0/24</text><text x="242.8" y="119">·</text><text x="259.6" y="119">AS3320</text><text x="318.4" y="119">DTAG</text>
+<text x="32.8" y="137" fill-opacity="0.6">PTR</text><text x="116.8" y="137">p203-0-113-7.dip0.example.net</text>
+<text x="32.8" y="155" fill-opacity="0.6">Registry</text><text x="116.8" y="155">DE</text><text x="150.4" y="155" fill="#3fb950">✓</text><text x="167.2" y="155" fill="#3fb950">geo-consistent</text>
+
+<text x="32.8" y="191" font-weight="bold">Type</text>
+<text x="167.2" y="209" fill-opacity="0.6">usage</text><text x="226.0" y="209" fill-opacity="0.6">company</text>
+<text x="32.8" y="227">proxycheck.io</text><rect x="158.8" y="214" width="50.4" height="18" fill="#2ea043"/><text x="167.2" y="227" fill="#0d1117">ISP</text><text x="226.0" y="227" fill-opacity="0.6">—</text>
+<text x="32.8" y="245">ipinfo.io*</text><rect x="158.8" y="232" width="50.4" height="18" fill="#2ea043"/><text x="167.2" y="245" fill="#0d1117">ISP</text><rect x="217.6" y="232" width="50.4" height="18" fill="#2ea043"/><text x="226.0" y="245" fill="#0d1117">ISP</text>
+
+<text x="32.8" y="281" font-weight="bold">Score</text>
+<text x="32.8" y="299">ipquery.io</text><text x="175.6" y="299">0</text><text x="242.8" y="299" fill="#3fb950">very</text><text x="284.8" y="299" fill="#3fb950">low</text>
+<text x="32.8" y="317">proxycheck.io</text><text x="175.6" y="317">0</text><text x="242.8" y="317" fill="#3fb950">very</text><text x="284.8" y="317" fill="#3fb950">low</text>
+
+<text x="32.8" y="353" font-weight="bold">Factors</text>
+<text x="167.2" y="371" fill-opacity="0.6">cc</text><text x="192.4" y="371" fill-opacity="0.6">proxy</text><text x="259.6" y="371" fill-opacity="0.6">VPN</text><text x="310.0" y="371" fill-opacity="0.6">Tor</text><text x="352.0" y="371" fill-opacity="0.6">host</text><text x="394.0" y="371" fill-opacity="0.6">abuse</text><text x="461.2" y="371" fill-opacity="0.6">bot</text>
+<text x="32.8" y="389">ipquery.io</text><text x="167.2" y="389" fill-opacity="0.6">DE</text><text x="226.0" y="389" fill="#3fb950">✓</text><text x="276.4" y="389" fill="#3fb950">✓</text><text x="326.8" y="389" fill="#3fb950">✓</text><text x="377.2" y="389" fill="#3fb950">✓</text><text x="427.6" y="389" fill-opacity="0.6">·</text><text x="478.0" y="389" fill-opacity="0.6">·</text>
+<text x="32.8" y="407">ip-api.com</text><text x="167.2" y="407" fill-opacity="0.6">DE</text><text x="226.0" y="407" fill="#3fb950">✓</text><text x="276.4" y="407" fill-opacity="0.6">·</text><text x="326.8" y="407" fill-opacity="0.6">·</text><text x="377.2" y="407" fill="#3fb950">✓</text><text x="427.6" y="407" fill-opacity="0.6">·</text><text x="478.0" y="407" fill-opacity="0.6">·</text>
+<text x="32.8" y="425">ip2location.io</text><text x="167.2" y="425" fill-opacity="0.6">DE</text><text x="226.0" y="425" fill="#3fb950">✓</text><text x="276.4" y="425" fill-opacity="0.6">·</text><text x="326.8" y="425" fill-opacity="0.6">·</text><text x="377.2" y="425" fill-opacity="0.6">·</text><text x="427.6" y="425" fill-opacity="0.6">·</text><text x="478.0" y="425" fill-opacity="0.6">·</text>
+<text x="32.8" y="443">proxycheck.io</text><text x="167.2" y="443" fill-opacity="0.6">DE</text><text x="226.0" y="443" fill="#3fb950">✓</text><text x="276.4" y="443" fill="#3fb950">✓</text><text x="326.8" y="443" fill="#3fb950">✓</text><text x="377.2" y="443" fill="#3fb950">✓</text><text x="427.6" y="443" fill-opacity="0.6">·</text><text x="478.0" y="443" fill-opacity="0.6">·</text>
+<text x="32.8" y="461">ipinfo.io*</text><text x="167.2" y="461" fill-opacity="0.6">DE</text><text x="226.0" y="461" fill="#3fb950">✓</text><text x="276.4" y="461" fill="#3fb950">✓</text><text x="326.8" y="461" fill="#3fb950">✓</text><text x="377.2" y="461" fill="#3fb950">✓</text><text x="427.6" y="461" fill-opacity="0.6">·</text><text x="478.0" y="461" fill-opacity="0.6">·</text>
+<text x="32.8" y="479" fill-opacity="0.6">✓</text><text x="49.6" y="479" fill-opacity="0.6">clean,</text><text x="108.4" y="479" fill-opacity="0.6">✗</text><text x="125.2" y="479" fill-opacity="0.6">detected,</text><text x="209.2" y="479" fill-opacity="0.6">·</text><text x="226.0" y="479" fill-opacity="0.6">not</text><text x="259.6" y="479" fill-opacity="0.6">reported</text>
+
+<text x="41.2" y="515" font-weight="bold">IP</text><text x="66.4" y="515" font-weight="bold">quality</text><text x="133.6" y="515" font-weight="bold">·</text><text x="150.4" y="515" font-weight="bold">IPv6</text>
+<text x="32.8" y="533" fill-opacity="0.6">unavailable</text>
+
+<text x="41.2" y="569" font-weight="bold">Region</text><text x="100.0" y="569" font-weight="bold">&amp;</text><text x="116.8" y="569" font-weight="bold">services</text>
+<text x="32.8" y="587" font-weight="bold">Region</text><text x="100.0" y="587" fill="#3fb950">DE</text><text x="125.2" y="587" fill="#3fb950">Germany</text><text x="192.4" y="587">·</text><text x="209.2" y="587" fill-opacity="0.6">GeoIP</text><text x="259.6" y="587" fill-opacity="0.6">4/4</text><text x="293.2" y="587">·</text><text x="310.0" y="587" fill-opacity="0.6">platforms</text><text x="394.0" y="587" fill-opacity="0.6">3/3</text>
+<text x="32.8" y="605" fill-opacity="0.6">CDN</text><text x="100.0" y="605" fill-opacity="0.6">Cloudflare</text><text x="192.4" y="605" fill-opacity="0.6">FRA</text><text x="226.0" y="605" fill-opacity="0.6">DE</text>
+
+<text x="32.8" y="641" font-weight="bold">Streaming</text><text x="125.2" y="641" fill="#3fb950">✓</text><text x="142.0" y="641">Netflix</text><text x="310.0" y="641" fill="#3fb950">✓</text><text x="326.8" y="641">Disney+*</text>
+<text x="125.2" y="659" fill="#3fb950">✓</text><text x="142.0" y="659">Prime</text><text x="192.4" y="659">Video</text><text x="310.0" y="659" fill="#3fb950">✓</text><text x="326.8" y="659">YouTube</text><text x="394.0" y="659">Premium*</text>
+<text x="32.8" y="677" font-weight="bold">Web</text><text x="125.2" y="677" fill="#3fb950">✓</text><text x="142.0" y="677">Reddit</text><text x="310.0" y="677" fill="#3fb950">✓</text><text x="326.8" y="677">Wikipedia</text><text x="410.8" y="677">editing</text>
+<text x="32.8" y="695" font-weight="bold">AI</text><text x="125.2" y="695" fill="#3fb950">✓</text><text x="142.0" y="695">OpenAI</text><text x="200.8" y="695">API</text><text x="310.0" y="695" fill="#3fb950">✓</text><text x="326.8" y="695">NotebookLM</text>
+<text x="125.2" y="713" fill="#3fb950">✓</text><text x="142.0" y="713">Anthropic</text><text x="226.0" y="713">API</text><text x="310.0" y="713" fill="#3fb950">✓</text><text x="326.8" y="713">DeepSeek</text><text x="402.4" y="713">API</text>
+<text x="125.2" y="731" fill="#3fb950">✓</text><text x="142.0" y="731">ChatGPT</text><text x="209.2" y="731">app</text><text x="310.0" y="731" fill="#f85149">✗</text><text x="326.8" y="731">Kimi</text><text x="368.8" y="731">API</text><text x="402.4" y="731">(CN)</text>
+
+<text x="41.2" y="767" font-weight="bold">Reputation</text><text x="133.6" y="767" font-weight="bold">lists</text><text x="184.0" y="767" font-weight="bold">&amp;</text><text x="200.8" y="767" font-weight="bold">mail</text>
+<text x="32.8" y="785" font-weight="bold">DNSBL</text><text x="108.4" y="785" fill="#3fb950">✓</text><text x="125.2" y="785">bl.spamcop.net</text><text x="293.2" y="785" fill="#3fb950">✓</text><text x="310.0" y="785">dnsbl.dronebl.org</text>
+<text x="108.4" y="803" fill="#3fb950">✓</text><text x="125.2" y="803">psbl.surriel.com</text>
+<text x="32.8" y="821" font-weight="bold">Mail</text><text x="108.4" y="821" fill="#f85149">✗</text><text x="125.2" y="821">Outbound</text><text x="200.8" y="821">SMTP</text><text x="242.8" y="821">(25)</text><text x="284.8" y="821" fill-opacity="0.6">connection</text><text x="377.2" y="821" fill-opacity="0.6">timed</text><text x="427.6" y="821" fill-opacity="0.6">out,</text><text x="469.6" y="821" fill-opacity="0.6">port</text>
+<text x="108.4" y="839" fill-opacity="0.6">25</text><text x="133.6" y="839" fill-opacity="0.6">likely</text><text x="192.4" y="839" fill-opacity="0.6">filtered</text>
+<text x="32.8" y="857" font-weight="bold">Network</text><text x="108.4" y="857" fill="#3fb950">✓</text><text x="125.2" y="857">PeeringDB</text><text x="209.2" y="857" fill-opacity="0.6">AS3320</text><text x="268.0" y="857" fill-opacity="0.6">Cable/DSL/ISP</text>
+<text x="108.4" y="875" fill="#3fb950">✓</text><text x="125.2" y="875">Known</text><text x="175.6" y="875">ranges</text><text x="234.4" y="875" fill-opacity="0.6">not</text><text x="268.0" y="875" fill-opacity="0.6">in:</text><text x="301.6" y="875" fill-opacity="0.6">tor-exits,</text><text x="394.0" y="875" fill-opacity="0.6">aws,</text><text x="436.0" y="875" fill-opacity="0.6">gcp</text>
+
+<text x="41.2" y="911" font-weight="bold">Censorship</text>
+<text x="32.8" y="929" font-weight="bold">DNS</text><text x="116.8" y="929" fill="#3fb950">✓</text><text x="133.6" y="929" fill="#3fb950">4</text>
+<text x="32.8" y="947" font-weight="bold">Telegram</text><text x="116.8" y="947" fill="#3fb950">✓</text><text x="133.6" y="947" fill="#3fb950">2</text>
+<text x="32.8" y="965" font-weight="bold">Portal</text><text x="116.8" y="965" fill="#3fb950">✓</text><text x="133.6" y="965" fill="#3fb950">3</text>
+<text x="32.8" y="983" fill-opacity="0.6">DNS</text><text x="66.4" y="983" fill-opacity="0.6">exit</text><text x="116.8" y="983">DE</text><text x="142.0" y="983">203.0.113.53</text><text x="251.2" y="983">AS3320</text><text x="310.0" y="983">Deutsche</text><text x="385.6" y="983">Telekom</text><text x="452.8" y="983">AG</text>
+
+<text x="16.0" y="1019" fill-opacity="0.6">✓</text><text x="32.8" y="1019" fill-opacity="0.6">yes,</text><text x="74.8" y="1019" fill-opacity="0.6">✗</text><text x="91.6" y="1019" fill-opacity="0.6">no</text>
+</g>
+<rect x="193.4" y="291.8" width="6.4" height="6.4" fill="#3fb950"/><rect x="202.3" y="292.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><rect x="210.7" y="292.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><rect x="219.1" y="292.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><rect x="227.5" y="292.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><rect x="193.4" y="309.8" width="6.4" height="6.4" fill="#3fb950"/><rect x="202.3" y="310.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><rect x="210.7" y="310.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><rect x="219.1" y="310.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><rect x="227.5" y="310.3" width="5.4" height="5.4" fill="none" stroke="#e6edf3" stroke-opacity="0.6"/><path fill="none" stroke-width="1" stroke-linecap="square" stroke="#e6edf3" d="M20.2 43.0H32.8M192.4 43.0H515.8M20.2 493.0H515.8M20.2 511.0H32.8M192.4 511.0H515.8M20.2 547.0H515.8M20.2 565.0H32.8M192.4 565.0H515.8M20.2 745.0H515.8M20.2 763.0H32.8M242.8 763.0H515.8M20.2 889.0H515.8M20.2 907.0H32.8M133.6 907.0H515.8M20.2 997.0H515.8M20.2 43.0V493.0M20.2 511.0V547.0M20.2 565.0V745.0M20.2 763.0V889.0M20.2 907.0V997.0M515.8 43.0V493.0M515.8 511.0V547.0M515.8 565.0V745.0M515.8 763.0V889.0M515.8 907.0V997.0"/>
+<path fill="none" stroke-width="1" stroke-linecap="square" stroke="#e6edf3" stroke-opacity="0.6" d="M74.8 187.0H503.2M83.2 277.0H503.2M100.0 349.0H503.2"/>
+</svg>

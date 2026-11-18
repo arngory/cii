@@ -28,6 +28,34 @@ type Keys struct {
 	GeminiAPIKey      string `yaml:"gemini_api_key"`
 }
 
+type Codes []int
+
+func (c *Codes) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var one int
+		if err := n.Decode(&one); err != nil {
+			return err
+		}
+		*c = Codes{one}
+		return nil
+	}
+	var many []int
+	if err := n.Decode(&many); err != nil {
+		return err
+	}
+	*c = many
+	return nil
+}
+
+type ServiceCheck struct {
+	Name     string `yaml:"name"`
+	URL      string `yaml:"url"`
+	Expect   Codes  `yaml:"expect"`
+	Contains string `yaml:"contains"`
+	Blocked  string `yaml:"blocked"`
+	Group    string `yaml:"group"`
+}
+
 type Config struct {
 	IPEcho []ipdetect.Provider `yaml:"ip_echo"`
 	Keys   Keys                `yaml:"keys"`
@@ -37,6 +65,7 @@ type Config struct {
 	Route struct {
 		Targets []string `yaml:"targets"`
 	} `yaml:"route"`
+	Services []ServiceCheck `yaml:"services"`
 }
 
 func DefaultPath() string { return filepath.Join(paths.ConfigDir(), "config.yaml") }

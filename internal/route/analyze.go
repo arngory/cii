@@ -17,6 +17,7 @@ const (
 	Distant     = "distant"
 	Intercepted = "intercepted"
 	Unreachable = "unreachable"
+	Absent      = "absent"
 )
 
 const (
@@ -25,6 +26,10 @@ const (
 )
 
 func judge(p *Path, floor float64, own uint) {
+	if p.absent {
+		p.Verdict, p.Reason = Absent, p.Error
+		return
+	}
 	if p.RTTms <= 0 {
 		p.Verdict = Unreachable
 		if p.Reason = p.Error; p.Reason == "" {
@@ -101,6 +106,8 @@ func (r *Report) Results() []probe.Result {
 			res.Status = probe.Partial
 		case Detour, Intercepted:
 			res.Status = probe.No
+		case Absent:
+			res.Status = probe.Unknown
 		default:
 			res.Status = probe.Failed
 		}
