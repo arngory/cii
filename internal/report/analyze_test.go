@@ -3,6 +3,7 @@ package report
 import (
 	"fmt"
 	"github.com/arngory/cii/internal/netx"
+	"math"
 	"regexp"
 	"slices"
 	"strings"
@@ -384,5 +385,13 @@ func TestUnreachableStack(t *testing.T) {
 	screen := strings.Join(r.Screen(Style{Unicode: true, Width: 200, Lang: "ru"}, "", nil), "\n")
 	if !strings.Contains(screen, "Связь     ⚠ нет маршрута ни к одному из 9 адресатов") {
 		t.Errorf("russian screen:\n%s", screen)
+	}
+}
+
+func TestLeadingNumber(t *testing.T) {
+	for in, want := range map[string]int{"1420 on wg0": 1420, "1500 on eth0": 1500, "9000": 9000, "on eth0": math.MaxInt, "": math.MaxInt, "0 on lo": math.MaxInt, "-5 x": math.MaxInt} {
+		if got := leadingNumber(in); got != want {
+			t.Errorf("leadingNumber(%q) = %d, want %d", in, got, want)
+		}
 	}
 }

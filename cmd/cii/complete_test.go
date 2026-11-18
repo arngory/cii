@@ -145,3 +145,19 @@ func TestManPage(t *testing.T) {
 		t.Errorf("manual page has a formatting error or a path of this machine")
 	}
 }
+
+func TestZshCompletionSyntax(t *testing.T) {
+	zsh, err := exec.LookPath("zsh")
+	if err != nil {
+		t.Skip("zsh is not installed")
+	}
+	script := completionScript("zsh")
+	if out, err := exec.Command(zsh, "-n", "-c", script).CombinedOutput(); err != nil {
+		t.Fatalf("zsh -n: %v\n%s", err, out)
+	}
+	for _, want := range []string{"for (( i = 2; i < CURRENT; i++ ))", "cmd=${words[i]} at=$i", "CURRENT == at + 1"} {
+		if !strings.Contains(script, want) {
+			t.Errorf("zsh script lacks %q: the command must be found after leading flags", want)
+		}
+	}
+}

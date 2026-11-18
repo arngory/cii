@@ -166,7 +166,7 @@ func zshCompletion() string {
 	for _, c := range commands {
 		fmt.Fprintf(&b, "\t\t%s\n", zshItem(c.name, c.help))
 	}
-	b.WriteString("\t)\n\tlocal cmd=\"\"\n\tif (( CURRENT > 2 )) && [[ ${words[2]} != -* ]]; then\n\t\tcmd=${words[2]}\n\tfi\n\tcase $cmd in\n")
+	b.WriteString("\t)\n\tlocal cmd=\"\" at=0 i\n\tfor (( i = 2; i < CURRENT; i++ )); do\n\t\tif [[ ${words[i]} != -* ]]; then\n\t\t\tcmd=${words[i]} at=$i\n\t\t\tbreak\n\t\tfi\n\tdone\n\tcase $cmd in\n")
 	for _, c := range commands[1:] {
 		if flags := zshFlags(c); flags != "" {
 			fmt.Fprintf(&b, "\t%s) flags=(%s) ;;\n", c.name, flags)
@@ -183,7 +183,7 @@ func zshCompletion() string {
 		_describe -o 'flag' flags
 	elif [[ -z $cmd ]]; then
 		_describe 'command' commands
-	elif (( ${#subs} > 0 && CURRENT == 3 )); then
+	elif (( ${#subs} > 0 && CURRENT == at + 1 )); then
 		compadd -a subs
 	else
 		_files

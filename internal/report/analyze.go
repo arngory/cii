@@ -4,8 +4,10 @@ import (
 	"cmp"
 	"fmt"
 	"io"
+	"math"
 	"net/netip"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/arngory/cii/internal/censor"
@@ -403,6 +405,15 @@ func (a *analysis) resolverExit(r *Report) {
 	}
 }
 
+func leadingNumber(s string) int {
+	field, _, _ := strings.Cut(s, " ")
+	n, err := strconv.Atoi(field)
+	if err != nil || n <= 0 {
+		return math.MaxInt
+	}
+	return n
+}
+
 func (a *analysis) transport(r *Report) {
 	var named, quicDown []string
 	for _, res := range r.Censor {
@@ -416,7 +427,7 @@ func (a *analysis) transport(r *Report) {
 		case strings.HasPrefix(res.Service, "QUIC ") && res.Status == probe.No:
 			quicDown = append(quicDown, strings.TrimPrefix(res.Service, "QUIC "))
 		case res.Service == "Interface MTU":
-			if mtu, _, _ := strings.Cut(res.Reason, " "); len(mtu) < 4 || len(mtu) == 4 && mtu < "1500" {
+			if leadingNumber(res.Reason) < 1500 {
 				a.add(Info, a.t("Interface MTU is %s", res.Reason), a.t("Below 1500 there is a tunnel or PPPoE on the way; large packets are fragmented or rely on path MTU discovery."))
 			}
 		case res.Service != "NAT (STUN)":
