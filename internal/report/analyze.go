@@ -71,18 +71,22 @@ var analysisRU = map[string]string{
 	"UDP does not get through: no STUN server answered":                                                             "UDP не проходит: не ответил ни один STUN-сервер",
 	"Calls, WireGuard, QUIC and peer-to-peer connections rely on UDP.":                                              "От UDP зависят звонки, WireGuard, QUIC и прямые соединения между узлами.",
 	"NAT is symmetric": "NAT симметричный",
-	"Each destination gets its own port mapping, so peer-to-peer connections need a relay.":   "Для каждого адресата выдаётся свой порт, поэтому прямым соединениям между узлами нужен ретранслятор.",
-	"Carrier-grade NAT: the public address is shared with other subscribers":                  "NAT оператора (CGNAT): публичный адрес общий с другими абонентами",
-	"Inbound connections and port forwarding are not possible.":                               "Входящие соединения и проброс портов невозможны.",
-	"UDP leaves through another address than HTTP":                                            "UDP выходит через другой адрес, чем HTTP",
-	"Traffic is split between exits by protocol.":                                             "Трафик разделён между выходами по протоколу.",
-	"Blocked by name (SNI or Host), not by address: %s":                                       "Блокируются по имени (SNI или Host), а не по адресу: %s",
-	"The addresses themselves answer; only connections that carry the name are cut.":          "Сами адреса отвечают; обрываются только соединения, в которых названо имя.",
-	"QUIC (HTTP/3) does not get through: %s":                                                  "QUIC (HTTP/3) не проходит: %s",
-	"Browsers fall back to TCP; applications that need QUIC will not work.":                   "Браузеры перейдут на TCP; приложения, которым нужен QUIC, работать не будут.",
-	"DNS is answered by a local fake-IP proxy":                                                "DNS отвечает локальный прокси в режиме fake-IP",
-	"Route probes were answered locally":                                                      "На замеры маршрутов ответили локально",
-	"A local proxy, tunnel or sandbox ends the connections; path verdicts mean nothing here.": "Соединения завершает локальный прокси, туннель или песочница; вердикты маршрутов здесь ничего не значат.",
+	"Each destination gets its own port mapping, so peer-to-peer connections need a relay.":                                                       "Для каждого адресата выдаётся свой порт, поэтому прямым соединениям между узлами нужен ретранслятор.",
+	"Carrier-grade NAT: the public address is shared with other subscribers":                                                                      "NAT оператора (CGNAT): публичный адрес общий с другими абонентами",
+	"Inbound connections and port forwarding are not possible.":                                                                                   "Входящие соединения и проброс портов невозможны.",
+	"UDP leaves through another address than HTTP":                                                                                                "UDP выходит через другой адрес, чем HTTP",
+	"Traffic is split between exits by protocol.":                                                                                                 "Трафик разделён между выходами по протоколу.",
+	"Blocked by name (SNI or Host), not by address: %s":                                                                                           "Блокируются по имени (SNI или Host), а не по адресу: %s",
+	"The addresses themselves answer; only connections that carry the name are cut.":                                                              "Сами адреса отвечают; обрываются только соединения, в которых названо имя.",
+	"QUIC (HTTP/3) does not get through: %s":                                                                                                      "QUIC (HTTP/3) не проходит: %s",
+	"Browsers fall back to TCP; applications that need QUIC will not work.":                                                                       "Браузеры перейдут на TCP; приложения, которым нужен QUIC, работать не будут.",
+	"%s has an address but no working route: all %d checks failed with network unreachable":                                                       "%s: адрес есть, но рабочего маршрута нет — все %d проверок упали с network unreachable",
+	"The address is assigned, yet no packet gets out. Programs that try %s first wait or fail; fix the route or turn %s off on this machine.":     "Адрес назначен, но пакеты не уходят. Программы, которые сначала пробуют %s, ждут или падают; почините маршрут или выключите %s на этой машине.",
+	"%s is only partly routed: no route to %d of %d destinations":                                                                                 "%s маршрутизируется частично: нет маршрута к %d из %d адресатов",
+	"Some networks answer over %s and others do not. Programs that prefer %s can fail on the unreachable ones; check the route and the firewall.": "Одни сети отвечают по %s, другие нет. Программы, которые предпочитают %s, могут не работать с недоступными; проверьте маршрут и межсетевой экран.",
+	"DNS is answered by a local fake-IP proxy":                                                                                                    "DNS отвечает локальный прокси в режиме fake-IP",
+	"Route probes were answered locally":                                                                                                          "На замеры маршрутов ответили локально",
+	"A local proxy, tunnel or sandbox ends the connections; path verdicts mean nothing here.":                                                     "Соединения завершает локальный прокси, туннель или песочница; вердикты маршрутов здесь ничего не значат.",
 	"Detours: %s":                  "Крюки: %s",
 	"Through transit networks: %s": "Через транзитные сети: %s",
 	"Unreachable: %s":              "Недоступны: %s",
@@ -156,7 +160,9 @@ func Analyze(r *Report, lang string) []Finding {
 		before := len(a.out)
 		a.host(f.label, f.host)
 		for i := before; i < len(a.out); i++ {
-			a.out[i].Title = prefix + a.out[i].Title
+			if !strings.HasPrefix(a.out[i].Title, f.label) {
+				a.out[i].Title = prefix + a.out[i].Title
+			}
 		}
 	}
 	a.censor(r.Censor)
@@ -196,6 +202,13 @@ func (a *analysis) host(label string, h *Host) {
 	}
 	if len(h.Disagree) > 0 {
 		a.add(Warn, a.t("Echo services saw different addresses: %s", strings.Join(h.Disagree, "; ")), a.t("Traffic is split between several exits (policy routing or a balancer)."))
+	}
+	if r := h.reach(); r.broken() && r.none() {
+		a.add(Alert, a.t("%s has an address but no working route: all %d checks failed with network unreachable", label, r.tried),
+			a.t("The address is assigned, yet no packet gets out. Programs that try %s first wait or fail; fix the route or turn %s off on this machine.", label, label))
+	} else if r.broken() {
+		a.add(Warn, a.t("%s is only partly routed: no route to %d of %d destinations", label, r.unreachable, r.tried),
+			a.t("Some networks answer over %s and others do not. Programs that prefer %s can fail on the unreachable ones; check the route and the firewall.", label, label))
 	}
 	if p := h.Profile; p != nil {
 		if len(p.Usage) > 0 && p.Usage[0].Value == "hosting" {

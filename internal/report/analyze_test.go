@@ -1,6 +1,8 @@
 package report
 
 import (
+	"fmt"
+	"github.com/arngory/cii/internal/netx"
 	"regexp"
 	"slices"
 	"strings"
@@ -325,5 +327,62 @@ func TestAnalyzeTransport(t *testing.T) {
 	r.Scrubbed().WriteJSON(&js)
 	if strings.Contains(js.String(), "192.168.1.5") || strings.Contains(js.String(), "51000") {
 		t.Errorf("masked report keeps the NAT mapping:\n%s", js.String())
+	}
+}
+
+func TestUnreachableStack(t *testing.T) {
+	stack := func(failed, ok int) *Host {
+		h := &Host{Address: "2001:db8::7"}
+		var rs []probe.Result
+		for i := range failed {
+			rs = append(rs, probe.Result{Group: services.AI, Service: fmt.Sprintf("API %d", i), Status: probe.Failed, Reason: netx.ReasonUnreachable})
+		}
+		for i := range ok {
+			rs = append(rs, probe.Result{Group: services.Web, Service: fmt.Sprintf("Site %d", i), Status: probe.Yes})
+		}
+		rs = append(rs, probe.Result{Group: risk.Network, Service: "Known ranges", Status: probe.Yes},
+			probe.Result{Group: services.Web, Service: "Slow", Status: probe.Failed, Reason: "timeout"})
+		h.SetServices(rs)
+		return h
+	}
+	for name, c := range map[string]struct {
+		host   *Host
+		screen string
+		find   string
+	}{
+		"none":    {stack(12, 0), "Reach     ⚠ no route to 12 of 13 destinations", "warn | IPv6 is only partly routed: no route to 12 of 13 destinations"},
+		"partial": {stack(8, 20), "Reach     ⚠ no route to 8 of 29 destinations", "warn | IPv6 is only partly routed: no route to 8 of 29 destinations"},
+		"few":     {stack(4, 0), "", ""},
+		"rare":    {stack(6, 40), "", ""},
+	} {
+		r := &Report{Tool: Tool{Name: "cii"}, IPv4: &Host{Address: "203.0.113.7"}, IPv6: c.host}
+		screen := strings.Join(r.Screen(Style{Unicode: true, Width: 200}, "", nil), "\n")
+		out := analysed(t, r, "en")
+		if c.screen == "" {
+			if strings.Contains(screen, "Reach") || strings.Contains(out, "routed") || strings.Contains(out, "no working route") {
+				t.Errorf("%s: reported\n%s\n%s", name, screen, out)
+			}
+			continue
+		}
+		if !strings.Contains(screen, c.screen) {
+			t.Errorf("%s: %q missing\n%s", name, c.screen, screen)
+		}
+		if !strings.Contains(out, c.find) || strings.Contains(out, "IPv6: IPv6") {
+			t.Errorf("%s: %q missing\n%s", name, c.find, out)
+		}
+	}
+	all := stack(9, 0)
+	all.Services = all.Services[:9]
+	all.SetServices(all.Services)
+	r := &Report{Tool: Tool{Name: "cii"}, IPv6: all}
+	if out := analysed(t, r, "en"); !strings.Contains(out, "alert | IPv6 has an address but no working route: all 9 checks failed") {
+		t.Errorf("no route at all:\n%s", out)
+	}
+	if ru := analysed(t, r, "ru"); !strings.Contains(ru, "IPv6: адрес есть, но рабочего маршрута нет — все 9 проверок") || strings.Contains(ru, "IPv6: IPv6") {
+		t.Errorf("russian:\n%s", ru)
+	}
+	screen := strings.Join(r.Screen(Style{Unicode: true, Width: 200, Lang: "ru"}, "", nil), "\n")
+	if !strings.Contains(screen, "Связь     ⚠ нет маршрута ни к одному из 9 адресатов") {
+		t.Errorf("russian screen:\n%s", screen)
 	}
 }

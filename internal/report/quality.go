@@ -83,7 +83,7 @@ var factorShort = map[probe.Flag]string{
 	probe.Proxy: "prx", probe.VPN: "VPN", probe.Tor: "Tor", probe.Hosting: "hst", probe.Abuser: "abu", probe.Bot: "bot",
 }
 
-var qualityLabels = []string{"Address", "Via", "Also seen", "ASN", "Place", "Route", "PTR", "Registry"}
+var qualityLabels = []string{"Address", "Via", "Also seen", "Reach", "ASN", "Place", "Route", "PTR", "Registry"}
 
 func sectionRule(c paint, m marks, title string, iw int) string {
 	return c.bold(title) + " " + c.dim(strings.Repeat(m.rule, max(0, iw-utf8.RuneCountInString(title)-1)))
@@ -104,6 +104,13 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	}
 	if len(h.Disagree) > 0 {
 		lines = append(lines, field("Also seen", c.yellow(m.warn+" "+strings.Join(h.Disagree, "; "))))
+	}
+	if r := h.reach(); r.broken() {
+		text := fmt.Sprintf(m.tr("no route to %d of %d destinations"), r.unreachable, r.tried)
+		if r.none() {
+			text = fmt.Sprintf(m.tr("no route to any of %d destinations"), r.tried)
+		}
+		lines = append(lines, field("Reach", c.yellow(m.warn+" "+text)))
 	}
 	if as := bestASN(h.Geo); as != "" {
 		lines = append(lines, field("ASN", as))
