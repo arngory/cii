@@ -70,6 +70,16 @@ func TestOfflineDROPAndPeeringDB(t *testing.T) {
 	if noASN := Offline(base, netip.MustParseAddr("203.0.113.7"), 0); !strings.Contains(noASN[0].Reason, "ASN unknown") {
 		t.Errorf("no ASN = %+v", noASN[0])
 	}
+	if err := os.Remove(filepath.Join(dir, "peeringdb.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if gone := Offline(base, netip.MustParseAddr("203.0.113.7"), 64999); gone[0].Status != probe.Unknown || !strings.Contains(gone[0].Reason, "unreadable") {
+		t.Errorf("listed but missing PeeringDB file = %+v", gone[0])
+	}
+	write("peeringdb.txt", "AS1\t"+strings.Repeat("x", 1<<20)+"\n")
+	if long := Offline(base, netip.MustParseAddr("203.0.113.7"), 64999); long[0].Status != probe.Unknown {
+		t.Errorf("unreadable PeeringDB file = %+v", long[0])
+	}
 }
 
 func TestParseDROPAndPeeringDB(t *testing.T) {
