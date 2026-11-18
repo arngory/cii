@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -46,12 +45,7 @@ func (m *metricsServer) set(r *report.Report) error {
 	return nil
 }
 
-func (m *metricsServer) close() error {
-	if err := m.srv.Close(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
-}
+func (m *metricsServer) close() error { return m.srv.Close() }
 
 func (m *metricsServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	switch {
