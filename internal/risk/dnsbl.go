@@ -103,6 +103,7 @@ type Options struct {
 	NoMail     bool
 	Mail       MailOptions
 	ResolvConf string
+	Resolver   *netx.DNSServer
 }
 
 func Rules(opts Options) []netx.Rule {
@@ -157,6 +158,7 @@ func Run(ctx context.Context, n *netx.Net, ip netip.Addr, opts Options) []probe.
 	if n.Proxied() {
 		return proxied(ip, opts)
 	}
+	opts.Resolver = n.Options().DNS
 	return run(ctx, n, n, n.Options().Timeout, ip, opts)
 }
 
@@ -185,7 +187,7 @@ func slots(ip netip.Addr, opts Options, status probe.Status, reason string) []pr
 func run(ctx context.Context, r resolver, d dialer, timeout time.Duration, ip netip.Addr, opts Options) []probe.Result {
 	var out []probe.Result
 	if !opts.NoDNSBL {
-		out = append(out, checkDNSBL(ctx, r, ip, opts.ResolvConf)...)
+		out = append(out, checkDNSBL(ctx, r, ip, opts)...)
 	}
 	out = append(out, checkPTR(ctx, r, ip))
 	if !opts.NoMail {
@@ -208,12 +210,18 @@ func zonesFor(ip netip.Addr) []Zone {
 	return out
 }
 
-func checkDNSBL(ctx context.Context, r resolver, ip netip.Addr, resolvConf string) []probe.Result {
+func checkDNSBL(ctx context.Context, r resolver, ip netip.Addr, opts Options) []probe.Result {
 	zones := zonesFor(ip)
 	if len(zones) == 0 {
 		return nil
 	}
-	public := publicResolvers(resolvConf)
+	public, which := publicResolvers(opts.ResolvConf), "system resolver"
+	if s := opts.Resolver; s != nil {
+		public, which = "", "resolver"
+		if s.Public() {
+			public = s.Label()
+		}
+	}
 	rev := netx.ReverseName(ip)
 	out := make([]probe.Result, len(zones))
 	sem := make(chan struct{}, 8)
@@ -222,7 +230,7 @@ func checkDNSBL(ctx context.Context, r resolver, ip netip.Addr, resolvConf strin
 		out[i] = probe.Result{Group: DNSBL, Service: z.Zone}
 		if z.Private && public != "" {
 			out[i].Status = probe.Unknown
-			out[i].Reason = "skipped: system resolver " + public + " is public; " + z.Name + " requires your own resolver"
+			out[i].Reason = "skipped: " + which + " " + public + " is public; " + z.Name + " requires your own resolver"
 			continue
 		}
 		wg.Add(1)

@@ -60,7 +60,7 @@ func (r *runner) transport(ctx context.Context) []probe.Result {
 }
 
 func (r *runner) resolveFamily(ctx context.Context, host string) (netip.Addr, error) {
-	pa, err := r.systemAnswer(ctx, host)
+	pa, err := r.lookup(ctx, host)
 	switch {
 	case err != nil:
 		return netip.Addr{}, err

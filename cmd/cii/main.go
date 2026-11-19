@@ -75,6 +75,8 @@ Common flags:
   --iface NAME       bind outgoing connections to this interface's address
   --source ADDR      bind outgoing connections to this local address
   --proxy URL[,URL]  http://, https:// or socks5:// proxy for HTTP traffic; several URLs check each exit side by side
+  --dns SERVER       resolver for the checks instead of the system one: quad9, cznic, cloudflare, google, adguard (DNS over TLS),
+                     an address such as 192.0.2.53 (plain DNS) or tls://ADDRESS#NAME; censorship checks still test the system resolver
   --timeout DUR      per-request timeout (default 10s)
   --offline          never touch the network (local interfaces + databases only)
   --quick            skip region, service and censorship checks
@@ -174,7 +176,7 @@ func run(ctx context.Context, args []string) error {
 
 type common struct {
 	v4, v6, offline, plan, json, mask, noColor, quick, extended, debug, noLog, noRisk, demo, prom, quiet bool
-	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, html, from, promFile                     string
+	iface, source, proxy, cfgPath, dataDir, catalog, lang, svg, html, from, promFile, dns                string
 	timeout                                                                                              time.Duration
 }
 
@@ -184,6 +186,7 @@ func (c *common) register(fs *flag.FlagSet) {
 	fs.StringVar(&c.iface, "iface", "", "interface")
 	fs.StringVar(&c.source, "source", "", "source address")
 	fs.StringVar(&c.proxy, "proxy", "", "proxy URL")
+	fs.StringVar(&c.dns, "dns", "", "resolver for the checks: system, "+strings.Join(netx.DNSPresetNames(), ", ")+", an address, or tls://ADDRESS#NAME")
 	fs.StringVar(&c.lang, "lang", "auto", "interface language: auto, en or ru")
 	fs.DurationVar(&c.timeout, "timeout", 10*time.Second, "per-request timeout")
 	fs.BoolVar(&c.offline, "offline", false, "no network")
@@ -259,8 +262,30 @@ func (c *common) options(f netx.Family) (netx.Options, error) {
 	return o, nil
 }
 
+func (c *common) dnsServer() (*netx.DNSServer, error) {
+	spec := c.dns
+	if spec == "" {
+		if cfg, err := config.Load(c.cfgPath); err == nil {
+			spec = cfg.DNS
+		}
+	}
+	return netx.ParseDNS(spec)
+}
+
+func (c *common) dnsRules() []netx.Rule {
+	if s, err := c.dnsServer(); err == nil && s != nil && !c.offline {
+		return s.Rules()
+	}
+	return nil
+}
+
 func (c *common) baseOptions() (netx.Options, error) {
 	o := netx.Options{Timeout: c.timeout}
+	dns, err := c.dnsServer()
+	if err != nil {
+		return o, err
+	}
+	o.DNS = dns
 	if c.proxy != "" {
 		u, err := url.Parse(c.proxy)
 		if err != nil || u.Host == "" {
@@ -516,7 +541,7 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 	var routeList []route.Target
 	benchOpts := bench.Defaults()
 	benchOpts.Net, benchOpts.Iperf = !c.offline, !c.offline
-	policy := netx.NewPolicy()
+	policy := netx.NewPolicy(c.dnsRules()...)
 	if !c.offline {
 		policy.Add(ipdetect.Rules(providers)...)
 		policy.Add(probe.Rules(checks)...)
@@ -913,6 +938,12 @@ func footer(r *report.Report, unicode bool, lang, logPath string, logErr error) 
 		parts = append(parts, fmt.Sprintf("%d %s", len(hosts), t("hosts contacted")))
 	default:
 		parts = append(parts, t("no network contacts"))
+	}
+	for _, e := range r.Network {
+		if e.Module == netx.DNSModule && e.Requests > 0 {
+			parts = append(parts, "DNS: "+strings.TrimPrefix(e.Purpose, "dns: name lookups via "))
+			break
+		}
 	}
 	if n := r.FailedChecks(); n > 0 {
 		parts = append(parts, fmt.Sprintf("%d %s", n, t("checks failed")))
@@ -1322,7 +1353,7 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 		srcs = append(srcs, s)
 	}
 	updateRisk := len(riskIDs) > 0 || len(ids) == 0
-	policy := netx.NewPolicy()
+	policy := netx.NewPolicy(c.dnsRules()...)
 	if !c.offline {
 		policy.Add(datasrc.Rules(srcs)...)
 		if updateRisk {
@@ -1421,7 +1452,7 @@ func cmdCensor(ctx context.Context, args []string) error {
 		return fmt.Errorf("unknown protocol %q (known: http, https, both)", protocol)
 	}
 	opts := censor.Options{Modes: strings.Split(mode, ","), DomainsFile: domainsFile, Domain: domain, Protocol: protocol, Retries: retries}
-	policy := netx.NewPolicy(censor.Rules(opts)...)
+	policy := netx.NewPolicy(append(censor.Rules(opts), c.dnsRules()...)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
 		return nil
@@ -1486,7 +1517,7 @@ func cmdBench(ctx context.Context, args []string) error {
 	if err := opts.Validate(); err != nil {
 		return err
 	}
-	policy := netx.NewPolicy(bench.Rules(opts)...)
+	policy := netx.NewPolicy(append(bench.Rules(opts), c.dnsRules()...)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
 		return nil
@@ -1582,7 +1613,7 @@ func cmdRoute(ctx context.Context, args []string) error {
 	if opts.Targets, err = routeTargets(cfg, targetSpec); err != nil {
 		return err
 	}
-	policy := netx.NewPolicy(route.Rules(opts.Targets)...)
+	policy := netx.NewPolicy(append(route.Rules(opts.Targets), c.dnsRules()...)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
 		return nil

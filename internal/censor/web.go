@@ -297,7 +297,7 @@ func (r *runner) resolveTarget(ctx context.Context, host string) (string, *probe
 		return ip.String(), nil
 	}
 	defer r.acquire()()
-	pa, err := r.systemAnswer(ctx, host)
+	pa, err := r.lookup(ctx, host)
 	switch {
 	case errors.Is(err, netx.ErrProxyRaw):
 		return "", nil

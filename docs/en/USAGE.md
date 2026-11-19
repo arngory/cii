@@ -51,6 +51,7 @@ An `m` after the number (`2m`) hides addresses and the provider. Enter alone run
 | `--quick` | address and local databases only, no service checks |
 | `--no-censor`, `--no-risk` | skip censorship; skip reputation, DNSBL and mail |
 | `-4`, `-6` | IPv4 only or IPv6 only |
+| `--dns SERVER` | the resolver for the checks instead of the system one: `quad9`, `cznic` (CZ.NIC ODVR), `cloudflare`, `google`, `adguard` over DNS-over-TLS; an address such as `192.0.2.53` for plain DNS; `tls://ADDRESS#NAME` for your own DNS-over-TLS. The censorship checks still test the system resolver; see [CONFIG.md](CONFIG.md#dns) |
 | `--proxy URL[,URL…]` | check through a proxy (`http://`, `https://`, `socks5://`); several URLs give several exits side by side |
 | `--iface NAME`, `--source ADDR` | leave through this interface or local address |
 | `--catalog LIST` | regional service catalogues: `auto` (by country), `all`, `none` or codes like `JP,EU` |

@@ -52,6 +52,7 @@ type Options struct {
 	Timeout   time.Duration
 	UserAgent string
 	Transport http.RoundTripper
+	DNS       *DNSServer
 }
 
 func DefaultUserAgent() string {
@@ -66,6 +67,7 @@ type Net struct {
 	proxy    sync.Map
 	proxied  bool
 	resolved sync.Map
+	resolver *net.Resolver
 }
 
 func firstEnv(keys ...string) string {
@@ -111,7 +113,11 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	if opts.Source.IsValid() {
 		d.LocalAddr = &net.TCPAddr{IP: opts.Source.AsSlice()}
 	}
-	n := &Net{opts: opts, policy: policy, ledger: led, proxied: opts.Proxy != nil || envProxy()}
+	n := &Net{opts: opts, policy: policy, ledger: led, proxied: opts.Proxy != nil || envProxy(), resolver: net.DefaultResolver}
+	if opts.DNS != nil && !n.proxied {
+		n.resolver = &net.Resolver{PreferGo: true, Dial: n.dnsDial}
+		d.Resolver = n.resolver
+	}
 
 	proxy := http.ProxyURL(opts.Proxy)
 	if opts.Proxy == nil {
