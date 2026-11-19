@@ -218,6 +218,8 @@ func TestReasonIsShortForNetworkErrors(t *testing.T) {
 
 type lookupStub map[string][]string
 
+func (l lookupStub) Proxied() bool { return l["proxied"] != nil }
+
 func (l lookupStub) LookupHost(_ context.Context, _, name string) ([]string, error) {
 	if a, ok := l[name]; ok {
 		return a, nil
@@ -244,11 +246,24 @@ func TestNoAddressForTheFamily(t *testing.T) {
 		{"gone.example", netx.IPv6, ""},
 		{"v4only.example", netx.Any, ""},
 	} {
-		if got := noAddress(ctx, r, "m", missing(c.name), c.f); got != c.want {
+		if got := noAddress(ctx, r, "m", c.name, missing(c.name), c.f); got != c.want {
 			t.Errorf("%s over %v = %q, want %q", c.name, c.f, got, c.want)
 		}
 	}
-	if got := noAddress(ctx, r, "m", &net.DNSError{Err: "server misbehaving", Name: "v4only.example"}, netx.IPv6); got != "" {
+	if got := noAddress(ctx, r, "m", "v4only.example", &net.DNSError{Err: "server misbehaving", Name: "v4only.example"}, netx.IPv6); got != "" {
 		t.Errorf("other DNS error = %q", got)
+	}
+	if got := noAddress(ctx, r, "m", "www.example.org", missing("v4only.example"), netx.IPv6); got != "" {
+		t.Errorf("an error about another name, such as the proxy's = %q", got)
+	}
+	proxied := lookupStub{"v4only.example": {"192.0.2.10"}, "proxied": {}}
+	if got := noAddress(ctx, proxied, "m", "v4only.example", missing("v4only.example"), netx.IPv6); got != "" {
+		t.Errorf("behind a proxy = %q", got)
+	}
+	if got := noAddress(ctx, r, "m", "V4ONLY.example.", missing("v4only.example"), netx.IPv6); got != "the service has no IPv6 address" {
+		t.Errorf("case and a trailing dot = %q", got)
+	}
+	if got := requestHost("https://api.example.org/{ip}/json", netip.MustParseAddr("192.0.2.1")); got != "api.example.org" {
+		t.Errorf("requestHost = %q", got)
 	}
 }

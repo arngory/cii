@@ -196,7 +196,7 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 		}
 		resp, err := do(ctx, n.HTTPClient(c.Module), env.Keys, ip, c, r)
 		if err != nil {
-			if missing := noAddress(ctx, n, c.Module, err, transport); missing != "" {
+			if missing := noAddress(ctx, n, c.Module, requestHost(r.URL, ip), err, transport); missing != "" {
 				return []Result{{Status: Unknown, Reason: missing}}
 			}
 			return Fail(reason(err))
@@ -262,11 +262,25 @@ func do(ctx context.Context, client *http.Client, keys config.Keys, ip netip.Add
 
 type hostLookup interface {
 	LookupHost(ctx context.Context, module, name string) ([]string, error)
+	Proxied() bool
 }
 
-func noAddress(ctx context.Context, r hostLookup, module string, err error, f netx.Family) string {
+func requestHost(rawURL string, ip netip.Addr) string {
+	u, err := url.Parse(strings.ReplaceAll(rawURL, "{ip}", ip.String()))
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
+}
+
+func noAddress(ctx context.Context, r hostLookup, module, host string, err error, f netx.Family) string {
 	var dnsErr *net.DNSError
-	if f == netx.Any || !errors.As(err, &dnsErr) || !dnsErr.IsNotFound || dnsErr.Name == "" {
+	switch {
+	case f == netx.Any || r.Proxied() || host == "":
+		return ""
+	case !errors.As(err, &dnsErr) || !dnsErr.IsNotFound:
+		return ""
+	case !strings.EqualFold(strings.TrimSuffix(dnsErr.Name, "."), strings.TrimSuffix(host, ".")):
 		return ""
 	}
 	addrs, lerr := r.LookupHost(ctx, module, dnsErr.Name)
