@@ -70,10 +70,17 @@ func ParseDNS(spec string) (*DNSServer, error) {
 		}
 		s.Port, s.TLSName = "853", name
 	}
+	bare := addr
+	if strings.HasPrefix(addr, "[") && strings.HasSuffix(addr, "]") && strings.Contains(addr, ":") {
+		bare = addr[1 : len(addr)-1]
+	}
 	ap, err := netip.ParseAddrPort(addr)
+	if err == nil && ap.Port() == 0 {
+		return nil, fmt.Errorf("--dns %q: port 0 is not a port", spec)
+	}
 	if err == nil {
 		s.Port = fmt.Sprint(ap.Port())
-	} else if a, perr := netip.ParseAddr(strings.Trim(addr, "[]")); perr == nil {
+	} else if a, perr := netip.ParseAddr(bare); perr == nil && (bare == addr || a.Is6()) {
 		ap = netip.AddrPortFrom(a, 0)
 	} else {
 		return nil, fmt.Errorf("--dns %q: expected system, one of %s, an address such as 192.0.2.53 or [2001:db8::53]:53, or tls://ADDRESS#NAME", spec, strings.Join(DNSPresetNames(), ", "))

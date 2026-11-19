@@ -750,10 +750,11 @@ func (p stackPlan) checkHost(ctx context.Context, h *hostRun) {
 	if !p.c.offline {
 		env := probe.Env{Nets: h.nets, Keys: p.keys, Done: func(i int, rs []probe.Result) { p.s.update(func() { h.checks[i] = rs }) }}
 		probe.Run(ctx, env, h.family, ip, p.checks)
-		var regional []probe.Check
-		if h.addr.Source != ipdetect.SourceUnconfirmed {
-			regional = services.SelectRegional(p.c.catalogsFor(p.catalogs, p.s.verdict(h)), p.keys, p.c.extended)
+		verdict := p.s.verdict(h)
+		if h.addr.Source == ipdetect.SourceUnconfirmed {
+			verdict = nil
 		}
+		regional := services.SelectRegional(p.c.catalogsFor(p.catalogs, verdict), p.keys, p.c.extended)
 		p.s.update(func() { h.regional = slots(probe.Placeholders(regional)) })
 		env.Done = func(i int, rs []probe.Result) { p.s.update(func() { h.regional[i] = rs }) }
 		probe.Run(ctx, env, h.family, ip, regional)

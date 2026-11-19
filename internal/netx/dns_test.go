@@ -31,7 +31,7 @@ func TestParseDNS(t *testing.T) {
 		"": "", "system": "", "System": "",
 		"quad9": "Quad9 over TLS|9.9.9.9|853|dns.quad9.net", "CZNIC": "CZ.NIC ODVR over TLS|193.17.47.1|853|odvr.nic.cz",
 		"192.0.2.53": "192.0.2.53|192.0.2.53|53|", "192.0.2.53:5353": "192.0.2.53|192.0.2.53|5353|",
-		"[2001:db8::53]:53": "2001:db8::53|2001:db8::53|53|", "2001:db8::53": "2001:db8::53|2001:db8::53|53|",
+		"[2001:db8::53]:53": "2001:db8::53|2001:db8::53|53|", "2001:db8::53": "2001:db8::53|2001:db8::53|53|", "[2001:db8::53]": "2001:db8::53|2001:db8::53|53|",
 		"tls://192.0.2.53#dns.example":          "192.0.2.53 over TLS|192.0.2.53|853|dns.example",
 		"tls://[2001:db8::53]:8853#dns.example": "2001:db8::53 over TLS|2001:db8::53|8853|dns.example",
 	} {
@@ -48,7 +48,8 @@ func TestParseDNS(t *testing.T) {
 			t.Errorf("%q = %q, want %q", spec, got, want)
 		}
 	}
-	for _, bad := range []string{"dns.example", "tls://192.0.2.53", "tls://dns.example#dns.example", "quad8", "192.0.2.53:x", "fe80::1%eth0"} {
+	for _, bad := range []string{"dns.example", "tls://192.0.2.53", "tls://dns.example#dns.example", "quad8", "192.0.2.53:x", "fe80::1%eth0",
+		"[192.0.2.53]", "2001:db8::53]", "[2001:db8::53", "192.0.2.53:0", "tls://192.0.2.53:0#dns.example", "[2001:db8::53]:0"} {
 		if s, err := ParseDNS(bad); err == nil {
 			t.Errorf("%q accepted as %+v", bad, s)
 		}
