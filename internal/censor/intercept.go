@@ -93,9 +93,14 @@ func googleChaosResult(txt []string, rcode dnsmessage.RCode, err error) probe.Re
 	return res
 }
 
-func localChecks(n *netx.Net) []probe.Result {
+func localChecks(n *netx.Net, stacks ...netx.Family) []probe.Result {
 	var out []probe.Result
 	out = append(out, routeCheck(n))
+	for _, f := range stacks {
+		if f != n.Options().Family && !n.Proxied() && !n.Options().Source.IsValid() {
+			out = append(out, otherRoute(f))
+		}
+	}
 	if ns := netx.SystemNameservers(resolvConf); len(ns) > 0 {
 		res := probe.Result{Group: Local, Service: "System resolver", Status: probe.Yes, Reason: "no fake-IP resolver"}
 		for _, a := range ns {
@@ -113,6 +118,21 @@ func localChecks(n *netx.Net) []probe.Result {
 		}
 	}
 	return out
+}
+
+func otherRoute(f netx.Family) probe.Result {
+	name := map[netx.Family]string{netx.IPv4: "IPv4", netx.IPv6: "IPv6"}[f]
+	res := probe.Result{Group: Local, Service: "Default route (" + name + ")"}
+	ifc, src, ok := netx.RouteInterface(f)
+	switch {
+	case !ok:
+		res.Status, res.Reason = probe.No, "no default route: only networks with a route of their own are reachable over "+name
+	case netx.IsTunnel(ifc):
+		res.Status, res.Reason, res.Detail = probe.Partial, "through tunnel "+ifc.Name+": results describe the tunnel exit", src.String()
+	default:
+		res.Status, res.Reason = probe.Yes, "no tunnel on "+ifc.Name
+	}
+	return res
 }
 
 func routeCheck(n *netx.Net) probe.Result {

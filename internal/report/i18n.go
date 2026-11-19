@@ -26,6 +26,7 @@ var translations = map[string]map[string]string{
 		"Via":                                "Через",
 		"Also seen":                          "Ещё видно",
 		"Reach":                              "Связь",
+		"from the interface, unconfirmed":    "с интерфейса, не подтверждён",
 		"no route to %d of %d destinations":  "нет маршрута к %d из %d адресатов",
 		"no route to any of %d destinations": "нет маршрута ни к одному из %d адресатов",
 		"Place":                              "Место",

@@ -12,7 +12,8 @@
 6. **No remote code.** cii downloads nothing for execution: no scripts, no binaries, no "ad blocks".
 7. **Data comes only from the original source.** `cii data update` downloads databases directly from the publishers (DB-IP, IPinfo, MaxMind), not from servers of the cii authors. It runs only when invoked explicitly.
 8. **The proxy is not bypassed.** All HTTP goes through the proxy if one is set with the `--proxy` flag or the environment variables `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` (honouring `NO_PROXY`). In both cases raw connections and DNS queries (DNSBL, the SMTP probe, iperf3, censorship checks, the ICMP and TCP measurements of `cii route`) are forbidden and shown as "unknown" with the reason: otherwise they would go past the proxy and reveal the real address. The decision "the proxy is in effect" is made once at startup and is the same for all modules.
-9. **Secrets do not leak.** Tokens are stripped from URLs in errors, logs and `manifest.json`.
+9. **Only the declared resolver.** By default the system resolver looks up names. If `--dns` or `dns` in the config is set, lookups go only to that server's addresses: they are declared as rules of the `dns` module and show in `--plan` and in the ledger. The checks of the system resolver itself still ask the system one.
+10. **Secrets do not leak.** Tokens are stripped from URLs in errors, logs and `manifest.json`.
 
 cii accepts incoming connections in one case: `cii watch --listen HOST:PORT` opens an HTTP `/metrics` address on the address you give and serves only the metrics of the latest run there. Without this flag cii listens on nothing.
 

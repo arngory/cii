@@ -121,7 +121,7 @@ func TestDNSBLv6AndPublicResolver(t *testing.T) {
 	noEnvProxy(t)
 	f := &fakeResolver{}
 	rc := writeResolvConf(t, "# x\nnameserver 8.8.8.8\nnameserver 2001:4860:4860::8888\n")
-	rs := checkDNSBL(context.Background(), f, netip.MustParseAddr("2a00:1450::1"), rc)
+	rs := checkDNSBL(context.Background(), f, netip.MustParseAddr("2a00:1450::1"), Options{ResolvConf: rc})
 	m := byService(rs)
 	if len(rs) != 2 || m["zen.spamhaus.org"].Status != probe.Unknown || m["dnsbl.dronebl.org"].Status != probe.Yes {
 		t.Fatalf("v6 results = %+v", rs)
@@ -129,8 +129,19 @@ func TestDNSBLv6AndPublicResolver(t *testing.T) {
 	if len(f.asked) != 1 || !strings.HasSuffix(f.asked[0], ".a.2.dnsbl.dronebl.org") {
 		t.Errorf("asked = %v", f.asked)
 	}
-	if rs := checkDNSBL(context.Background(), f, netip.MustParseAddr("10.0.0.1"), rc); rs != nil {
+	if rs := checkDNSBL(context.Background(), f, netip.MustParseAddr("10.0.0.1"), Options{ResolvConf: rc}); rs != nil {
 		t.Errorf("private address queried: %+v", rs)
+	}
+	quad9, _ := netx.ParseDNS("quad9")
+	private := writeResolvConf(t, "nameserver 192.168.1.1\n")
+	rs = checkDNSBL(context.Background(), &fakeResolver{}, netip.MustParseAddr("81.2.3.4"), Options{ResolvConf: private, Resolver: quad9})
+	if z := byService(rs)["zen.spamhaus.org"]; z.Status != probe.Unknown || z.Reason != "skipped: resolver Quad9 over TLS is public; Spamhaus ZEN requires your own resolver" {
+		t.Errorf("public chosen resolver = %+v", z)
+	}
+	own, _ := netx.ParseDNS("192.168.1.53")
+	rs = checkDNSBL(context.Background(), &fakeResolver{}, netip.MustParseAddr("81.2.3.4"), Options{ResolvConf: rc, Resolver: own})
+	if z := byService(rs)["zen.spamhaus.org"]; strings.HasPrefix(z.Reason, "skipped") {
+		t.Errorf("own resolver on a private address = %+v", z)
 	}
 }
 
@@ -316,5 +327,27 @@ func TestPTR(t *testing.T) {
 	}
 	if got := Placeholders(ip, Options{NoDNSBL: true, NoMail: true}); len(got) != 1 || got[0].Service != PTRService || got[0].Status != probe.Pending {
 		t.Errorf("placeholders = %+v", got)
+	}
+}
+
+type ptrStub struct {
+	names []string
+	err   error
+}
+
+func (p ptrStub) LookupHost(context.Context, string, string) ([]string, error) { return nil, nil }
+
+func (p ptrStub) LookupAddr(context.Context, string, netip.Addr) ([]string, error) {
+	return p.names, p.err
+}
+
+func TestPTRWithInvalidNames(t *testing.T) {
+	ip := netip.MustParseAddr("203.0.113.7")
+	malformed := &net.DNSError{Err: malformedNames, Name: "203.0.113.7"}
+	if r := checkPTR(context.Background(), ptrStub{err: malformed}, ip); r.Status != probe.Unknown || !strings.Contains(r.Reason, "not a valid host name") {
+		t.Errorf("only invalid names = %+v", r)
+	}
+	if r := checkPTR(context.Background(), ptrStub{names: []string{"host.example.net."}, err: malformed}, ip); r.Status != probe.Yes || r.Detail != "host.example.net" {
+		t.Errorf("valid name next to an invalid one = %+v", r)
 	}
 }

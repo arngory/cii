@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/arngory/cii/internal/ipdetect"
 	"github.com/arngory/cii/internal/probe"
 	"github.com/arngory/cii/internal/refdata"
 	"github.com/arngory/cii/internal/region"
@@ -99,6 +100,9 @@ func qualityLines(c paint, m marks, h *Host, iw int) []string {
 	}
 	field := func(name, value string) string { return c.dim(pad(m.tr(name), labelW+1)) + value }
 	lines := []string{field("Address", c.green(h.Address))}
+	if h.Source == ipdetect.SourceUnconfirmed {
+		lines[0] = field("Address", c.yellow(h.Address)+" "+c.dim("("+m.tr("from the interface, unconfirmed")+")"))
+	}
 	if h.Via != "" {
 		lines = append(lines, field("Via", h.Via))
 	}

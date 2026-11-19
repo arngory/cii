@@ -30,8 +30,8 @@ func (r *runner) egress(ctx context.Context) []probe.Result {
 		return out
 	}
 	lookups := []func(context.Context) ([]string, error){
-		func(ctx context.Context) ([]string, error) { return r.n.LookupHost(ctx, Module, akamaiWhoami) },
-		func(ctx context.Context) ([]string, error) { return r.n.LookupTXT(ctx, Module, googleWhoami) },
+		func(ctx context.Context) ([]string, error) { return r.n.LookupHostSystem(ctx, Module, akamaiWhoami) },
+		func(ctx context.Context) ([]string, error) { return r.n.LookupTXTSystem(ctx, Module, googleWhoami) },
 	}
 	var wg sync.WaitGroup
 	for i, lookup := range lookups {

@@ -60,6 +60,8 @@ type Options struct {
 	Source    netip.Addr
 }
 
+const SourceUnconfirmed = "interface, no echo service answered"
+
 func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address {
 	var res Address
 	var candidates []netip.Addr
@@ -92,7 +94,7 @@ func Detect(ctx context.Context, n *netx.Net, f netx.Family, o Options) Address 
 		return res
 	}
 	if len(res.Interface) > 0 {
-		res.Address, res.Source = res.Interface[0], "interface"
+		res.Address, res.Source = res.Interface[0], SourceUnconfirmed
 		return res
 	}
 	switch {

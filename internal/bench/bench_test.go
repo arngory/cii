@@ -641,3 +641,18 @@ func TestCloudflareLatencyProbeTimesOut(t *testing.T) {
 		t.Errorf("stalled trace: err = %v after %s", err, time.Since(start))
 	}
 }
+
+func TestPickAddrForSystemIperf3(t *testing.T) {
+	addrs := []string{"2001:db8::5", "::ffff:192.0.2.5", "198.51.100.5"}
+	for f, want := range map[netx.Family]string{netx.IPv4: "192.0.2.5", netx.IPv6: "2001:db8::5", netx.Any: "2001:db8::5"} {
+		if got, ok := pickAddr(addrs, f); !ok || got != want {
+			t.Errorf("%v = %q, %v; want %q", f, got, ok, want)
+		}
+	}
+	if _, ok := pickAddr([]string{"192.0.2.5"}, netx.IPv6); ok {
+		t.Error("an IPv4 address was picked for IPv6")
+	}
+	if _, ok := pickAddr([]string{"not-an-address"}, netx.Any); ok {
+		t.Error("garbage was picked")
+	}
+}

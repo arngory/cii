@@ -2,8 +2,10 @@ package report
 
 import (
 	"fmt"
+	"github.com/arngory/cii/internal/ipdetect"
 	"github.com/arngory/cii/internal/netx"
 	"math"
+	"net/netip"
 	"regexp"
 	"slices"
 	"strings"
@@ -393,5 +395,34 @@ func TestLeadingNumber(t *testing.T) {
 		if got := leadingNumber(in); got != want {
 			t.Errorf("leadingNumber(%q) = %d, want %d", in, got, want)
 		}
+	}
+}
+
+func TestUnconfirmedAddress(t *testing.T) {
+	h := NewHost(ipdetect.Address{Address: netip.MustParseAddr("2001:db8::7"), Source: ipdetect.SourceUnconfirmed}, nil)
+	r := &Report{Tool: Tool{Name: "cii"}, IPv4: &Host{Address: "203.0.113.7"}, IPv6: h}
+	for lang, want := range map[string][2]string{
+		"en": {"2001:db8::7 (from the interface, unconfirmed)", "warn | IPv6: no echo service answered; the address is the one on the interface"},
+		"ru": {"2001:db8::7 (с интерфейса, не подтверждён)", "warn | IPv6: ни один echo-сервис не ответил; адрес взят с интерфейса"},
+	} {
+		screen := strings.Join(r.Screen(Style{Unicode: true, Width: 200, Lang: lang}, "", nil), "\n")
+		if !strings.Contains(screen, want[0]) {
+			t.Errorf("%s screen lacks %q:\n%s", lang, want[0], screen)
+		}
+		if out := analysed(t, r, lang); !strings.Contains(out, want[1]) || strings.Contains(out, "IPv6: IPv6") {
+			t.Errorf("%s analysis lacks %q:\n%s", lang, want[1], out)
+		}
+	}
+	confirmed := NewHost(ipdetect.Address{Address: netip.MustParseAddr("2001:db8::7"), Source: "echo:test"}, nil)
+	r.IPv6 = confirmed
+	if out := analysed(t, r, "en"); strings.Contains(out, "interface") {
+		t.Errorf("a confirmed address was flagged:\n%s", out)
+	}
+	var js strings.Builder
+	h.Address = "2001:db8::7"
+	r.IPv6 = h
+	r.Scrubbed().WriteJSON(&js)
+	if strings.Contains(js.String(), "2001:db8") || !strings.Contains(js.String(), ipdetect.SourceUnconfirmed) {
+		t.Errorf("masked report:\n%s", js.String())
 	}
 }

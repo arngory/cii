@@ -89,7 +89,7 @@ func (n *Net) DialAddr(ctx context.Context, module, network, host string, ip net
 }
 
 func (n *Net) dial(ctx context.Context, module string, rule Rule, host, base, network, addr string) (net.Conn, error) {
-	d := net.Dialer{Timeout: n.opts.Timeout}
+	d := net.Dialer{Timeout: n.opts.Timeout, Resolver: n.resolver}
 	if n.opts.Source.IsValid() {
 		if base == "tcp" {
 			d.LocalAddr = &net.TCPAddr{IP: n.opts.Source.AsSlice()}
@@ -109,20 +109,34 @@ func (n *Net) dial(ctx context.Context, module string, rule Rule, host, base, ne
 }
 
 func (n *Net) LookupHost(ctx context.Context, module, name string) ([]string, error) {
-	out, err := n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupHost(ctx, name) })
+	out, err := n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return n.resolver.LookupHost(ctx, name) })
 	if err == nil {
-		var addrs []netip.Addr
-		for _, s := range out {
-			if a, err := netip.ParseAddr(s); err == nil {
-				addrs = append(addrs, a.Unmap())
-			}
-		}
-		n.resolved.Store(resolvedKey(module, name), addrs)
+		n.remember(module, name, out)
 	}
 	return out, err
 }
 
-func (n *Net) LookupTXT(ctx context.Context, module, name string) ([]string, error) {
+func (n *Net) LookupHostSystem(ctx context.Context, module, name string) ([]string, error) {
+	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupHost(ctx, name) })
+}
+
+func (n *Net) remember(module, name string, found []string) {
+	n.resolvedMu.Lock()
+	defer n.resolvedMu.Unlock()
+	key := resolvedKey(module, name)
+	var addrs []netip.Addr
+	if v, ok := n.resolved.Load(key); ok {
+		addrs = slices.Clone(v.([]netip.Addr))
+	}
+	for _, s := range found {
+		if a, err := netip.ParseAddr(s); err == nil && !slices.Contains(addrs, a.Unmap()) {
+			addrs = append(addrs, a.Unmap())
+		}
+	}
+	n.resolved.Store(key, addrs)
+}
+
+func (n *Net) LookupTXTSystem(ctx context.Context, module, name string) ([]string, error) {
 	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupTXT(ctx, name) })
 }
 
@@ -187,6 +201,6 @@ func ReverseZone(ip netip.Addr) string {
 func (n *Net) LookupAddr(ctx context.Context, module string, ip netip.Addr) ([]string, error) {
 	name := ReverseName(ip) + "." + ReverseZone(ip)
 	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) {
-		return net.DefaultResolver.LookupAddr(ctx, ip.Unmap().String())
+		return n.resolver.LookupAddr(ctx, ip.Unmap().String())
 	})
 }

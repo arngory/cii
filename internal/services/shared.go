@@ -177,7 +177,7 @@ var (
 		Eval: byRedirect(regexp.MustCompile(`locationnotsupported|locationnotvalidated|britbox\.co\.uk`), false)}
 	sharedAcornTV = probe.Check{Service: "Acorn TV", Requests: probe.Get("https://acorn.tv/"),
 		Eval: byMarkers([]string{"not yet available in your", "unavailable in your"}, []string{"signup.acorn.tv"})}
-	sharedShudder = probe.Check{Service: "Shudder", Requests: probe.Get("https://www.shudder.com/"),
+	sharedShudder = probe.Check{Service: "Shudder", Requests: probe.Get("https://www.shudder.com/"), ExtraHosts: []string{"watch.shudder.com"},
 		Eval: byMarkers([]string{"not available", "not yet available", "403 ERROR"}, []string{"shudder"})}
 	sharedAMCPlus = probe.Check{Service: "AMC+", Requests: noRedirect("https://www.amcplus.com/"),
 		Eval: byRedirect(regexp.MustCompile(`geographic-restriction`), true)}

@@ -270,7 +270,7 @@ func (r *runner) dns(ctx context.Context) []probe.Result {
 	out = append(out, r.hijack(ctx, refIdx, refDoH)...)
 	out = append(out, r.interception(ctx)...)
 	out = append(out, r.egress(ctx)...)
-	return append(out, localChecks(r.n)...)
+	return append(out, localChecks(r.n, r.opts.Stacks...)...)
 }
 
 func udpResult(service string, t transportResult) probe.Result {
@@ -382,9 +382,17 @@ func plainFromAnswer(a answer, err error) plainAnswer {
 }
 
 func (r *runner) systemAnswer(ctx context.Context, name string) (plainAnswer, error) {
+	return r.answer(ctx, name, r.n.LookupHostSystem)
+}
+
+func (r *runner) lookup(ctx context.Context, name string) (plainAnswer, error) {
+	return r.answer(ctx, name, r.n.LookupHost)
+}
+
+func (r *runner) answer(ctx context.Context, name string, lookup func(context.Context, string, string) ([]string, error)) (plainAnswer, error) {
 	ctx, cancel := r.timeoutCtx(ctx)
 	defer cancel()
-	addrs, err := r.n.LookupHost(ctx, Module, name)
+	addrs, err := lookup(ctx, Module, name)
 	var dnsErr *net.DNSError
 	switch {
 	case errors.As(err, &dnsErr) && dnsErr.IsNotFound:

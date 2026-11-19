@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http/httpproxy"
@@ -52,6 +53,7 @@ type Options struct {
 	Timeout   time.Duration
 	UserAgent string
 	Transport http.RoundTripper
+	DNS       *DNSServer
 }
 
 func DefaultUserAgent() string {
@@ -59,13 +61,16 @@ func DefaultUserAgent() string {
 }
 
 type Net struct {
-	opts     Options
-	policy   *Policy
-	ledger   *ledger.Ledger
-	tr       http.RoundTripper
-	proxy    sync.Map
-	proxied  bool
-	resolved sync.Map
+	opts       Options
+	policy     *Policy
+	ledger     *ledger.Ledger
+	tr         http.RoundTripper
+	proxy      sync.Map
+	proxied    bool
+	resolved   sync.Map
+	resolvedMu sync.Mutex
+	resolver   *net.Resolver
+	dnsLast    atomic.Value
 }
 
 func firstEnv(keys ...string) string {
@@ -111,7 +116,12 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	if opts.Source.IsValid() {
 		d.LocalAddr = &net.TCPAddr{IP: opts.Source.AsSlice()}
 	}
-	n := &Net{opts: opts, policy: policy, ledger: led, proxied: opts.Proxy != nil || envProxy()}
+	toProxy := *d
+	n := &Net{opts: opts, policy: policy, ledger: led, proxied: opts.Proxy != nil || envProxy(), resolver: net.DefaultResolver}
+	if opts.DNS != nil {
+		n.resolver = &net.Resolver{PreferGo: true, Dial: n.dnsDial}
+		d.Resolver = n.resolver
+	}
 
 	proxy := http.ProxyURL(opts.Proxy)
 	if opts.Proxy == nil {
@@ -132,7 +142,7 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 		},
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			if _, viaProxy := n.proxy.Load(addr); viaProxy {
-				return d.DialContext(ctx, "tcp", addr)
+				return toProxy.DialContext(ctx, "tcp", addr)
 			}
 			return d.DialContext(ctx, opts.Family.network("tcp"), addr)
 		},

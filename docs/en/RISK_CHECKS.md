@@ -64,7 +64,7 @@ Queries go through the system resolver (`netx.LookupHost`), each zone is a singl
 
 | Zone | What it catches | Specifics |
 |---|---|---|
-| `zen.spamhaus.org` | SBL, CSS, XBL, PBL | **not queried through public resolvers** (8.8.8.8, 1.1.1.1, 9.9.9.9 and the like — Spamhaus answers such queries with the stub `127.255.255.x` and treats them as a violation). cii reads `/etc/resolv.conf`; if the resolver is public, the zone is marked `?` with an explanation |
+| `zen.spamhaus.org` | SBL, CSS, XBL, PBL | **not queried through public resolvers** (8.8.8.8, 1.1.1.1, 9.9.9.9 and the like — Spamhaus answers such queries with the stub `127.255.255.x` and treats them as a violation). cii reads `/etc/resolv.conf`; if the resolver is public, the zone is marked `?` with an explanation. With `--dns` the chosen server is what counts: the presets are public, so give your own resolver as an address |
 | `bl.spamcop.net` | SpamCop user reports | |
 | `psbl.surriel.com` | PSBL | |
 | `bl.mailspike.net` | Mailspike reputation | the codes `127.0.0.10–14` are reputation levels and are not counted as a listing |

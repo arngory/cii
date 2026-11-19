@@ -66,6 +66,7 @@ type Config struct {
 		Targets []string `yaml:"targets"`
 	} `yaml:"route"`
 	Services []ServiceCheck `yaml:"services"`
+	DNS      string         `yaml:"dns"`
 }
 
 func DefaultPath() string { return filepath.Join(paths.ConfigDir(), "config.yaml") }
