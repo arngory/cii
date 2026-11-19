@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"strconv"
@@ -40,14 +41,34 @@ func SystemIperf3(ctx context.Context, env Env, path string, s IperfServer, dur 
 		run.Error = "no IPv6 endpoint"
 		return run
 	}
-	if _, err := env.Net.LookupHost(ctx, Module, s.Host); err != nil {
+	addrs, err := env.Net.LookupHost(ctx, Module, s.Host)
+	if err != nil {
 		run.Error = err.Error()
 		return run
 	}
+	addr, ok := pickAddr(addrs, env.Net.Options().Family)
+	if !ok {
+		run.Error = "no address of the " + env.Net.Options().Family.String() + " family"
+		return run
+	}
 	return tryPorts(ctx, run, 0, isIperfRetryable, func(port int, reverse bool) (float64, float64, error) {
-		mbps, err := iperf3Once(ctx, env, path, s, port, dur, reverse)
+		mbps, err := iperf3Once(ctx, env, path, s, addr, port, dur, reverse)
 		return mbps, 0, err
 	})
+}
+
+func pickAddr(addrs []string, f netx.Family) (string, bool) {
+	for _, s := range addrs {
+		a, err := netip.ParseAddr(s)
+		if err != nil {
+			continue
+		}
+		a = a.Unmap()
+		if f == netx.Any || a.Is4() == (f == netx.IPv4) {
+			return a.String(), true
+		}
+	}
+	return "", false
 }
 
 func isIperfRetryable(err error) bool {
@@ -55,11 +76,11 @@ func isIperfRetryable(err error) bool {
 	return strings.Contains(msg, "busy") || strings.Contains(msg, "refused") || strings.Contains(msg, "access denied")
 }
 
-func iperf3Once(ctx context.Context, env Env, path string, s IperfServer, port int, dur time.Duration, reverse bool) (float64, error) {
+func iperf3Once(ctx context.Context, env Env, path string, s IperfServer, addr string, port int, dur time.Duration, reverse bool) (float64, error) {
 	purpose := Module + ": iperf3 " + s.Provider + ", " + s.Location
 	host := strings.TrimSuffix(strings.ToLower(s.Host), ".")
 	env.Ledger.Request(Module, purpose, host, "tcp")
-	mbps, err := iperf3Exec(ctx, env, path, s.Host, port, dur, reverse)
+	mbps, err := iperf3Exec(ctx, env, path, addr, port, dur, reverse)
 	if err != nil {
 		env.Ledger.Error(Module, purpose, host, "tcp")
 	}
