@@ -77,7 +77,7 @@ Any other `.mmdb` placed in the data directory (for example, a commercial databa
 
 ## `dns`
 
-Which resolver the checks use to look up names. By default it is the system one (`/etc/resolv.conf` on Linux and macOS, the adapter settings on Windows). The `--dns` flag takes priority; `--dns system` brings back the system resolver even when the config names another.
+Which resolver the checks use to look up names. By default it is the system one (`/etc/resolv.conf` on Linux and macOS, the adapter settings on Windows). The `--dns` flag takes priority; `--dns system` brings back the system resolver even when the config names another. If the config cannot be read, the command stops with an error instead of silently falling back to the system resolver.
 
 ```yaml
 dns: quad9
@@ -99,7 +99,7 @@ Every server address is a network policy rule of the `dns` module: it shows in `
 
 - all names of the checks go through the chosen server: echo services, region, services, reputation, DNSBL, routes, the benchmark, `cii data update`, the DPI and geoblock checks;
 - the censorship checks that examine the system resolver itself (`System resolver spoofing`, the DNS exit) still ask the system one;
-- with a proxy the proxy resolves names, and `--dns` is not used;
+- requests through a proxy are resolved by the proxy itself; connections that bypass it (hosts in `NO_PROXY`, HTTPS when only `HTTP_PROXY` is set) are resolved by the chosen server;
 - Spamhaus ZEN is not queried when the chosen server is public (all presets are): Spamhaus does not answer public resolvers. ZEN needs your own recursive resolver — give it as an address.
 
 DNS-over-HTTPS is not supported yet.

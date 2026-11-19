@@ -208,8 +208,29 @@ func TestChosenResolver(t *testing.T) {
 	}
 
 	proxy, _ := url.Parse("http://127.0.0.1:1")
-	if p := New(Options{Proxy: proxy, DNS: server}, policy, ledger.New()); p.resolver != net.DefaultResolver {
-		t.Error("behind a proxy names are resolved at the proxy, so the chosen resolver must stay unused")
+	behind := New(Options{Family: IPv4, Timeout: time.Second, Proxy: proxy, DNS: server}, policy, ledger.New())
+	if _, err := behind.LookupHost(context.Background(), "m", "web.cii-test.example"); err != ErrProxyRaw {
+		t.Errorf("a raw lookup behind a proxy = %v", err)
+	}
+
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+	t.Setenv("NO_PROXY", "web.cii-test.example")
+	envLed := ledger.New()
+	env := New(Options{Family: IPv4, Timeout: 2 * time.Second, DNS: server}, policy, envLed)
+	if !env.Proxied() {
+		t.Fatal("the environment proxy was not noticed")
+	}
+	resp, err = env.HTTPClient("m").Get("http://web.cii-test.example:" + strconv.Itoa(webPort) + "/")
+	if err != nil {
+		t.Fatalf("a NO_PROXY host behind an environment proxy: %v", err)
+	}
+	resp.Body.Close()
+	used := false
+	for _, e := range envLed.Entries() {
+		used = used || e.Module == DNSModule && e.Requests > 0
+	}
+	if !used {
+		t.Errorf("a direct connection behind an environment proxy skipped the chosen resolver: %+v", envLed.Entries())
 	}
 	if sys := New(Options{}, policy, ledger.New()); sys.resolver != net.DefaultResolver {
 		t.Error("without --dns the system resolver must be used")

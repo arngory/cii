@@ -265,9 +265,11 @@ func (c *common) options(f netx.Family) (netx.Options, error) {
 func (c *common) dnsServer() (*netx.DNSServer, error) {
 	spec := c.dns
 	if spec == "" {
-		if cfg, err := config.Load(c.cfgPath); err == nil {
-			spec = cfg.DNS
+		cfg, err := config.Load(c.cfgPath)
+		if err != nil {
+			return nil, err
 		}
+		spec = cfg.DNS
 	}
 	return netx.ParseDNS(spec)
 }

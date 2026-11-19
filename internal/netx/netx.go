@@ -114,8 +114,9 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 	if opts.Source.IsValid() {
 		d.LocalAddr = &net.TCPAddr{IP: opts.Source.AsSlice()}
 	}
+	toProxy := *d
 	n := &Net{opts: opts, policy: policy, ledger: led, proxied: opts.Proxy != nil || envProxy(), resolver: net.DefaultResolver}
-	if opts.DNS != nil && !n.proxied {
+	if opts.DNS != nil {
 		n.resolver = &net.Resolver{PreferGo: true, Dial: n.dnsDial}
 		d.Resolver = n.resolver
 	}
@@ -139,7 +140,7 @@ func New(opts Options, policy *Policy, led *ledger.Ledger) *Net {
 		},
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			if _, viaProxy := n.proxy.Load(addr); viaProxy {
-				return d.DialContext(ctx, "tcp", addr)
+				return toProxy.DialContext(ctx, "tcp", addr)
 			}
 			return d.DialContext(ctx, opts.Family.network("tcp"), addr)
 		},

@@ -126,6 +126,16 @@ func (s *DNSServer) ordered() []netip.Addr {
 	return out
 }
 
+func (n *Net) allowResolver(host, proto string) (Rule, error) {
+	rule, ok := n.policy.Match(DNSModule, host)
+	if !ok {
+		n.ledger.Blocked(DNSModule, "not declared", normalizeHost(host), proto)
+		return rule, &BlockedError{Module: DNSModule, Host: host}
+	}
+	n.ledger.Request(DNSModule, rule.Purpose, ledgerHost(rule, host), proto)
+	return rule, nil
+}
+
 func (n *Net) dnsDial(ctx context.Context, network, _ string) (net.Conn, error) {
 	s := n.opts.DNS
 	base := "udp"
@@ -138,7 +148,7 @@ func (n *Net) dnsDial(ctx context.Context, network, _ string) (net.Conn, error) 
 		if src.IsValid() && src.Is4() != a.Is4() {
 			continue
 		}
-		rule, err := n.allow(DNSModule, a.String(), s.proto())
+		rule, err := n.allowResolver(a.String(), s.proto())
 		if err != nil {
 			errs = append(errs, err)
 			continue

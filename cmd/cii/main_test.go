@@ -210,7 +210,9 @@ func TestFooterNamesTheChosenResolver(t *testing.T) {
 
 func TestDNSFlag(t *testing.T) {
 	for spec, want := range map[string]string{"": "", "system": "", "cznic": "CZ.NIC ODVR over TLS", "192.0.2.53": "192.0.2.53"} {
-		c := common{dns: spec, cfgPath: filepath.Join(t.TempDir(), "missing.yaml")}
+		empty := filepath.Join(t.TempDir(), "empty.yaml")
+		os.WriteFile(empty, nil, 0o600)
+		c := common{dns: spec, cfgPath: empty}
 		o, err := c.baseOptions()
 		got := ""
 		if o.DNS != nil {
@@ -236,5 +238,13 @@ func TestDNSFlag(t *testing.T) {
 	}
 	if _, err := (&common{dns: "bogus"}).baseOptions(); err == nil {
 		t.Error("an unknown resolver was accepted")
+	}
+	broken := filepath.Join(t.TempDir(), "broken.yaml")
+	os.WriteFile(broken, []byte("dns: [quad9\n"), 0o600)
+	if _, err := (&common{cfgPath: broken}).baseOptions(); err == nil {
+		t.Error("a broken config was ignored, so its dns setting silently fell back to the system resolver")
+	}
+	if _, err := (&common{cfgPath: filepath.Join(t.TempDir(), "missing.yaml")}).baseOptions(); err == nil {
+		t.Error("a missing explicit --config was ignored")
 	}
 }
