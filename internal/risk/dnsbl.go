@@ -123,12 +123,17 @@ func Rules(opts Options) []netx.Rule {
 
 const PTRService = "Reverse DNS"
 
+const malformedNames = "DNS response contained records which contain invalid names"
+
 func checkPTR(ctx context.Context, r resolver, ip netip.Addr) probe.Result {
 	res := probe.Result{Group: Network, Service: PTRService}
 	names, err := r.LookupAddr(ctx, Module, ip)
+	var dnsErr *net.DNSError
 	switch {
-	case err == nil && len(names) > 0:
+	case len(names) > 0:
 		res.Status, res.Detail = probe.Yes, strings.TrimSuffix(names[0], ".")
+	case errors.As(err, &dnsErr) && dnsErr.Err == malformedNames:
+		res.Status, res.Reason = probe.Unknown, "a PTR record exists, but its name is not a valid host name"
 	case err == nil || notFound(err):
 		res.Status, res.Reason = probe.Unknown, "no PTR record"
 	default:

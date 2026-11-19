@@ -51,6 +51,7 @@ The country and network of the address found come from the local databases, with
 Two checks that make no network requests. They show that the results of the other checks describe something other than a direct connection:
 
 - `Default route` — the interface through which the kernel would send traffic to the internet. To find this out, a UDP socket is created to the documentation address 192.0.2.1 (2001:db8::1 for IPv6): no packets leave in the process. A point-to-point interface or a name `tun*`, `utun*`, `tap*`, `ppp*`, `wg*`, `ipsec*`, `gpd*`, `nordlynx*`, `tailscale*`, `zt*` — `partial`: traffic goes through a tunnel, and the results describe its exit. If `--source` or `--iface` is set, the line is called `Source interface` and checks the interface of that address. With a proxy — `?`: the path starts at the proxy, not at this machine.
+- `Default route (IPv6)` (or `(IPv4)`) — the same for the second stack when it has an address. No default route — `✗`: only networks with a route of their own are reachable over that stack; this happens when an address is assigned but there is no gateway, or a tunnel hands out routes to some networks only.
 - `System resolver` — the `nameserver` addresses from `/etc/resolv.conf`. An address from 198.18.0.0/15 (a range for benchmarks, not found in real networks) — `partial`: DNS is answered by a local proxy in fake-IP mode, as in Clash or sing-box. If the file does not exist (Windows), the line is not printed.
 
 

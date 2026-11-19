@@ -215,3 +215,20 @@ func TestReasonIsShortForNetworkErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestNoAddressForTheFamily(t *testing.T) {
+	missing := &url.Error{Op: "Get", URL: "https://www.example.org/", Err: &net.OpError{Op: "dial", Net: "tcp6",
+		Err: &net.DNSError{Err: "no such host", Name: "www.example.org", Server: "192.0.2.53:53", IsNotFound: true}}}
+	if got := noAddress(missing, netx.IPv6); got != "the service has no IPv6 address" {
+		t.Errorf("IPv6 = %q", got)
+	}
+	if got := noAddress(missing, netx.IPv4); got != "the service has no IPv4 address" {
+		t.Errorf("IPv4 = %q", got)
+	}
+	if got := noAddress(missing, netx.Any); got != "" {
+		t.Errorf("any family = %q", got)
+	}
+	if got := noAddress(&net.DNSError{Err: "server misbehaving", Name: "x"}, netx.IPv6); got != "" {
+		t.Errorf("other DNS error = %q", got)
+	}
+}

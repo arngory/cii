@@ -1,9 +1,11 @@
 package censor
 
 import (
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -97,5 +99,33 @@ func TestLocalRouteBehindProxy(t *testing.T) {
 	n := netx.New(netx.Options{Family: netx.IPv4, Proxy: proxy}, netx.NewPolicy(), nil)
 	if r := localChecks(n)[0]; r.Status != probe.Unknown || !strings.Contains(r.Reason, "proxy") {
 		t.Errorf("route behind proxy = %+v", r)
+	}
+}
+
+func TestLocalChecksAddTheOtherStack(t *testing.T) {
+	noProxyEnv(t)
+	n := netx.New(netx.Options{Family: netx.IPv4}, netx.NewPolicy(), nil)
+	rows := localChecks(n, netx.IPv4, netx.IPv6)
+	var names []string
+	for _, r := range rows {
+		names = append(names, r.Service)
+	}
+	if !slices.Contains(names, "Default route") || !slices.Contains(names, "Default route (IPv6)") || slices.Contains(names, "Default route (IPv4)") {
+		t.Errorf("rows = %v", names)
+	}
+	for _, r := range rows {
+		if r.Service == "Default route (IPv6)" && (r.Group != Local || r.Status == "" || r.Reason == "") {
+			t.Errorf("IPv6 route row = %+v", r)
+		}
+	}
+	if only := localChecks(n, netx.IPv4); slices.ContainsFunc(only, func(r probe.Result) bool { return strings.HasPrefix(r.Service, "Default route (") }) {
+		t.Errorf("a second route row without a second stack: %+v", only)
+	}
+	bound := netx.New(netx.Options{Family: netx.IPv4, Source: netip.MustParseAddr("192.0.2.10")}, netx.NewPolicy(), nil)
+	if rows := localChecks(bound, netx.IPv4, netx.IPv6); slices.ContainsFunc(rows, func(r probe.Result) bool { return r.Service == "Default route (IPv6)" }) {
+		t.Error("a bound source address still got a route row for the other family")
+	}
+	if r := otherRoute(netx.IPv6); r.Service != "Default route (IPv6)" || (r.Status == probe.No) != strings.HasPrefix(r.Reason, "no default route") {
+		t.Errorf("otherRoute = %+v", r)
 	}
 }

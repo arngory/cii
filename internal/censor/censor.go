@@ -36,6 +36,7 @@ type Options struct {
 	Protocol    string
 	Retries     int
 	Locate      func(netip.Addr) (country, network string)
+	Stacks      []netx.Family
 }
 
 func ValidMode(m string) bool {

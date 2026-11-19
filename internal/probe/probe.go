@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -195,6 +196,9 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 		}
 		resp, err := do(ctx, n.HTTPClient(c.Module), env.Keys, ip, c, r)
 		if err != nil {
+			if missing := noAddress(err, transport); missing != "" {
+				return []Result{{Status: Unknown, Reason: missing}}
+			}
 			return Fail(reason(err))
 		}
 		responses = append(responses, resp)
@@ -254,6 +258,17 @@ func do(ctx context.Context, client *http.Client, keys config.Keys, ip netip.Add
 		return nil, err
 	}
 	return &Response{Status: resp.StatusCode, URL: resp.Request.URL.String(), Header: resp.Header, Body: data}, nil
+}
+
+func noAddress(err error, f netx.Family) string {
+	var dnsErr *net.DNSError
+	if f == netx.Any || !errors.As(err, &dnsErr) || !dnsErr.IsNotFound {
+		return ""
+	}
+	if f == netx.IPv6 {
+		return "the service has no IPv6 address"
+	}
+	return "the service has no IPv4 address"
 }
 
 func Fail(reason string) []Result {

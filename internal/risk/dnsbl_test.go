@@ -318,3 +318,25 @@ func TestPTR(t *testing.T) {
 		t.Errorf("placeholders = %+v", got)
 	}
 }
+
+type ptrStub struct {
+	names []string
+	err   error
+}
+
+func (p ptrStub) LookupHost(context.Context, string, string) ([]string, error) { return nil, nil }
+
+func (p ptrStub) LookupAddr(context.Context, string, netip.Addr) ([]string, error) {
+	return p.names, p.err
+}
+
+func TestPTRWithInvalidNames(t *testing.T) {
+	ip := netip.MustParseAddr("203.0.113.7")
+	malformed := &net.DNSError{Err: malformedNames, Name: "203.0.113.7"}
+	if r := checkPTR(context.Background(), ptrStub{err: malformed}, ip); r.Status != probe.Unknown || !strings.Contains(r.Reason, "not a valid host name") {
+		t.Errorf("only invalid names = %+v", r)
+	}
+	if r := checkPTR(context.Background(), ptrStub{names: []string{"host.example.net."}, err: malformed}, ip); r.Status != probe.Yes || r.Detail != "host.example.net" {
+		t.Errorf("valid name next to an invalid one = %+v", r)
+	}
+}
