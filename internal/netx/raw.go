@@ -109,25 +109,31 @@ func (n *Net) dial(ctx context.Context, module string, rule Rule, host, base, ne
 }
 
 func (n *Net) LookupHost(ctx context.Context, module, name string) ([]string, error) {
-	return n.lookupHost(ctx, module, name, n.resolver)
+	out, err := n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return n.resolver.LookupHost(ctx, name) })
+	if err == nil {
+		n.remember(module, name, out)
+	}
+	return out, err
 }
 
 func (n *Net) LookupHostSystem(ctx context.Context, module, name string) ([]string, error) {
-	return n.lookupHost(ctx, module, name, net.DefaultResolver)
+	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupHost(ctx, name) })
 }
 
-func (n *Net) lookupHost(ctx context.Context, module, name string, r *net.Resolver) ([]string, error) {
-	out, err := n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return r.LookupHost(ctx, name) })
-	if err == nil {
-		var addrs []netip.Addr
-		for _, s := range out {
-			if a, err := netip.ParseAddr(s); err == nil {
-				addrs = append(addrs, a.Unmap())
-			}
-		}
-		n.resolved.Store(resolvedKey(module, name), addrs)
+func (n *Net) remember(module, name string, found []string) {
+	n.resolvedMu.Lock()
+	defer n.resolvedMu.Unlock()
+	key := resolvedKey(module, name)
+	var addrs []netip.Addr
+	if v, ok := n.resolved.Load(key); ok {
+		addrs = slices.Clone(v.([]netip.Addr))
 	}
-	return out, err
+	for _, s := range found {
+		if a, err := netip.ParseAddr(s); err == nil && !slices.Contains(addrs, a.Unmap()) {
+			addrs = append(addrs, a.Unmap())
+		}
+	}
+	n.resolved.Store(key, addrs)
 }
 
 func (n *Net) LookupTXT(ctx context.Context, module, name string) ([]string, error) {

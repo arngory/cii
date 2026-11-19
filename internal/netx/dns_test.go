@@ -269,3 +269,27 @@ func noProxy(t *testing.T) {
 		t.Setenv(k, "")
 	}
 }
+
+func TestLookupsMergeAllowedAddresses(t *testing.T) {
+	noProxy(t)
+	n := New(Options{Family: IPv4}, NewPolicy(Rule{Module: "m", Pattern: "localhost"}), ledger.New())
+	n.remember("m", "rotating.example", []string{"192.0.2.1"})
+	n.remember("m", "rotating.example", []string{"192.0.2.2", "192.0.2.1"})
+	for _, a := range []string{"192.0.2.1", "192.0.2.2"} {
+		if err := n.addrOf("m", "rotating.example", netip.MustParseAddr(a)); err != nil {
+			t.Errorf("%s was forgotten after a second answer: %v", a, err)
+		}
+	}
+	if _, err := n.LookupHostSystem(context.Background(), "m", "localhost"); err != nil {
+		t.Skipf("no system resolver for localhost: %v", err)
+	}
+	if _, ok := n.resolved.Load(resolvedKey("m", "localhost")); ok {
+		t.Error("a system-resolver answer became a connectable address")
+	}
+	if _, err := n.LookupHost(context.Background(), "m", "localhost"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := n.resolved.Load(resolvedKey("m", "localhost")); !ok {
+		t.Error("an answer of the checks' resolver was not remembered")
+	}
+}

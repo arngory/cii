@@ -60,14 +60,15 @@ func DefaultUserAgent() string {
 }
 
 type Net struct {
-	opts     Options
-	policy   *Policy
-	ledger   *ledger.Ledger
-	tr       http.RoundTripper
-	proxy    sync.Map
-	proxied  bool
-	resolved sync.Map
-	resolver *net.Resolver
+	opts       Options
+	policy     *Policy
+	ledger     *ledger.Ledger
+	tr         http.RoundTripper
+	proxy      sync.Map
+	proxied    bool
+	resolved   sync.Map
+	resolvedMu sync.Mutex
+	resolver   *net.Resolver
 }
 
 func firstEnv(keys ...string) string {
