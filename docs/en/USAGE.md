@@ -76,7 +76,7 @@ Your own keys (ipinfo, IPQS, AbuseIPDB, Gemini and others) enable extra checks �
 
 The layout follows the window width: one column below 110 characters, two from 110, three from 200. It is designed for terminals from 50 columns and 24 rows (a 500×500 or 640×480 window): tables narrow down and long lines wrap. While checks run the screen updates in place and `◌` marks a check still in progress. If the frame is taller than the window, the bottom line says how many lines are hidden, and the full report is printed at the end. Ctrl+C shows what has arrived.
 
-If no echo service answers over a stack, the address is taken from the interface and labelled "from the interface, unconfirmed": servers may see another address, and regional catalogs are not chosen for that stack. A service without an address of the needed family (no AAAA record for IPv6) is `?` with the reason "the service has no IPv6 address", not an error.
+If no echo service answers over a stack, the address is taken from the interface and labelled "from the interface, unconfirmed": servers may see another address, and regional catalogs are not chosen for that stack. A service without an address of the needed family (no AAAA record for IPv6, while the name resolves to IPv4) is `?` with the reason "the service has no IPv6 address", not an error; a name that does not exist stays an error.
 
 Marks: `✓` yes, `✗` no, `◐` partial, `⊘` the service blocks this address, `?` no answer, `!` error, `*` an `--extended` check.
 

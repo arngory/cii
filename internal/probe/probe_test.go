@@ -216,19 +216,39 @@ func TestReasonIsShortForNetworkErrors(t *testing.T) {
 	}
 }
 
+type lookupStub map[string][]string
+
+func (l lookupStub) LookupHost(_ context.Context, _, name string) ([]string, error) {
+	if a, ok := l[name]; ok {
+		return a, nil
+	}
+	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
 func TestNoAddressForTheFamily(t *testing.T) {
-	missing := &url.Error{Op: "Get", URL: "https://www.example.org/", Err: &net.OpError{Op: "dial", Net: "tcp6",
-		Err: &net.DNSError{Err: "no such host", Name: "www.example.org", Server: "192.0.2.53:53", IsNotFound: true}}}
-	if got := noAddress(missing, netx.IPv6); got != "the service has no IPv6 address" {
-		t.Errorf("IPv6 = %q", got)
+	missing := func(name string) error {
+		return &url.Error{Op: "Get", URL: "https://" + name + "/", Err: &net.OpError{Op: "dial", Net: "tcp6",
+			Err: &net.DNSError{Err: "no such host", Name: name, Server: "192.0.2.53:53", IsNotFound: true}}}
 	}
-	if got := noAddress(missing, netx.IPv4); got != "the service has no IPv4 address" {
-		t.Errorf("IPv4 = %q", got)
+	r := lookupStub{"v4only.example": {"192.0.2.10"}, "v6only.example": {"2001:db8::10"}, "both.example": {"192.0.2.10", "2001:db8::10"}}
+	ctx := context.Background()
+	for _, c := range []struct {
+		name string
+		f    netx.Family
+		want string
+	}{
+		{"v4only.example", netx.IPv6, "the service has no IPv6 address"},
+		{"v6only.example", netx.IPv4, "the service has no IPv4 address"},
+		{"v4only.example", netx.IPv4, ""},
+		{"both.example", netx.IPv6, ""},
+		{"gone.example", netx.IPv6, ""},
+		{"v4only.example", netx.Any, ""},
+	} {
+		if got := noAddress(ctx, r, "m", missing(c.name), c.f); got != c.want {
+			t.Errorf("%s over %v = %q, want %q", c.name, c.f, got, c.want)
+		}
 	}
-	if got := noAddress(missing, netx.Any); got != "" {
-		t.Errorf("any family = %q", got)
-	}
-	if got := noAddress(&net.DNSError{Err: "server misbehaving", Name: "x"}, netx.IPv6); got != "" {
+	if got := noAddress(ctx, r, "m", &net.DNSError{Err: "server misbehaving", Name: "v4only.example"}, netx.IPv6); got != "" {
 		t.Errorf("other DNS error = %q", got)
 	}
 }

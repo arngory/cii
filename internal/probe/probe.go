@@ -196,7 +196,7 @@ func runOne(ctx context.Context, env Env, f netx.Family, ip netip.Addr, c Check)
 		}
 		resp, err := do(ctx, n.HTTPClient(c.Module), env.Keys, ip, c, r)
 		if err != nil {
-			if missing := noAddress(err, transport); missing != "" {
+			if missing := noAddress(ctx, n, c.Module, err, transport); missing != "" {
 				return []Result{{Status: Unknown, Reason: missing}}
 			}
 			return Fail(reason(err))
@@ -260,10 +260,23 @@ func do(ctx context.Context, client *http.Client, keys config.Keys, ip netip.Add
 	return &Response{Status: resp.StatusCode, URL: resp.Request.URL.String(), Header: resp.Header, Body: data}, nil
 }
 
-func noAddress(err error, f netx.Family) string {
+type hostLookup interface {
+	LookupHost(ctx context.Context, module, name string) ([]string, error)
+}
+
+func noAddress(ctx context.Context, r hostLookup, module string, err error, f netx.Family) string {
 	var dnsErr *net.DNSError
-	if f == netx.Any || !errors.As(err, &dnsErr) || !dnsErr.IsNotFound {
+	if f == netx.Any || !errors.As(err, &dnsErr) || !dnsErr.IsNotFound || dnsErr.Name == "" {
 		return ""
+	}
+	addrs, lerr := r.LookupHost(ctx, module, dnsErr.Name)
+	if lerr != nil || len(addrs) == 0 {
+		return ""
+	}
+	for _, s := range addrs {
+		if a, perr := netip.ParseAddr(s); perr == nil && a.Unmap().Is4() == (f == netx.IPv4) {
+			return ""
+		}
 	}
 	if f == netx.IPv6 {
 		return "the service has no IPv6 address"

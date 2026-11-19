@@ -93,7 +93,7 @@ dns: quad9
 | `192.0.2.53`, `[2001:db8::53]:5353` | plain DNS (UDP, TCP for long answers) to this address; the default port is 53 |
 | `tls://192.0.2.53#dns.example` | your own DNS-over-TLS: an address, an optional port (853 by default) and the name in the certificate |
 
-The server is given as an address, not a name: finding a resolver by name would need another resolver. For the presets the IPv4 addresses are tried first, then IPv6 — lookups for the IPv6 checks also go over IPv4 when it works. The DNS-over-TLS certificate is verified against the system root certificates.
+The server is given as an address, not a name: finding a resolver by name would need another resolver. For the presets the IPv4 addresses are tried first, then IPv6 — lookups for the IPv6 checks also go over IPv4 when it works. With `--source` or `--iface` only the server addresses of the source address's family are used, and the lookups leave from it; if there are none, names are not resolved rather than sent past the chosen interface. The DNS-over-TLS certificate is verified against the system root certificates.
 
 Every server address is a network policy rule of the `dns` module: it shows in `--plan`, and every connection to it in the network ledger. The footer of the screen names the resolver the lookups went through. What changes:
 

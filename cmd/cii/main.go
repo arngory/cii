@@ -941,7 +941,7 @@ func footer(r *report.Report, unicode bool, lang, logPath string, logErr error) 
 	}
 	for _, e := range r.Network {
 		if e.Module == netx.DNSModule && e.Requests > 0 {
-			parts = append(parts, "DNS: "+strings.TrimPrefix(e.Purpose, "dns: name lookups via "))
+			parts = append(parts, "DNS: "+strings.TrimPrefix(e.Purpose, netx.DNSPurpose))
 			break
 		}
 	}

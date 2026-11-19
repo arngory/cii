@@ -198,6 +198,15 @@ func TestChosenResolver(t *testing.T) {
 		t.Errorf("an undeclared resolver was used: %v", err)
 	}
 
+	v6src := New(Options{Family: IPv6, Timeout: time.Second, Source: netip.MustParseAddr("::1"), DNS: server}, policy, ledger.New())
+	if _, err := v6src.LookupHost(context.Background(), "m", "web.cii-test.example"); err == nil || !strings.Contains(err.Error(), "no address of the source address family") {
+		t.Errorf("an IPv4 resolver was used from an IPv6 source address: %v", err)
+	}
+	bound := New(Options{Family: IPv4, Timeout: time.Second, Source: netip.MustParseAddr("127.0.0.1"), DNS: server}, policy, ledger.New())
+	if addrs, err := bound.LookupHost(context.Background(), "m", "web.cii-test.example"); err != nil || len(addrs) != 1 {
+		t.Errorf("lookup from a bound IPv4 source = %v, %v", addrs, err)
+	}
+
 	proxy, _ := url.Parse("http://127.0.0.1:1")
 	if p := New(Options{Proxy: proxy, DNS: server}, policy, ledger.New()); p.resolver != net.DefaultResolver {
 		t.Error("behind a proxy names are resolved at the proxy, so the chosen resolver must stay unused")

@@ -13,7 +13,10 @@ import (
 	"strings"
 )
 
-const DNSModule = "dns"
+const (
+	DNSModule  = "dns"
+	DNSPurpose = "dns: name lookups via "
+)
 
 var dnsRoots *x509.CertPool
 
@@ -104,7 +107,7 @@ func (s *DNSServer) Public() bool {
 func (s *DNSServer) Rules() []Rule {
 	var out []Rule
 	for _, a := range s.Addrs {
-		out = append(out, Rule{Module: DNSModule, Pattern: a.String(), Purpose: "dns: name lookups via " + s.Label()})
+		out = append(out, Rule{Module: DNSModule, Pattern: a.String(), Purpose: DNSPurpose + s.Label()})
 	}
 	return out
 }
@@ -130,14 +133,18 @@ func (n *Net) dnsDial(ctx context.Context, network, _ string) (net.Conn, error) 
 		base = "tcp"
 	}
 	var errs []error
+	src := n.opts.Source
 	for _, a := range s.ordered() {
+		if src.IsValid() && src.Is4() != a.Is4() {
+			continue
+		}
 		rule, err := n.allow(DNSModule, a.String(), s.proto())
 		if err != nil {
 			errs = append(errs, err)
 			continue
 		}
 		d := net.Dialer{Timeout: n.opts.Timeout}
-		if src := n.opts.Source; src.IsValid() && src.Is4() == a.Is4() {
+		if src.IsValid() {
 			if base == "tcp" {
 				d.LocalAddr = &net.TCPAddr{IP: src.AsSlice()}
 			} else {
@@ -161,7 +168,7 @@ func (n *Net) dnsDial(ctx context.Context, network, _ string) (net.Conn, error) 
 		return c, nil
 	}
 	if len(errs) == 0 {
-		return nil, errors.New("no DNS server address")
+		return nil, fmt.Errorf("%s has no address of the source address family", s.Label())
 	}
 	return nil, errors.Join(errs...)
 }
