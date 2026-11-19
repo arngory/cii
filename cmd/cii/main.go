@@ -274,11 +274,12 @@ func (c *common) dnsServer() (*netx.DNSServer, error) {
 	return netx.ParseDNS(spec)
 }
 
-func (c *common) dnsRules() []netx.Rule {
-	if s, err := c.dnsServer(); err == nil && s != nil && !c.offline {
-		return s.Rules()
+func (c *common) dnsRules() ([]netx.Rule, error) {
+	s, err := c.dnsServer()
+	if err != nil || s == nil || c.offline {
+		return nil, err
 	}
-	return nil
+	return s.Rules(), nil
 }
 
 func (c *common) baseOptions() (netx.Options, error) {
@@ -543,7 +544,11 @@ func collectIP(ctx context.Context, cp *common, f ipFlags) (*report.Report, erro
 	var routeList []route.Target
 	benchOpts := bench.Defaults()
 	benchOpts.Net, benchOpts.Iperf = !c.offline, !c.offline
-	policy := netx.NewPolicy(c.dnsRules()...)
+	resolverRules, err := c.dnsRules()
+	if err != nil {
+		return nil, err
+	}
+	policy := netx.NewPolicy(resolverRules...)
 	if !c.offline {
 		policy.Add(ipdetect.Rules(providers)...)
 		policy.Add(probe.Rules(checks)...)
@@ -1355,7 +1360,11 @@ func dataUpdate(ctx context.Context, c *common, ids []string) error {
 		srcs = append(srcs, s)
 	}
 	updateRisk := len(riskIDs) > 0 || len(ids) == 0
-	policy := netx.NewPolicy(c.dnsRules()...)
+	resolverRules, err := c.dnsRules()
+	if err != nil {
+		return err
+	}
+	policy := netx.NewPolicy(resolverRules...)
 	if !c.offline {
 		policy.Add(datasrc.Rules(srcs)...)
 		if updateRisk {
@@ -1454,7 +1463,11 @@ func cmdCensor(ctx context.Context, args []string) error {
 		return fmt.Errorf("unknown protocol %q (known: http, https, both)", protocol)
 	}
 	opts := censor.Options{Modes: strings.Split(mode, ","), DomainsFile: domainsFile, Domain: domain, Protocol: protocol, Retries: retries}
-	policy := netx.NewPolicy(append(censor.Rules(opts), c.dnsRules()...)...)
+	resolverRules, err := c.dnsRules()
+	if err != nil {
+		return err
+	}
+	policy := netx.NewPolicy(append(censor.Rules(opts), resolverRules...)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
 		return nil
@@ -1519,7 +1532,11 @@ func cmdBench(ctx context.Context, args []string) error {
 	if err := opts.Validate(); err != nil {
 		return err
 	}
-	policy := netx.NewPolicy(append(bench.Rules(opts), c.dnsRules()...)...)
+	resolverRules, err := c.dnsRules()
+	if err != nil {
+		return err
+	}
+	policy := netx.NewPolicy(append(bench.Rules(opts), resolverRules...)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
 		return nil
@@ -1615,7 +1632,11 @@ func cmdRoute(ctx context.Context, args []string) error {
 	if opts.Targets, err = routeTargets(cfg, targetSpec); err != nil {
 		return err
 	}
-	policy := netx.NewPolicy(append(route.Rules(opts.Targets), c.dnsRules()...)...)
+	resolverRules, err := c.dnsRules()
+	if err != nil {
+		return err
+	}
+	policy := netx.NewPolicy(append(route.Rules(opts.Targets), resolverRules...)...)
 	if c.plan {
 		report.WritePlan(os.Stdout, c.color(), policy.Rules())
 		return nil

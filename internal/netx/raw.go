@@ -136,10 +136,6 @@ func (n *Net) remember(module, name string, found []string) {
 	n.resolved.Store(key, addrs)
 }
 
-func (n *Net) LookupTXT(ctx context.Context, module, name string) ([]string, error) {
-	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return n.resolver.LookupTXT(ctx, name) })
-}
-
 func (n *Net) LookupTXTSystem(ctx context.Context, module, name string) ([]string, error) {
 	return n.resolve(ctx, module, name, func(ctx context.Context) ([]string, error) { return net.DefaultResolver.LookupTXT(ctx, name) })
 }

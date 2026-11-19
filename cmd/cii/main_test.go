@@ -225,19 +225,22 @@ func TestDNSFlag(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "config.yaml")
 	os.WriteFile(cfg, []byte("dns: quad9\n"), 0o600)
 	c := common{cfgPath: cfg}
-	if o, err := c.baseOptions(); err != nil || o.DNS == nil || o.DNS.Name != "Quad9" || len(c.dnsRules()) != 4 {
+	if o, err := c.baseOptions(); err != nil || o.DNS == nil || o.DNS.Name != "Quad9" || len(must(c.dnsRules())) != 4 {
 		t.Errorf("config dns = %+v, %v", o.DNS, err)
 	}
 	c = common{cfgPath: cfg, dns: "system"}
-	if o, _ := c.baseOptions(); o.DNS != nil || c.dnsRules() != nil {
+	if o, _ := c.baseOptions(); o.DNS != nil || must(c.dnsRules()) != nil {
 		t.Errorf("--dns system did not override the config: %+v", o.DNS)
 	}
 	c = common{cfgPath: cfg, offline: true}
-	if c.dnsRules() != nil {
+	if must(c.dnsRules()) != nil {
 		t.Error("an offline run declares a resolver")
 	}
 	if _, err := (&common{dns: "bogus"}).baseOptions(); err == nil {
 		t.Error("an unknown resolver was accepted")
+	}
+	if _, err := (&common{dns: "bogus"}).dnsRules(); err == nil {
+		t.Error("--plan would print a plan for an unknown resolver")
 	}
 	broken := filepath.Join(t.TempDir(), "broken.yaml")
 	os.WriteFile(broken, []byte("dns: [quad9\n"), 0o600)
@@ -247,4 +250,11 @@ func TestDNSFlag(t *testing.T) {
 	if _, err := (&common{cfgPath: filepath.Join(t.TempDir(), "missing.yaml")}).baseOptions(); err == nil {
 		t.Error("a missing explicit --config was ignored")
 	}
+}
+
+func must(rules []netx.Rule, err error) []netx.Rule {
+	if err != nil {
+		panic(err)
+	}
+	return rules
 }
