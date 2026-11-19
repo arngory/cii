@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
@@ -143,22 +144,47 @@ func (n *Net) allowResolver(host, proto string) (Rule, error) {
 	return rule, nil
 }
 
+func (n *Net) dnsCandidates() []netip.Addr {
+	s, src := n.opts.DNS, n.opts.Source
+	var out []netip.Addr
+	for _, a := range s.ordered() {
+		if !src.IsValid() || src.Is4() == a.Is4() {
+			out = append(out, a)
+		}
+	}
+	if last, ok := n.dnsLast.Load().(netip.Addr); ok {
+		if k := slices.Index(out, last); k > 0 {
+			out = append(append([]netip.Addr{last}, out[:k]...), out[k+1:]...)
+		}
+	}
+	return out
+}
+
 func (n *Net) dnsDial(ctx context.Context, network, _ string) (net.Conn, error) {
 	s := n.opts.DNS
 	base := "udp"
 	if strings.HasPrefix(network, "tcp") || s.TLSName != "" {
 		base = "tcp"
 	}
+	candidates := n.dnsCandidates()
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("%s has no address of the source address family", s.Label())
+	}
 	var errs []error
 	src := n.opts.Source
-	for _, a := range s.ordered() {
-		if src.IsValid() && src.Is4() != a.Is4() {
-			continue
+	for i, a := range candidates {
+		if ctx.Err() != nil {
+			errs = append(errs, ctx.Err())
+			break
 		}
 		rule, err := n.allowResolver(a.String(), s.proto())
 		if err != nil {
 			errs = append(errs, err)
 			continue
+		}
+		try, cancel := ctx, context.CancelFunc(func() {})
+		if deadline, ok := ctx.Deadline(); ok && i < len(candidates)-1 {
+			try, cancel = context.WithTimeout(ctx, time.Until(deadline)/2)
 		}
 		d := net.Dialer{Timeout: n.opts.Timeout}
 		if src.IsValid() {
@@ -168,24 +194,23 @@ func (n *Net) dnsDial(ctx context.Context, network, _ string) (net.Conn, error) 
 				d.LocalAddr = &net.UDPAddr{IP: src.AsSlice()}
 			}
 		}
-		c, err := d.DialContext(ctx, base, net.JoinHostPort(a.String(), s.Port))
+		c, err := d.DialContext(try, base, net.JoinHostPort(a.String(), s.Port))
 		if err == nil && s.TLSName != "" {
 			tc := tls.Client(c, &tls.Config{ServerName: s.TLSName, MinVersion: tls.VersionTLS12, RootCAs: dnsRoots})
-			if err = tc.HandshakeContext(ctx); err != nil {
+			if err = tc.HandshakeContext(try); err != nil {
 				c.Close()
 			} else {
 				c = tc
 			}
 		}
+		cancel()
 		if err != nil {
 			n.ledger.Error(DNSModule, rule.Purpose, a.String(), s.proto())
 			errs = append(errs, err)
 			continue
 		}
+		n.dnsLast.Store(a)
 		return c, nil
-	}
-	if len(errs) == 0 {
-		return nil, fmt.Errorf("%s has no address of the source address family", s.Label())
 	}
 	return nil, errors.Join(errs...)
 }

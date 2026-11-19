@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/net/http/httpproxy"
@@ -69,6 +70,7 @@ type Net struct {
 	resolved   sync.Map
 	resolvedMu sync.Mutex
 	resolver   *net.Resolver
+	dnsLast    atomic.Value
 }
 
 func firstEnv(keys ...string) string {

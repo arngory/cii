@@ -240,18 +240,8 @@ func TestChosenResolver(t *testing.T) {
 
 func TestChosenResolverOverTLS(t *testing.T) {
 	noProxy(t)
-	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	tmpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "dns.cii-test.example"}, DNSNames: []string{"dns.cii-test.example"},
-		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true,
-		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	leaf, _ := x509.ParseCertificate(der)
-	pool := x509.NewCertPool()
-	pool.AddCert(leaf)
-	ln, err := tls.Listen("tcp4", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{der}, PrivateKey: key}}})
+	cert, pool := testDNSCert(t)
+	ln, err := tls.Listen("tcp4", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,5 +303,97 @@ func TestLookupsMergeAllowedAddresses(t *testing.T) {
 	}
 	if _, ok := n.resolved.Load(resolvedKey("m", "localhost")); !ok {
 		t.Error("an answer of the checks' resolver was not remembered")
+	}
+}
+
+func testDNSCert(t *testing.T) (tls.Certificate, *x509.CertPool) {
+	t.Helper()
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	tmpl := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "dns.cii-test.example"}, DNSNames: []string{"dns.cii-test.example"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true,
+		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, _ := x509.ParseCertificate(der)
+	pool := x509.NewCertPool()
+	pool.AddCert(leaf)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key, Leaf: leaf}, pool
+}
+
+func TestResolverFailsOverWithinOneAttempt(t *testing.T) {
+	noProxy(t)
+	cert, pool := testDNSCert(t)
+	good, err := tls.Listen("tcp4", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer good.Close()
+	port := strconv.Itoa(good.Addr().(*net.TCPAddr).Port)
+	dead, err := net.Listen("tcp4", "127.0.0.2:"+port)
+	if err != nil {
+		t.Skipf("127.0.0.2 is not usable here: %v", err)
+	}
+	defer dead.Close()
+	go func() {
+		for {
+			c, err := dead.Accept()
+			if err != nil {
+				return
+			}
+			defer c.Close()
+		}
+	}()
+	go serveDNSStream(t, good, netip.MustParseAddr("192.0.2.77"), make(chan string, 16))
+	saved := dnsRoots
+	defer func() { dnsRoots = saved }()
+	dnsRoots = pool
+	server := &DNSServer{Name: "pair", Port: port, TLSName: "dns.cii-test.example",
+		Addrs: []netip.Addr{netip.MustParseAddr("127.0.0.2"), netip.MustParseAddr("127.0.0.1")}}
+	led := ledger.New()
+	n := New(Options{Family: IPv4, Timeout: 10 * time.Second, DNS: server}, NewPolicy(server.Rules()...), led)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	began := time.Now()
+	c, err := n.dnsDial(ctx, "udp", "")
+	if err != nil {
+		t.Fatalf("no failover within one attempt: %v", err)
+	}
+	c.Close()
+	if took := time.Since(began); took > 900*time.Millisecond {
+		t.Errorf("failover took %s", took)
+	}
+	if last, _ := n.dnsLast.Load().(netip.Addr); last != netip.MustParseAddr("127.0.0.1") {
+		t.Errorf("last working address = %v", last)
+	}
+	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Second)
+	defer cancel2()
+	if c, err := n.dnsDial(ctx2, "udp", ""); err != nil {
+		t.Fatalf("second dial: %v", err)
+	} else {
+		c.Close()
+	}
+	requests := map[string]int{}
+	for _, e := range led.Entries() {
+		requests[e.Host] += e.Requests
+	}
+	if requests["127.0.0.2"] != 1 || requests["127.0.0.1"] != 2 {
+		t.Errorf("the dead address should be tried once, the working one first afterwards: %v", requests)
+	}
+
+	gone, stop := context.WithCancel(context.Background())
+	stop()
+	before := len(led.Entries())
+	if _, err := n.dnsDial(gone, "udp", ""); err == nil {
+		t.Error("an expired attempt dialled")
+	}
+	after := 0
+	for _, e := range led.Entries() {
+		after += e.Requests
+	}
+	if after != 3 || len(led.Entries()) != before {
+		t.Errorf("an expired attempt was written to the ledger: %+v", led.Entries())
 	}
 }
