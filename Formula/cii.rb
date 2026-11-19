@@ -1,28 +1,28 @@
 class Cii < Formula
   desc "Complete information about the current IP address"
   homepage "https://github.com/arngory/cii"
-  version "0.4.0"
+  version "0.4.1"
   license "AGPL-3.0-only"
 
   on_macos do
     on_arm do
-      url "https://github.com/arngory/cii/releases/download/v0.4.0/cii-darwin-arm64"
-      sha256 "658a00c9e9d394baa9d066448365b9da68263f50e384f1e84cd7f122eb51c8d4"
+      url "https://github.com/arngory/cii/releases/download/v0.4.1/cii-darwin-arm64"
+      sha256 "02220e69926b0a7354edf229d5effcb3365fed7ad15efa5bce9ad5eb8aa9a56b"
     end
     on_intel do
-      url "https://github.com/arngory/cii/releases/download/v0.4.0/cii-darwin-amd64"
-      sha256 "aa4ac6e2db978f08427a58316cca313c4cc0e8fa58916dadbbcecbfa23fa2017"
+      url "https://github.com/arngory/cii/releases/download/v0.4.1/cii-darwin-amd64"
+      sha256 "883eb2d996796e1219c040f5b51704a6bab4c9281a8455f64b54e8487aacc2ae"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/arngory/cii/releases/download/v0.4.0/cii-linux-arm64"
-      sha256 "fcec44fbe4ffa9a80a69a427ed3bb655348db14235f3402dd2b4f5ae258cae52"
+      url "https://github.com/arngory/cii/releases/download/v0.4.1/cii-linux-arm64"
+      sha256 "8744e0d806ceaadc57809217ad72aa979d16ce19997a6be7c5522d102a052e90"
     end
     on_intel do
-      url "https://github.com/arngory/cii/releases/download/v0.4.0/cii-linux-amd64"
-      sha256 "799f51b15794d0b292a5c47b7f367fbf5d2c38cc75fc983b0e1dbfc1f75790c2"
+      url "https://github.com/arngory/cii/releases/download/v0.4.1/cii-linux-amd64"
+      sha256 "2843778e6d6ed311431761ace861366c1fb0b247fd5b4cafb2726d21d51da22f"
     end
   end
 
